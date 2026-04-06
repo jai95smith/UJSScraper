@@ -114,11 +114,14 @@ def search_cases(conn, county=None, status=None, docket_type=None,
         clauses.append("c.filing_date <= %s")
         params.append(filed_before)
     if name:
-        clauses.append("""EXISTS (
-            SELECT 1 FROM participants p
-            WHERE p.docket_number = c.docket_number AND p.name ILIKE %s
+        clauses.append("""(
+            c.caption ILIKE %s
+            OR EXISTS (
+                SELECT 1 FROM participants p
+                WHERE p.docket_number = c.docket_number AND p.name ILIKE %s
+            )
         )""")
-        params.append(f"%{name}%")
+        params.extend([f"%{name}%", f"%{name}%"])
 
     where = " AND ".join(clauses) if clauses else "TRUE"
     params.append(limit)

@@ -271,14 +271,48 @@ def _execute_tool(name, inputs):
     return f"Unknown tool: {name}"
 
 
+def _clean_question(question: str) -> str:
+    """Use Gemini Flash with Google Search grounding to fix spelling and verify names."""
+    try:
+        from google import genai
+        from google.genai.types import Tool, GoogleSearch
+        key = os.environ.get("GEMINI_API_KEY")
+        if not key:
+            return question
+        client = genai.Client(api_key=key)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=(
+                "Fix any spelling, grammar, or typos in this question about "
+                "Pennsylvania court cases. Use Google Search to verify the correct "
+                "spelling of person names, places, and legal terms. "
+                "Return ONLY the corrected question, nothing else.\n\n"
+                f"Question: {question}"
+            ),
+            config={
+                "temperature": 0,
+                "tools": [Tool(google_search=GoogleSearch())],
+            },
+        )
+        cleaned = response.text.strip()
+        if cleaned:
+            return cleaned
+    except Exception:
+        pass
+    return question
+
+
 def ask(question: str, api_key: Optional[str] = None) -> str:
     """Send a natural language question, get an answer using Claude + DB tools."""
     key = api_key or os.environ.get("ANTHROPIC_API_KEY")
     if not key:
         raise RuntimeError("Set ANTHROPIC_API_KEY env var")
 
+    # Clean up the question first
+    cleaned = _clean_question(question)
+
     client = anthropic.Anthropic(api_key=key)
-    messages = [{"role": "user", "content": question}]
+    messages = [{"role": "user", "content": cleaned}]
 
     # Tool use loop — Claude may call multiple tools
     for _ in range(5):  # max 5 tool rounds
