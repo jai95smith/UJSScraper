@@ -10,7 +10,7 @@ from ujs.core import (
     search_by_name, search_by_docket, search_by_otn,
     search_by_date, search_by_calendar, download_pdf,
 )
-from ujs.modules.docket_pdf import analyze_docket, fetch_docket_pdf, extract_text
+from ujs.modules.docket_pdf import analyze_docket, analyze_summary, fetch_docket_pdf, extract_text
 
 app = FastAPI(
     title="PA UJS Court Search API",
@@ -102,11 +102,19 @@ def api_docket_text(docket_number: str):
         return {"docket_number": docket_number, "text": text}
 
 
+@app.get("/docket/{docket_number}/summary")
+def api_docket_summary(docket_number: str):
+    """Download court summary PDF and extract full case history via Gemini."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        result = analyze_summary(docket_number, out_dir=tmpdir)
+        return {k: v for k, v in result.items() if k != "pdf_path"}
+
+
 @app.get("/docket/{docket_number}/pdf")
-def api_docket_pdf(docket_number: str):
-    """Download and serve the docket sheet PDF directly."""
+def api_docket_pdf(docket_number: str, doc: str = Query("docket", description="'docket' or 'summary'")):
+    """Download and serve a PDF directly."""
     tmpdir = tempfile.mkdtemp()
-    pdf_path = fetch_docket_pdf(docket_number, out_dir=tmpdir)
+    pdf_path = fetch_docket_pdf(docket_number, out_dir=tmpdir, doc_type=doc)
     return FileResponse(pdf_path, media_type="application/pdf",
                         filename=os.path.basename(pdf_path))
 

@@ -87,30 +87,92 @@ GEMINI_SCHEMA = {
     },
 }
 
-GEMINI_PROMPT = """Extract all structured data from this PA court docket sheet.
-Return every field you can find. For charges, include the disposition if present.
-For docket entries, include every entry with date and description.
-Be precise with statute numbers, dates, and names. Omit fields you cannot find.
+GEMINI_PROMPT = """Extract structured data from this PA court docket sheet. Copy values exactly as they appear in the document — do not rephrase, reformat, summarize, or abbreviate any field values. Every string value must be a verbatim copy from the source text.
 
-IMPORTANT FORMAT RULES:
-- ALL dates MUST be MM/DD/YYYY format (e.g. 01/08/2025, 12/19/2014). Never use YYYY-MM-DD.
-- ALL currency amounts MUST include $ and commas (e.g. $7,500.00, $15,000.00).
-- Statute numbers should be clean (e.g. "18 § 3929 §§ A1"), no extra whitespace or newlines."""
+FORMAT RULES:
+- ALL dates: MM/DD/YYYY (e.g. 01/08/2025). Never YYYY-MM-DD.
+- ALL currency: include $ and commas (e.g. $7,500.00).
+- Statute numbers: exact as printed (e.g. "18 § 3929 §§ A1"), no added whitespace.
+- Sentence durations: copy verbatim from the document (e.g. "Min of 3.00 Months Max of 23.00 Months 29.00 Days").
+- Do not add words, reorder, or paraphrase any values."""
+
+SUMMARY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "person": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "dob": {"type": "string"},
+                "sex": {"type": "string"},
+                "address": {"type": "string"},
+                "eyes": {"type": "string"},
+                "hair": {"type": "string"},
+                "race": {"type": "string"},
+                "aliases": {"type": "array", "items": {"type": "string"}},
+            },
+        },
+        "cases": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "docket_number": {"type": "string"},
+                    "county": {"type": "string"},
+                    "status": {"type": "string"},
+                    "otn": {"type": "string"},
+                    "arrest_date": {"type": "string"},
+                    "disposition_date": {"type": "string"},
+                    "disposition_judge": {"type": "string"},
+                    "defense_attorney": {"type": "string"},
+                    "charges": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "seq": {"type": "integer"},
+                                "statute": {"type": "string"},
+                                "grade": {"type": "string"},
+                                "description": {"type": "string"},
+                                "disposition": {"type": "string"},
+                                "sentence_date": {"type": "string"},
+                                "sentence_type": {"type": "string"},
+                                "sentence_duration": {"type": "string"},
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+}
+
+SUMMARY_PROMPT = """Extract structured data from this PA Court Summary report. This is a multi-case summary for one person across potentially multiple counties. Extract the person's info and EVERY case listed with all charges, dispositions, and sentences. Copy values exactly as they appear in the document — do not rephrase, reformat, summarize, or abbreviate any field values.
+
+FORMAT RULES:
+- ALL dates: MM/DD/YYYY (e.g. 01/08/2025). Never YYYY-MM-DD.
+- Statute numbers: exact as printed (e.g. "18 § 3929 §§ A1"), no added whitespace.
+- Sentence durations: copy verbatim (e.g. "Min: 1 Year(s) Max: 3 Year(s)").
+- Do not add words, reorder, or paraphrase any values.
+- Include every case even if it has minimal info."""
 
 
-def fetch_docket_pdf(docket_number, out_dir="."):
-    """Search for a docket, download its PDF, return the file path."""
+def fetch_docket_pdf(docket_number, out_dir=".", doc_type="docket"):
+    """Search for a docket, download its PDF, return the file path.
+    doc_type: 'docket' for docket sheet, 'summary' for court summary.
+    """
     results = search_by_docket(docket_number)
     if not results:
         raise ValueError(f"No results for docket: {docket_number}")
 
     r = results[0]
-    url = r.get("docket_sheet_url")
+    url_key = "court_summary_url" if doc_type == "summary" else "docket_sheet_url"
+    url = r.get(url_key)
     if not url:
-        raise ValueError(f"No docket sheet URL for: {docket_number}")
+        raise ValueError(f"No {doc_type} URL for: {docket_number}")
 
     os.makedirs(out_dir, exist_ok=True)
-    fn = os.path.join(out_dir, f"{docket_number.replace('-','_')}_docket.pdf")
+    fn = os.path.join(out_dir, f"{docket_number.replace('-','_')}_{doc_type}.pdf")
     download_pdf(url, fn)
     return fn
 
@@ -178,8 +240,8 @@ def parse_bail(text):
     return bail_info
 
 
-def parse_with_gemini(text, api_key=None):
-    """Send docket text to Gemini Flash for structured extraction."""
+def _gemini_extract(text, prompt, schema, api_key=None):
+    """Send text to Gemini Flash with a given schema."""
     key = api_key or os.environ.get("GEMINI_API_KEY")
     if not key:
         raise RuntimeError("Set GEMINI_API_KEY env var or pass api_key")
@@ -187,18 +249,29 @@ def parse_with_gemini(text, api_key=None):
     client = genai.Client(api_key=key)
     response = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=GEMINI_PROMPT + "\n\n" + text,
+        contents=prompt + "\n\n" + text,
         config={
+            "temperature": 0,
             "response_mime_type": "application/json",
-            "response_schema": GEMINI_SCHEMA,
+            "response_schema": schema,
         },
     )
     return json.loads(response.text)
 
 
+def parse_with_gemini(text, api_key=None):
+    """Parse a docket sheet with Gemini."""
+    return _gemini_extract(text, GEMINI_PROMPT, GEMINI_SCHEMA, api_key)
+
+
+def parse_summary_with_gemini(text, api_key=None):
+    """Parse a court summary with Gemini."""
+    return _gemini_extract(text, SUMMARY_PROMPT, SUMMARY_SCHEMA, api_key)
+
+
 def analyze_docket(docket_number, out_dir=".", use_gemini=True, api_key=None):
-    """Full pipeline: fetch PDF, extract text, parse with Gemini or regex."""
-    pdf_path = fetch_docket_pdf(docket_number, out_dir)
+    """Full pipeline: fetch docket sheet PDF, extract text, parse."""
+    pdf_path = fetch_docket_pdf(docket_number, out_dir, doc_type="docket")
     text = extract_text(pdf_path)
 
     if use_gemini:
@@ -219,6 +292,15 @@ def analyze_docket(docket_number, out_dir=".", use_gemini=True, api_key=None):
     }
 
 
+def analyze_summary(docket_number, out_dir=".", api_key=None):
+    """Fetch court summary PDF and parse with Gemini. Returns full case history."""
+    pdf_path = fetch_docket_pdf(docket_number, out_dir, doc_type="summary")
+    text = extract_text(pdf_path)
+    parsed = parse_summary_with_gemini(text, api_key=api_key)
+    parsed["pdf_path"] = pdf_path
+    return parsed
+
+
 def main():
     import argparse, json
     p = argparse.ArgumentParser(description="UJS Docket PDF Analyzer")
@@ -226,19 +308,22 @@ def main():
     p.add_argument("--out-dir", default="./pdfs", help="Output directory for PDFs")
     p.add_argument("--text-only", action="store_true", help="Just print extracted text")
     p.add_argument("--json", action="store_true", dest="as_json", help="Output JSON")
+    p.add_argument("--summary", action="store_true", help="Analyze court summary instead of docket sheet")
     p.add_argument("--no-ai", action="store_true", help="Skip Gemini, use regex parsing only")
     args = p.parse_args()
 
     if args.text_only:
-        pdf_path = fetch_docket_pdf(args.docket, args.out_dir)
+        doc = "summary" if args.summary else "docket"
+        pdf_path = fetch_docket_pdf(args.docket, args.out_dir, doc_type=doc)
         print(extract_text(pdf_path))
+    elif args.summary:
+        result = analyze_summary(args.docket, args.out_dir)
+        out = {k: v for k, v in result.items() if k != "pdf_path"}
+        print(json.dumps(out, indent=2))
     else:
         result = analyze_docket(args.docket, args.out_dir, use_gemini=not args.no_ai)
         out = {k: v for k, v in result.items() if k not in ("full_text", "pdf_path")}
-        if args.as_json:
-            print(json.dumps(out, indent=2))
-        else:
-            print(json.dumps(out, indent=2))
+        print(json.dumps(out, indent=2))
 
 
 if __name__ == "__main__":
