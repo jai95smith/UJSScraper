@@ -2,6 +2,7 @@
 """PA UJS Portal Case Search — lightweight CLI scraper."""
 
 import argparse, re, sys
+from datetime import datetime, timedelta
 from html import unescape
 from urllib.parse import urljoin
 
@@ -36,6 +37,49 @@ def search(session, token, **kwargs):
     return parse_results(r.text)
 
 
+def search_by_date(start_date, end_date, county=None, docket_type=None):
+    """Date-filed search requires Playwright (results are JS-rendered)."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto(SEARCH_URL)
+        page.wait_for_load_state("networkidle")
+
+        page.select_option("select[data-aopc-control-to-find]", "DateFiled")
+        page.wait_for_timeout(500)
+        page.fill("input[name=FiledStartDate]", start_date)
+        page.fill("input[name=FiledEndDate]", end_date)
+
+        if county or docket_type:
+            page.check("input[name=AdvanceSearch]")
+            page.wait_for_timeout(1000)
+            for sel in [("County", county), ("Docket Type", docket_type)]:
+                if sel[1]:
+                    try:
+                        page.select_option(f'select[title="{sel[0]}"]:visible', sel[1], timeout=3000)
+                    except Exception:
+                        pass  # filter client-side instead
+
+        page.click('button:has-text("Search")')
+        page.wait_for_timeout(8000)
+
+        html = page.content()
+        browser.close()
+
+    results = parse_results(html)
+    if county:
+        results = [r for r in results if r["county"].lower() == county.lower()]
+    if docket_type:
+        dtype_map = {"criminal": "-CR-", "civil": "-CV-", "traffic": "-TR-",
+                     "non-traffic": "-NT-", "landlord/tenant": "-LT-"}
+        code = dtype_map.get(docket_type.lower(), "")
+        if code:
+            results = [r for r in results if code in r["docket_number"]]
+    return results
+
+
 def parse_results(html):
     soup = BeautifulSoup(html, "html.parser")
     rows = soup.select("tbody tr")
@@ -44,10 +88,8 @@ def parse_results(html):
         cells = row.find_all("td")
         if len(cells) < 13:
             continue
-        # first two cells are hidden sort indices
         vals = [unescape(c.get_text(strip=True)) for c in cells[2:14]]
         rec = dict(zip(FIELDS, vals))
-        # extract PDF links
         for a in row.find_all("a", href=True):
             href = a["href"]
             if "DocketSheet" in href:
@@ -91,37 +133,58 @@ def main():
     p.add_argument("--type", help="Docket type: Criminal, Civil, etc.", dest="docket_type")
     p.add_argument("--dob", help="Date of birth (MM/DD/YYYY)")
     p.add_argument("--otn", help="OTN number")
+    p.add_argument("--recent", nargs="?", const="today", metavar="DAYS_OR_DATE",
+                   help="Search by filing date. 'today' (default), a number of days back, or MM/DD/YYYY start date")
+    p.add_argument("--end-date", help="End date for --recent range (default: today)", dest="end_date")
     p.add_argument("--download", type=int, metavar="N", help="Download docket sheet PDF for result N")
     p.add_argument("--json", action="store_true", help="Output JSON")
     args = p.parse_args()
 
-    if not any([args.last, args.docket, args.otn]):
-        p.error("Provide at least --last, --docket, or --otn")
+    if not any([args.last, args.docket, args.otn, args.recent]):
+        p.error("Provide at least --last, --docket, --otn, or --recent")
 
-    print("Connecting to UJS Portal...")
-    session, token = get_session()
+    if args.recent:
+        today = datetime.now()
+        if args.recent == "today":
+            start = today
+        elif args.recent.isdigit():
+            start = today - timedelta(days=int(args.recent))
+        else:
+            start = datetime.strptime(args.recent, "%m/%d/%Y")
+        end = datetime.strptime(args.end_date, "%m/%d/%Y") if args.end_date else today
 
-    params = {}
-    if args.docket:
-        params["SearchBy"] = "DocketNumber"
-        params["DocketNumber"] = args.docket
-    elif args.otn:
-        params["SearchBy"] = "OTN"
-        params["OTN"] = args.otn
+        print(f"Searching filings {start.strftime('%m/%d/%Y')} – {end.strftime('%m/%d/%Y')} (headless browser)...")
+        results = search_by_date(
+            start.strftime("%Y-%m-%d"),
+            end.strftime("%Y-%m-%d"),
+            county=args.county,
+            docket_type=args.docket_type,
+        )
     else:
-        params["SearchBy"] = "ParticipantName"
-        params["ParticipantLastName"] = args.last
-        if args.first:
-            params["ParticipantFirstName"] = args.first
-        if args.dob:
-            params["ParticipantDateOfBirth"] = args.dob
+        print("Connecting to UJS Portal...")
+        session, token = get_session()
 
-    if args.county:
-        params["County"] = args.county
-    if args.docket_type:
-        params["DocketType"] = args.docket_type
+        params = {}
+        if args.docket:
+            params["SearchBy"] = "DocketNumber"
+            params["DocketNumber"] = args.docket
+        elif args.otn:
+            params["SearchBy"] = "OTN"
+            params["OTN"] = args.otn
+        else:
+            params["SearchBy"] = "ParticipantName"
+            params["ParticipantLastName"] = args.last
+            if args.first:
+                params["ParticipantFirstName"] = args.first
+            if args.dob:
+                params["ParticipantDateOfBirth"] = args.dob
 
-    results = search(session, token, **params)
+        if args.county:
+            params["County"] = args.county
+        if args.docket_type:
+            params["DocketType"] = args.docket_type
+
+        results = search(session, token, **params)
 
     if args.json:
         import json
@@ -136,7 +199,8 @@ def main():
             url = r.get("docket_sheet_url")
             if url:
                 fn = f"{r['docket_number'].replace('-','_')}_docket.pdf"
-                download_pdf(session, url, fn)
+                session_dl, _ = get_session()
+                download_pdf(session_dl, url, fn)
             else:
                 print("No docket sheet URL for this result.")
         else:
