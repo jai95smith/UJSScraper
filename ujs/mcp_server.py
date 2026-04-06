@@ -288,4 +288,13 @@ def get_case_changes(docket_number: Optional[str] = None, limit: int = 20) -> st
 
 
 if __name__ == "__main__":
-    mcp.run()
+    import sys
+    if "--http" in sys.argv:
+        port = 8200
+        for i, arg in enumerate(sys.argv):
+            if arg == "--port" and i + 1 < len(sys.argv):
+                port = int(sys.argv[i + 1])
+        print(f"MCP server starting on http://0.0.0.0:{port}/mcp")
+        mcp.run(transport="streamable-http", host="0.0.0.0", port=port)
+    else:
+        mcp.run()

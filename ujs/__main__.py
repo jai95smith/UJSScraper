@@ -9,6 +9,7 @@ COMMANDS = {
     "docket": "ujs.modules.docket_pdf",
     "ingest": "ujs.modules.ingest",
     "api": None,  # handled separately
+    "mcp": None,  # handled separately
 }
 
 USAGE = """Usage: python -m ujs <command> [args]
@@ -28,6 +29,8 @@ Examples:
   python -m ujs ingest --queue-only
   python -m ujs ingest --refresh-only
   python -m ujs api --port 8100
+  python -m ujs mcp                    # stdio (Claude Code local)
+  python -m ujs mcp --http --port 8200 # HTTP (remote/prod)
 """
 
 
@@ -52,6 +55,20 @@ def main():
         args = p.parse_args()
         import uvicorn
         uvicorn.run("ujs.api:app", host=args.host, port=args.port, reload=args.reload)
+        return
+
+    if cmd == "mcp":
+        sys.argv = [sys.argv[0]] + sys.argv[2:]
+        from ujs.mcp_server import mcp as mcp_app
+        if "--http" in sys.argv:
+            port = 8200
+            for i, arg in enumerate(sys.argv):
+                if arg == "--port" and i + 1 < len(sys.argv):
+                    port = int(sys.argv[i + 1])
+            print(f"MCP server starting on http://0.0.0.0:{port}/mcp")
+            mcp_app.run(transport="streamable-http", host="0.0.0.0", port=port)
+        else:
+            mcp_app.run()
         return
 
     # Remove the command name so argparse in submodules sees the right args
