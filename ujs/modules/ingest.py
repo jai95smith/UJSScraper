@@ -57,6 +57,17 @@ def ingest_events(county=None, docket_type=None, lookahead_days=7):
 
 def deep_analyze_docket(docket_number):
     """Download PDF, run Gemini, store analysis + change detection."""
+    from ujs.core import search_by_docket
+
+    # Ensure case exists in DB first
+    with db.connect() as conn:
+        if not db.get_case(conn, docket_number):
+            results = search_by_docket(docket_number)
+            if results:
+                db.upsert_cases(conn, results)
+            else:
+                raise ValueError(f"Docket not found on UJS: {docket_number}")
+
     with tempfile.TemporaryDirectory() as d:
         analysis = analyze_docket(docket_number, out_dir=d)
 

@@ -1,5 +1,7 @@
 """REST API for PA UJS court data — DB-first with async ingest."""
 
+import threading, time, traceback
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse, JSONResponse
@@ -9,11 +11,58 @@ import tempfile, os
 from ujs import db
 from ujs.modules.docket_pdf import fetch_docket_pdf, extract_text, analyze_summary
 
+
+# -------------------------------------------------------------------
+# Background queue worker — processes ingest jobs automatically
+# -------------------------------------------------------------------
+
+_worker_running = False
+
+
+def _queue_worker():
+    """Background thread that polls the ingest queue every 10s."""
+    global _worker_running
+    _worker_running = True
+    while _worker_running:
+        try:
+            with db.connect() as conn:
+                job = db.claim_ingest_job(conn)
+            if job:
+                job_id, docket_number = job
+                print(f"[worker] Processing {docket_number}")
+                try:
+                    from ujs.modules.ingest import deep_analyze_docket
+                    deep_analyze_docket(docket_number)
+                    with db.connect() as conn:
+                        db.complete_ingest_job(conn, job_id)
+                    print(f"[worker] Done {docket_number}")
+                except Exception as e:
+                    print(f"[worker] Error {docket_number}: {e}")
+                    with db.connect() as conn:
+                        db.complete_ingest_job(conn, job_id, error=str(e))
+            else:
+                time.sleep(10)
+        except Exception as e:
+            print(f"[worker] Connection error: {e}")
+            time.sleep(30)
+
+
+@asynccontextmanager
+async def lifespan(app):
+    # Start background worker on API startup
+    t = threading.Thread(target=_queue_worker, daemon=True)
+    t.start()
+    print("[worker] Queue worker started")
+    yield
+    _worker_running = False
+
+
 app = FastAPI(
     title="PA UJS Court Search API",
     description="Programmatic access to Pennsylvania Unified Judicial System court records. "
                 "Data served from database — updated hourly via ingest pipeline.",
     version="2.0.0",
+    lifespan=lifespan,
 )
 
 

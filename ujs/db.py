@@ -35,6 +35,14 @@ def _hash(data):
 
 def upsert_case(conn, case):
     """Upsert a case from search results."""
+    # Ensure all expected keys exist with defaults
+    defaults = {
+        "docket_number": "", "court_type": "", "caption": "", "status": "",
+        "filing_date": "", "participant": "", "dob": "", "county": "",
+        "court_office": "", "otn": "", "complaint": "", "incident": "",
+        "docket_sheet_url": None, "court_summary_url": None,
+    }
+    case = {**defaults, **case}
     cur = conn.cursor()
     cur.execute("""
         INSERT INTO cases (docket_number, court_type, caption, status, filing_date,
