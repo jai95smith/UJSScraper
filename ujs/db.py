@@ -125,14 +125,30 @@ def search_cases(conn, county=None, status=None, docket_type=None,
         clauses.append("c.filing_date <= %s")
         params.append(filed_before)
     if name:
-        clauses.append("""(
-            c.caption ILIKE %s
-            OR EXISTS (
-                SELECT 1 FROM participants p
-                WHERE p.docket_number = c.docket_number AND p.name ILIKE %s
-            )
-        )""")
-        params.extend([f"%{name}%", f"%{name}%"])
+        # Handle "First Last" → also search "Last, First" and each word separately
+        name_parts = name.strip().split()
+        if len(name_parts) >= 2:
+            # "Kelli Murphy" → search for "%Kelli%Murphy%" AND "%Murphy%Kelli%"
+            forward = f"%{'%'.join(name_parts)}%"
+            reverse = f"%{name_parts[-1]}%{name_parts[0]}%"
+            clauses.append("""(
+                c.caption ILIKE %s OR c.caption ILIKE %s
+                OR EXISTS (
+                    SELECT 1 FROM participants p
+                    WHERE p.docket_number = c.docket_number
+                    AND (p.name ILIKE %s OR p.name ILIKE %s)
+                )
+            )""")
+            params.extend([forward, reverse, forward, reverse])
+        else:
+            clauses.append("""(
+                c.caption ILIKE %s
+                OR EXISTS (
+                    SELECT 1 FROM participants p
+                    WHERE p.docket_number = c.docket_number AND p.name ILIKE %s
+                )
+            )""")
+            params.extend([f"%{name}%", f"%{name}%"])
 
     where = " AND ".join(clauses) if clauses else "TRUE"
     params.append(limit)
