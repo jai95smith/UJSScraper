@@ -272,10 +272,9 @@ def _execute_tool(name, inputs):
 
 
 def _clean_question(question: str) -> str:
-    """Use Gemini Flash with Google Search grounding to fix spelling and verify names."""
+    """Fix spelling/grammar in court questions. Does NOT change person names."""
     try:
         from google import genai
-        from google.genai.types import Tool, GoogleSearch
         key = os.environ.get("GEMINI_API_KEY")
         if not key:
             return question
@@ -283,16 +282,14 @@ def _clean_question(question: str) -> str:
         response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=(
-                "Fix any spelling, grammar, or typos in this question about "
-                "Pennsylvania court cases. Use Google Search to verify the correct "
-                "spelling of person names, places, and legal terms. "
+                "Fix spelling and grammar in this question about Pennsylvania court cases. "
+                "Fix legal terms (arraignment, preliminary hearing, disposition, etc.) "
+                "and PA county names (Lehigh, Northampton, Bucks, etc.). "
+                "DO NOT change person names — leave them exactly as the user typed them. "
                 "Return ONLY the corrected question, nothing else.\n\n"
                 f"Question: {question}"
             ),
-            config={
-                "temperature": 0,
-                "tools": [Tool(google_search=GoogleSearch())],
-            },
+            config={"temperature": 0},
         )
         cleaned = response.text.strip()
         if cleaned:
