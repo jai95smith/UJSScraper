@@ -10,7 +10,15 @@ from ujs import db
 SYSTEM_PROMPT = """You are a PA court records assistant for Lehigh and Northampton counties.
 You answer questions about court cases, hearings, charges, attorneys, and judges using the provided tools.
 Always cite docket numbers. Be concise and factual. If data isn't available, say so clearly.
-Dates are in MM/DD/YYYY format. Never make up case information."""
+Dates are in MM/DD/YYYY format. Never make up case information.
+
+IMPORTANT — Name search strategy:
+- Names in court records are stored as "Last, First Middle" (e.g. "Murphy, Kelli Anne")
+- If search_cases returns 0 results, use fuzzy_name_search which handles misspellings
+- If multiple people share the same name, list ALL of them with their DOB and docket numbers
+  so the user can clarify which person they mean. Do not guess.
+- When the user provides a DOB or other detail, use it to narrow to the right person.
+"""
 
 # Tool definitions matching our DB functions
 TOOLS = [
@@ -110,6 +118,17 @@ TOOLS = [
         },
     },
     {
+        "name": "fuzzy_name_search",
+        "description": "Fuzzy search for person names — finds close matches even with misspellings. Use this when exact search returns 0 results.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "The name to search (any format)"},
+            },
+            "required": ["name"],
+        },
+    },
+    {
         "name": "get_case_changes",
         "description": "Get recent changes/updates to a specific case or all cases",
         "input_schema": {
@@ -171,6 +190,12 @@ def _execute_tool(name, inputs):
             )
             if not results:
                 return "No cases found."
+            return json.dumps([dict(r) for r in results], default=str)
+
+        elif name == "fuzzy_name_search":
+            results = db.fuzzy_name_search(conn, inputs["name"], limit=10)
+            if not results:
+                return f"No close matches found for: {inputs['name']}"
             return json.dumps([dict(r) for r in results], default=str)
 
         elif name == "search_by_judge":
@@ -305,11 +330,8 @@ def ask(question: str, api_key: Optional[str] = None) -> str:
     if not key:
         raise RuntimeError("Set ANTHROPIC_API_KEY env var")
 
-    # Clean up the question first
-    cleaned = _clean_question(question)
-
     client = anthropic.Anthropic(api_key=key)
-    messages = [{"role": "user", "content": cleaned}]
+    messages = [{"role": "user", "content": question}]
 
     # Tool use loop — Claude may call multiple tools
     for _ in range(5):  # max 5 tool rounds

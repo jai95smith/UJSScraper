@@ -624,6 +624,22 @@ def validate_api_key(conn, key):
 # Search: judges, attorneys, charges
 # ---------------------------------------------------------------------------
 
+def fuzzy_name_search(conn, name, limit=10):
+    """Fuzzy search for participant names using trigram similarity."""
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT p.name, p.docket_number, p.dob,
+               c.caption, c.status, c.county, c.filing_date,
+               similarity(p.name, %s) as match_score
+        FROM participants p
+        JOIN cases c ON p.docket_number = c.docket_number
+        WHERE similarity(p.name, %s) > 0.15
+        ORDER BY similarity(p.name, %s) DESC
+        LIMIT %s
+    """, (name, name, name, limit))
+    return cur.fetchall()
+
+
 def search_by_judge(conn, judge_name, county=None, limit=100):
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     params = [f"%{judge_name}%"]
