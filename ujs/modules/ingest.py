@@ -190,41 +190,56 @@ def batch_analyze_unanalyzed(limit=50, workers=3):
     return analyzed
 
 
-def run_cycle(county=None, docket_type=None, lookback_days=1,
-              lookahead_days=7, analyze_batch=10, refresh_batch=20, workers=3):
-    """Full ingest cycle: filings → events → queue → stale refresh."""
+def run_cycle(counties=None, docket_type=None, lookback_days=1,
+              lookahead_days=7, analyze_batch=20, refresh_batch=20,
+              auto_analyze=False, workers=3):
+    """Full ingest cycle: filings → events → auto-analyze → queue → stale refresh."""
+    counties = counties or ["Lehigh"]
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"\n{'='*60}")
-    print(f"[{ts}] Ingest cycle starting")
+    print(f"[{ts}] Ingest cycle | counties={counties} type={docket_type}")
     print(f"{'='*60}")
 
-    # 1. New filings
-    try:
-        ingest_filings(county, docket_type, lookback_days)
-    except Exception as e:
-        print(f"[filings] Error: {e}")
+    total_new = 0
 
-    # 2. Upcoming events
-    try:
-        ingest_events(county, docket_type, lookahead_days)
-    except Exception as e:
-        print(f"[events] Error: {e}")
+    # 1. New filings per county
+    for county in counties:
+        try:
+            _, new = ingest_filings(county, docket_type, lookback_days)
+            total_new += new
+        except Exception as e:
+            print(f"[filings] Error ({county}): {e}")
 
-    # 3. Process ingest queue (on-demand requests)
+    # 2. Upcoming events per county
+    for county in counties:
+        try:
+            ingest_events(county, docket_type, lookahead_days)
+        except Exception as e:
+            print(f"[events] Error ({county}): {e}")
+
+    # 3. Auto-analyze new unanalyzed dockets
+    if auto_analyze and total_new > 0:
+        try:
+            analyzed = batch_analyze_unanalyzed(limit=analyze_batch, workers=workers)
+            print(f"[auto-analyze] Analyzed {analyzed} new dockets")
+        except Exception as e:
+            print(f"[auto-analyze] Error: {e}")
+
+    # 4. Process ingest queue (on-demand requests)
     try:
         queued = process_queue(analyze_batch, workers=workers)
         print(f"[queue] Processed {queued} jobs")
     except Exception as e:
         print(f"[queue] Error: {e}")
 
-    # 4. Refresh stale records
+    # 5. Refresh stale records
     try:
         refreshed = refresh_stale(batch_size=refresh_batch, workers=workers)
         print(f"[refresh] Refreshed {refreshed} dockets")
     except Exception as e:
         print(f"[refresh] Error: {e}")
 
-    print(f"[{ts}] Cycle complete\n")
+    print(f"[{ts}] Cycle complete | {total_new} new cases\n")
 
 
 def run_loop(interval_minutes=60, **kwargs):
@@ -242,21 +257,23 @@ def run_loop(interval_minutes=60, **kwargs):
 def main():
     import argparse
     p = argparse.ArgumentParser(description="UJS Ingest Pipeline")
-    p.add_argument("--county", default="Lehigh")
-    p.add_argument("--type", dest="docket_type", default="Criminal")
+    p.add_argument("--counties", default="Lehigh,Northampton",
+                   help="Comma-separated county names (default: Lehigh,Northampton)")
+    p.add_argument("--type", dest="docket_type", default=None,
+                   help="Docket type filter: Criminal, Civil, Traffic, etc. (default: all)")
     p.add_argument("--lookback", type=int, default=1, help="Days back for filings")
     p.add_argument("--lookahead", type=int, default=7, help="Days ahead for events")
     p.add_argument("--interval", type=int, default=60, help="Minutes between cycles")
     p.add_argument("--workers", type=int, default=3, help="Parallel workers for Gemini (default: 3)")
+    p.add_argument("--auto-analyze", action="store_true",
+                   help="Auto-analyze new dockets with Gemini after ingest")
     p.add_argument("--once", action="store_true", help="Run one cycle and exit")
     p.add_argument("--queue-only", action="store_true", help="Only process ingest queue")
     p.add_argument("--refresh-only", action="store_true", help="Only refresh stale dockets")
     p.add_argument("--analyze-new", type=int, metavar="N", help="Batch analyze N unanalyzed dockets")
     args = p.parse_args()
 
-    kwargs = dict(county=args.county, docket_type=args.docket_type,
-                  lookback_days=args.lookback, lookahead_days=args.lookahead,
-                  workers=args.workers)
+    counties = [c.strip() for c in args.counties.split(",")]
 
     if args.analyze_new:
         batch_analyze_unanalyzed(limit=args.analyze_new, workers=args.workers)
@@ -265,9 +282,14 @@ def main():
     elif args.refresh_only:
         refresh_stale(workers=args.workers)
     elif args.once:
-        run_cycle(**kwargs)
+        run_cycle(counties=counties, docket_type=args.docket_type,
+                  lookback_days=args.lookback, lookahead_days=args.lookahead,
+                  auto_analyze=args.auto_analyze, workers=args.workers)
     else:
-        run_loop(interval_minutes=args.interval, **kwargs)
+        run_loop(interval_minutes=args.interval, counties=counties,
+                 docket_type=args.docket_type, lookback_days=args.lookback,
+                 lookahead_days=args.lookahead, auto_analyze=args.auto_analyze,
+                 workers=args.workers)
 
 
 if __name__ == "__main__":
