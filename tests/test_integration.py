@@ -16,8 +16,21 @@ from ujs.modules.docket_pdf import analyze_docket, analyze_summary
 
 TEST_DOCKET = "CP-39-CR-0000142-2025"
 TEST_DOCKET_MJ = "MJ-31303-TR-0000496-2026"
+TEST_PREFIX = "INTTEST-"
 PASS = 0
 FAIL = 0
+
+
+def _cleanup_test_data(conn):
+    """Only delete test data, never production data."""
+    cur = conn.cursor()
+    for tbl in ["change_log", "docket_entries", "attorneys", "sentences",
+                "bail", "charges", "events", "participants", "analyses",
+                "ingest_queue", "scrape_log"]:
+        cur.execute(f"DELETE FROM {tbl} WHERE docket_number LIKE %s OR docket_number = %s OR docket_number = %s",
+                    (f"{TEST_PREFIX}%", TEST_DOCKET, "TEST-DOCKET-999"))
+    cur.execute("DELETE FROM cases WHERE docket_number LIKE %s OR docket_number = %s",
+                (f"{TEST_PREFIX}%", TEST_DOCKET))
 
 
 def test(name, condition, detail=""):
@@ -82,14 +95,9 @@ def run_tests():
     # ------------------------------------------------------------------
     print("\n--- 3. DB upsert + retrieval ---")
     # ------------------------------------------------------------------
-    # Clean test data first
+    # Clean only test data
     with db.connect() as conn:
-        cur = conn.cursor()
-        for tbl in ["change_log", "docket_entries", "attorneys", "sentences",
-                     "bail", "charges", "events", "participants", "analyses",
-                     "ingest_queue", "scrape_log"]:
-            cur.execute(f"DELETE FROM {tbl}")
-        cur.execute("DELETE FROM cases")
+        _cleanup_test_data(conn)
 
     # Upsert from search results
     with db.connect() as conn:
@@ -204,16 +212,11 @@ def run_tests():
     test("cases count > 0", stats["cases"] > 0)
 
     # ------------------------------------------------------------------
-    # Cleanup
+    # Cleanup — only test data, never prod
     # ------------------------------------------------------------------
     print("\n--- Cleanup ---")
     with db.connect() as conn:
-        cur = conn.cursor()
-        for tbl in ["change_log", "docket_entries", "attorneys", "sentences",
-                     "bail", "charges", "events", "participants", "analyses",
-                     "ingest_queue", "scrape_log"]:
-            cur.execute(f"DELETE FROM {tbl}")
-        cur.execute("DELETE FROM cases")
+        _cleanup_test_data(conn)
     print("  Test data cleaned")
 
     # ------------------------------------------------------------------

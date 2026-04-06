@@ -66,6 +66,13 @@ app = FastAPI(
 )
 
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    import traceback
+    traceback.print_exc()
+    return JSONResponse(status_code=500, content= {"error": str(exc)})
+
+
 # -------------------------------------------------------------------
 # Auth helper
 # -------------------------------------------------------------------
@@ -284,13 +291,16 @@ def search_events(
 @app.get("/docket/{docket_number}", tags=["Docket"])
 def docket_info(docket_number: str):
     """Get case info. Auto-queues ingest if not yet indexed."""
-    with db.connect() as conn:
-        case = db.get_case(conn, docket_number)
-        if case:
-            return dict(case)
-        queue_id, status = db.queue_ingest(conn, docket_number, priority=5)
-        return JSONResponse(202, {"status": "queuing", "docket_number": docket_number,
-                                  "message": "Not yet indexed. Queued — retry in ~15s."})
+    try:
+        with db.connect() as conn:
+            case = db.get_case(conn, docket_number)
+            if case:
+                return dict(case)
+            queue_id, status = db.queue_ingest(conn, docket_number, priority=5)
+            return JSONResponse(status_code=202, content= {"status": "queuing", "docket_number": docket_number,
+                                      "message": "Not yet indexed. Queued — retry in ~15s."})
+    except Exception as e:
+        return JSONResponse(status_code=500, content= {"error": str(e), "docket_number": docket_number})
 
 
 @app.get("/docket/{docket_number}/analyze", tags=["Docket"])
@@ -303,7 +313,7 @@ def docket_analyze(docket_number: str):
         db.queue_ingest(conn, docket_number, priority=5)
         case = db.get_case(conn, docket_number)
         msg = "Case indexed but not yet analyzed." if case else "Not yet indexed."
-        return JSONResponse(202, {"status": "queuing", "docket_number": docket_number,
+        return JSONResponse(status_code=202, content= {"status": "queuing", "docket_number": docket_number,
                                   "message": f"{msg} Queued — retry in ~15s."})
 
 
@@ -601,7 +611,7 @@ def ask_question(body: AskRequest):
         answer = ask(body.question)
         return {"question": body.question, "answer": answer}
     except Exception as e:
-        return JSONResponse(500, {"error": str(e)})
+        return JSONResponse(status_code=500, content= {"error": str(e)})
 
 
 @app.get("/ask", tags=["Chat"])
@@ -613,7 +623,7 @@ def ask_question_get(q: str = Query(..., description="Your question")):
         answer = ask(q)
         return {"question": q, "answer": answer}
     except Exception as e:
-        return JSONResponse(500, {"error": str(e)})
+        return JSONResponse(status_code=500, content= {"error": str(e)})
 
 
 # -------------------------------------------------------------------
@@ -627,4 +637,4 @@ def health():
             s = db.get_stats(conn)
         return {"status": "ok", "db": "connected", "cases_indexed": s["cases"]}
     except Exception as e:
-        return JSONResponse(503, {"status": "error", "detail": str(e)})
+        return JSONResponse(status_code=503, content= {"status": "error", "detail": str(e)})
