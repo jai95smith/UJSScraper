@@ -68,7 +68,18 @@ def upsert_case(conn, case):
         RETURNING (xmax = 0) AS is_new
     """, case)
     row = cur.fetchone()
-    return row[0] if row else False
+    is_new = row[0] if row else False
+
+    # Store participant from search results if present
+    participant = case.get("participant", "").strip()
+    if participant:
+        cur.execute("""
+            INSERT INTO participants (docket_number, name, dob, role)
+            VALUES (%s, %s, %s, 'defendant')
+            ON CONFLICT (docket_number, name, role) DO UPDATE SET dob = EXCLUDED.dob
+        """, (case["docket_number"], participant, case.get("dob", "") or None))
+
+    return is_new
 
 
 def upsert_cases(conn, cases):
