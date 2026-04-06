@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 
 from ujs import db
-from ujs.core import search_by_date, search_by_calendar
+from ujs.core import search_by_date, search_by_calendar, get_session, _post_search
 from ujs.modules.docket_pdf import analyze_docket
 
 
@@ -151,6 +151,35 @@ def refresh_stale(active_hours=24, closed_days=7, batch_size=20, workers=3):
     return refreshed
 
 
+def ingest_appellate(lookback_days=1):
+    """Scrape recent appellate filings from all three PA appellate courts."""
+    today = datetime.now()
+    start = (today - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
+    end = today.strftime("%Y-%m-%d")
+    total_new = 0
+
+    for court in ["Supreme", "Superior", "Commonwealth"]:
+        try:
+            session, token = get_session()
+            results = _post_search(session, token, SearchBy="AppellateCourtName",
+                                   FiledStartDate=start, FiledEndDate=end,
+                                   AppellateCourtName=court)
+            with db.connect() as conn:
+                total, new = db.upsert_cases(conn, results)
+                cur = conn.cursor()
+                cur.execute("""
+                    INSERT INTO scrape_log (scrape_type, county, docket_type, date_range,
+                                            cases_found, cases_new, completed_at)
+                    VALUES ('appellate', %s, NULL, %s, %s, %s, NOW())
+                """, (court, f"{start}/{end}", total, new))
+            print(f"[appellate] {court}: {total} found, {new} new")
+            total_new += new
+        except Exception as e:
+            print(f"[appellate] {court} error: {e}")
+
+    return total_new
+
+
 def batch_analyze_unanalyzed(limit=50, workers=3):
     """Find cases in DB that don't have a Gemini analysis yet, analyze them."""
     with db.connect() as conn:
@@ -217,7 +246,14 @@ def run_cycle(counties=None, docket_type=None, lookback_days=1,
         except Exception as e:
             print(f"[events] Error ({county}): {e}")
 
-    # 3. Auto-analyze new unanalyzed dockets
+    # 3. Appellate courts (statewide)
+    try:
+        app_new = ingest_appellate(lookback_days)
+        total_new += app_new
+    except Exception as e:
+        print(f"[appellate] Error: {e}")
+
+    # 4. Auto-analyze new unanalyzed dockets
     if auto_analyze and total_new > 0:
         try:
             analyzed = batch_analyze_unanalyzed(limit=analyze_batch, workers=workers)
