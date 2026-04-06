@@ -85,6 +85,110 @@ def _get_key(x_api_key: Optional[str] = None):
 # Case search
 # -------------------------------------------------------------------
 
+# -------------------------------------------------------------------
+# Quick access — filings & hearings
+# -------------------------------------------------------------------
+
+@app.get("/filings/today", tags=["Quick Access"])
+def filings_today(
+    county: Optional[str] = None,
+    docket_type: Optional[str] = Query(None, alias="type"),
+    limit: int = Query(200, le=500),
+):
+    """Cases filed today."""
+    today = datetime.now().strftime("%m/%d/%Y")
+    with db.connect() as conn:
+        return [dict(r) for r in db.search_cases(
+            conn, county=county, docket_type=docket_type,
+            filed_after=today, filed_before=today, limit=limit)]
+
+
+@app.get("/filings/recent", tags=["Quick Access"])
+def filings_recent(
+    days: int = Query(7, description="Days back"),
+    county: Optional[str] = None,
+    docket_type: Optional[str] = Query(None, alias="type"),
+    limit: int = Query(200, le=500),
+):
+    """Cases filed in the last N days."""
+    from datetime import timedelta
+    start = (datetime.now() - timedelta(days=days)).strftime("%m/%d/%Y")
+    today = datetime.now().strftime("%m/%d/%Y")
+    with db.connect() as conn:
+        return [dict(r) for r in db.search_cases(
+            conn, county=county, docket_type=docket_type,
+            filed_after=start, filed_before=today, limit=limit)]
+
+
+@app.get("/hearings/today", tags=["Quick Access"])
+def hearings_today(
+    county: Optional[str] = None,
+    docket_type: Optional[str] = Query(None, alias="type"),
+):
+    """Court hearings/events scheduled for today."""
+    today = datetime.now().strftime("%m/%d/%Y")
+    with db.connect() as conn:
+        cur = conn.cursor(cursor_factory=__import__("psycopg2").extras.RealDictCursor)
+        clauses = ["e.event_date LIKE %s"]
+        params = [f"{today}%"]
+        if county:
+            clauses.append("c.county ILIKE %s")
+            params.append(county)
+        if docket_type:
+            dtype_map = {"criminal": "-CR-", "civil": "-CV-", "traffic": "-TR-"}
+            code = dtype_map.get(docket_type.lower(), "")
+            if code:
+                clauses.append("c.docket_number LIKE %s")
+                params.append(f"%{code}%")
+        cur.execute(f"""
+            SELECT e.*, c.caption, c.status as case_status, c.county, c.filing_date
+            FROM events e JOIN cases c ON e.docket_number = c.docket_number
+            WHERE {' AND '.join(clauses)}
+            ORDER BY e.event_date ASC
+        """, params)
+        return [dict(r) for r in cur.fetchall()]
+
+
+@app.get("/hearings/upcoming", tags=["Quick Access"])
+def hearings_upcoming(
+    days: int = Query(7, description="Days ahead"),
+    county: Optional[str] = None,
+    docket_type: Optional[str] = Query(None, alias="type"),
+    event_type: Optional[str] = Query(None, description="e.g. 'Preliminary Hearing', 'Trial'"),
+    limit: int = Query(200, le=500),
+):
+    """Court hearings/events in the next N days."""
+    with db.connect() as conn:
+        cur = conn.cursor(cursor_factory=__import__("psycopg2").extras.RealDictCursor)
+        clauses = []
+        params = []
+        if county:
+            clauses.append("c.county ILIKE %s")
+            params.append(county)
+        if docket_type:
+            dtype_map = {"criminal": "-CR-", "civil": "-CV-", "traffic": "-TR-"}
+            code = dtype_map.get(docket_type.lower(), "")
+            if code:
+                clauses.append("c.docket_number LIKE %s")
+                params.append(f"%{code}%")
+        if event_type:
+            clauses.append("e.event_type ILIKE %s")
+            params.append(f"%{event_type}%")
+        where = " AND ".join(clauses) if clauses else "TRUE"
+        params.append(limit)
+        cur.execute(f"""
+            SELECT e.*, c.caption, c.status as case_status, c.county, c.filing_date
+            FROM events e JOIN cases c ON e.docket_number = c.docket_number
+            WHERE {where}
+            ORDER BY e.event_date ASC LIMIT %s
+        """, params)
+        return [dict(r) for r in cur.fetchall()]
+
+
+# -------------------------------------------------------------------
+# Search endpoints
+# -------------------------------------------------------------------
+
 @app.get("/search/cases", tags=["Search"])
 def search_cases(
     name: Optional[str] = None,
