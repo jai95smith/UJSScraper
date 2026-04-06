@@ -6,3 +6,5 @@ fastapi
 uvicorn
 google-genai
 psycopg2-binary
+anthropic
+mcp[cli]

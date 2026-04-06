@@ -585,6 +585,38 @@ def create_key(name: str, email: Optional[str] = None):
 
 
 # -------------------------------------------------------------------
+# Natural language chat
+# -------------------------------------------------------------------
+
+class AskRequest(BaseModel):
+    question: str
+
+@app.post("/ask", tags=["Chat"])
+def ask_question(body: AskRequest):
+    """Ask a natural language question about court records.
+    Examples: 'Did Taiba Sultana's ballot appeal pass?',
+    'What hearings are in Lehigh tomorrow?', 'Show me DUI cases this month'"""
+    from ujs.chat import ask
+    try:
+        answer = ask(body.question)
+        return {"question": body.question, "answer": answer}
+    except Exception as e:
+        return JSONResponse(500, {"error": str(e)})
+
+
+@app.get("/ask", tags=["Chat"])
+def ask_question_get(q: str = Query(..., description="Your question")):
+    """Ask a question via GET (browser-friendly).
+    Example: /ask?q=What hearings are in Lehigh today?"""
+    from ujs.chat import ask
+    try:
+        answer = ask(q)
+        return {"question": q, "answer": answer}
+    except Exception as e:
+        return JSONResponse(500, {"error": str(e)})
+
+
+# -------------------------------------------------------------------
 # Health
 # -------------------------------------------------------------------
 
