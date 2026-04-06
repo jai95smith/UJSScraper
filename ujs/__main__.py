@@ -7,6 +7,7 @@ COMMANDS = {
     "search": "ujs.cli",
     "monitor": "ujs.modules.monitor",
     "docket": "ujs.modules.docket_pdf",
+    "ingest": "ujs.modules.ingest",
     "api": None,  # handled separately
 }
 
@@ -14,16 +15,18 @@ USAGE = """Usage: python -m ujs <command> [args]
 
 Commands:
   search    Search by name, docket, OTN, date, or calendar events
-  monitor   Hourly monitor for new filings & events
+  monitor   Hourly monitor for new filings & events (file-based)
   docket    Download and analyze docket sheet PDFs
+  ingest    DB ingest pipeline — scrape, analyze, store, refresh
   api       Start the REST API server
 
 Examples:
   python -m ujs search --last Smith --county Lehigh --type Criminal
   python -m ujs search --calendar 3 --county Lehigh
-  python -m ujs monitor --county Lehigh --type Criminal --once
-  python -m ujs monitor --county Lehigh --interval 60
   python -m ujs docket CP-39-CR-0000142-2025
+  python -m ujs ingest --county Lehigh --type Criminal --once
+  python -m ujs ingest --queue-only
+  python -m ujs ingest --refresh-only
   python -m ujs api --port 8100
 """
 

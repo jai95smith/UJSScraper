@@ -1,96 +1,142 @@
-"""REST API for PA UJS court data."""
+"""REST API for PA UJS court data — DB-first with async ingest."""
 
 from datetime import datetime, timedelta
 from fastapi import FastAPI, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from typing import Optional
 import tempfile, os
 
-from ujs.core import (
-    search_by_name, search_by_docket, search_by_otn,
-    search_by_date, search_by_calendar, download_pdf,
-)
-from ujs.modules.docket_pdf import analyze_docket, analyze_summary, fetch_docket_pdf, extract_text
+from ujs import db
+from ujs.modules.docket_pdf import fetch_docket_pdf, extract_text, analyze_summary
 
 app = FastAPI(
     title="PA UJS Court Search API",
-    description="Programmatic access to Pennsylvania Unified Judicial System court records",
-    version="1.0.0",
+    description="Programmatic access to Pennsylvania Unified Judicial System court records. "
+                "Data served from database — updated hourly via ingest pipeline.",
+    version="2.0.0",
 )
 
 
 # -------------------------------------------------------------------
-# Search endpoints
+# Search endpoints (DB-first)
 # -------------------------------------------------------------------
 
-@app.get("/search/name")
-def api_search_name(
-    last: str,
-    first: Optional[str] = None,
-    dob: Optional[str] = Query(None, description="MM/DD/YYYY"),
+@app.get("/search/cases")
+def api_search_cases(
+    name: Optional[str] = None,
+    county: Optional[str] = None,
+    status: Optional[str] = None,
+    docket_type: Optional[str] = Query(None, alias="type"),
+    filed_after: Optional[str] = Query(None, description="MM/DD/YYYY"),
+    filed_before: Optional[str] = Query(None, description="MM/DD/YYYY"),
+    limit: int = Query(100, le=500),
+):
+    """Search indexed cases from database."""
+    with db.connect() as conn:
+        results = db.search_cases(
+            conn, county=county, status=status, docket_type=docket_type,
+            filed_after=filed_after, filed_before=filed_before,
+            name=name, limit=limit,
+        )
+        return [dict(r) for r in results]
+
+
+@app.get("/search/events")
+def api_search_events(
     county: Optional[str] = None,
     docket_type: Optional[str] = Query(None, alias="type"),
+    days: int = Query(7, description="Days ahead"),
 ):
-    return search_by_name(last, first=first, dob=dob, county=county, docket_type=docket_type)
-
-
-@app.get("/search/docket")
-def api_search_docket(number: str = Query(..., description="e.g. CP-39-CR-0001378-1989")):
-    return search_by_docket(number)
-
-
-@app.get("/search/otn")
-def api_search_otn(otn: str):
-    return search_by_otn(otn)
-
-
-@app.get("/search/filings")
-def api_search_filings(
-    days: int = Query(1, description="Days back to search"),
-    start: Optional[str] = Query(None, description="YYYY-MM-DD start date"),
-    end: Optional[str] = Query(None, description="YYYY-MM-DD end date"),
-    county: Optional[str] = None,
-    docket_type: Optional[str] = Query(None, alias="type"),
-):
-    today = datetime.now()
-    s = start or (today - timedelta(days=days)).strftime("%Y-%m-%d")
-    e = end or today.strftime("%Y-%m-%d")
-    return search_by_date(s, e, county=county, docket_type=docket_type)
-
-
-@app.get("/search/calendar")
-def api_search_calendar(
-    days: int = Query(7, description="Days ahead to search"),
-    start: Optional[str] = Query(None, description="YYYY-MM-DD start date"),
-    end: Optional[str] = Query(None, description="YYYY-MM-DD end date"),
-    county: Optional[str] = None,
-    docket_type: Optional[str] = Query(None, alias="type"),
-):
-    today = datetime.now()
-    s = start or today.strftime("%Y-%m-%d")
-    e = end or (today + timedelta(days=days)).strftime("%Y-%m-%d")
-    return search_by_calendar(s, e, county=county, docket_type=docket_type)
+    """Get upcoming calendar events from database."""
+    with db.connect() as conn:
+        cur = conn.cursor(cursor_factory=__import__("psycopg2").extras.RealDictCursor)
+        clauses = ["e.event_date >= %s"]
+        params = [datetime.now().strftime("%m/%d/%Y")]
+        if county:
+            clauses.append("c.county ILIKE %s")
+            params.append(county)
+        if docket_type:
+            dtype_map = {"criminal": "-CR-", "civil": "-CV-", "traffic": "-TR-"}
+            code = dtype_map.get(docket_type.lower(), "")
+            if code:
+                clauses.append("c.docket_number LIKE %s")
+                params.append(f"%{code}%")
+        where = " AND ".join(clauses)
+        cur.execute(f"""
+            SELECT e.*, c.caption, c.status as case_status, c.county, c.filing_date
+            FROM events e JOIN cases c ON e.docket_number = c.docket_number
+            WHERE {where}
+            ORDER BY e.event_date ASC LIMIT 200
+        """, params)
+        return [dict(r) for r in cur.fetchall()]
 
 
 # -------------------------------------------------------------------
-# Docket endpoints
+# Docket endpoints (DB-first, auto-queue on miss)
 # -------------------------------------------------------------------
 
 @app.get("/docket/{docket_number}")
 def api_docket_info(docket_number: str):
-    """Get case info for a docket number."""
-    results = search_by_docket(docket_number)
-    if not results:
-        return {"error": "Not found", "docket_number": docket_number}
-    return results[0]
+    """Get case info. Returns 202 + queues ingest if not yet indexed."""
+    with db.connect() as conn:
+        case = db.get_case(conn, docket_number)
+        if case:
+            return dict(case)
+
+        # Not in DB — auto-queue
+        queue_id, status = db.queue_ingest(conn, docket_number, priority=5)
+        return JSONResponse(status_code=202, content={
+            "status": "queuing",
+            "docket_number": docket_number,
+            "queue_id": queue_id,
+            "message": "Not yet indexed. Queued for scraping — retry in ~15s.",
+        })
 
 
 @app.get("/docket/{docket_number}/analyze")
-def api_docket_analyze(docket_number: str, ai: bool = Query(True, description="Use Gemini AI parsing")):
-    """Download docket PDF and extract structured case data via Gemini."""
+def api_docket_analyze(docket_number: str):
+    """Get Gemini-parsed analysis. Returns 202 if not yet analyzed."""
+    with db.connect() as conn:
+        analysis = db.get_analysis(conn, docket_number, "docket")
+        if analysis:
+            return analysis
+
+        # Check if case exists but not yet analyzed
+        case = db.get_case(conn, docket_number)
+        if case:
+            queue_id, status = db.queue_ingest(conn, docket_number, priority=5)
+            return JSONResponse(status_code=202, content={
+                "status": "queuing",
+                "docket_number": docket_number,
+                "message": "Case indexed but not yet analyzed. Queued — retry in ~15s.",
+            })
+
+        # Not in DB at all
+        queue_id, status = db.queue_ingest(conn, docket_number, priority=5)
+        return JSONResponse(status_code=202, content={
+            "status": "queuing",
+            "docket_number": docket_number,
+            "message": "Not yet indexed. Queued for scraping — retry in ~15s.",
+        })
+
+
+@app.get("/docket/{docket_number}/summary")
+def api_docket_summary(docket_number: str):
+    """Get court summary (cross-case person history). Returns 202 if not cached."""
+    with db.connect() as conn:
+        analysis = db.get_analysis(conn, docket_number, "summary")
+        if analysis:
+            return analysis
+
+    # Not cached — scrape live for summaries (they're per-person, not per-docket)
     with tempfile.TemporaryDirectory() as tmpdir:
-        result = analyze_docket(docket_number, out_dir=tmpdir, use_gemini=ai)
-        return {k: v for k, v in result.items() if k not in ("full_text", "pdf_path")}
+        result = analyze_summary(docket_number, out_dir=tmpdir)
+        clean = {k: v for k, v in result.items() if k != "pdf_path"}
+
+    with db.connect() as conn:
+        db.store_analysis(conn, docket_number, clean, "summary")
+
+    return clean
 
 
 @app.get("/docket/{docket_number}/text")
@@ -102,14 +148,6 @@ def api_docket_text(docket_number: str):
         return {"docket_number": docket_number, "text": text}
 
 
-@app.get("/docket/{docket_number}/summary")
-def api_docket_summary(docket_number: str):
-    """Download court summary PDF and extract full case history via Gemini."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        result = analyze_summary(docket_number, out_dir=tmpdir)
-        return {k: v for k, v in result.items() if k != "pdf_path"}
-
-
 @app.get("/docket/{docket_number}/pdf")
 def api_docket_pdf(docket_number: str, doc: str = Query("docket", description="'docket' or 'summary'")):
     """Download and serve a PDF directly."""
@@ -119,10 +157,69 @@ def api_docket_pdf(docket_number: str, doc: str = Query("docket", description="'
                         filename=os.path.basename(pdf_path))
 
 
+@app.get("/docket/{docket_number}/changes")
+def api_docket_changes(docket_number: str):
+    """Get change history for a docket."""
+    with db.connect() as conn:
+        changes = db.get_changes(conn, docket_number=docket_number)
+        return [dict(c) for c in changes]
+
+
 # -------------------------------------------------------------------
-# Health
+# Ingest / queue
 # -------------------------------------------------------------------
+
+@app.get("/ingest/{docket_number}/status")
+def api_ingest_status(docket_number: str):
+    """Check ingest status for a docket."""
+    with db.connect() as conn:
+        cur = conn.cursor(cursor_factory=__import__("psycopg2").extras.RealDictCursor)
+        cur.execute("""
+            SELECT id, status, requested_at, started_at, completed_at, error
+            FROM ingest_queue WHERE docket_number = %s
+            ORDER BY requested_at DESC LIMIT 1
+        """, (docket_number,))
+        job = cur.fetchone()
+        if not job:
+            case = db.get_case(conn, docket_number)
+            if case:
+                return {"status": "indexed", "last_scraped": case["last_scraped"].isoformat() if case["last_scraped"] else None}
+            return {"status": "unknown", "docket_number": docket_number}
+        return dict(job)
+
+
+# -------------------------------------------------------------------
+# Changes feed
+# -------------------------------------------------------------------
+
+@app.get("/changes")
+def api_changes(
+    since: Optional[str] = Query(None, description="ISO datetime"),
+    limit: int = Query(50, le=200),
+):
+    """Get recent changes across all dockets."""
+    since_dt = datetime.fromisoformat(since) if since else None
+    with db.connect() as conn:
+        changes = db.get_changes(conn, since=since_dt, limit=limit)
+        return [dict(c) for c in changes]
+
+
+# -------------------------------------------------------------------
+# Stats / health
+# -------------------------------------------------------------------
+
+@app.get("/stats")
+def api_stats():
+    """Database statistics and health."""
+    with db.connect() as conn:
+        return db.get_stats(conn)
+
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "portal": "https://ujsportal.pacourts.us"}
+    try:
+        with db.connect() as conn:
+            stats = db.get_stats(conn)
+        return {"status": "ok", "db": "connected", "cases_indexed": stats["cases"]}
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"status": "error", "detail": str(e)})
