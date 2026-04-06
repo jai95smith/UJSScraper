@@ -4,3 +4,4 @@ playwright
 pdfplumber
 fastapi
 uvicorn
+google-genai

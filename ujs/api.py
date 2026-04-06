@@ -86,16 +86,11 @@ def api_docket_info(docket_number: str):
 
 
 @app.get("/docket/{docket_number}/analyze")
-def api_docket_analyze(docket_number: str):
-    """Download docket PDF and extract charges, dispositions, bail."""
+def api_docket_analyze(docket_number: str, ai: bool = Query(True, description="Use Gemini AI parsing")):
+    """Download docket PDF and extract structured case data via Gemini."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        result = analyze_docket(docket_number, out_dir=tmpdir)
-        return {
-            "docket_number": result["docket_number"],
-            "charges": result["charges"],
-            "dispositions": result["dispositions"],
-            "bail": result["bail"],
-        }
+        result = analyze_docket(docket_number, out_dir=tmpdir, use_gemini=ai)
+        return {k: v for k, v in result.items() if k not in ("full_text", "pdf_path")}
 
 
 @app.get("/docket/{docket_number}/text")

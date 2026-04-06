@@ -1,9 +1,96 @@
 #!/usr/bin/env python3
 """Docket PDF downloader and text extractor."""
 
-import os, re
+import json, os, re
+
+from google import genai
 
 from ujs.core import search_by_docket, search_by_name, download_pdf
+
+GEMINI_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "docket_number": {"type": "string"},
+        "case_caption": {"type": "string"},
+        "court": {"type": "string"},
+        "county": {"type": "string"},
+        "case_status": {"type": "string"},
+        "filing_date": {"type": "string"},
+        "judge": {"type": "string"},
+        "defendant": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "dob": {"type": "string"},
+                "address": {"type": "string"},
+            },
+        },
+        "charges": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "seq": {"type": "integer"},
+                    "statute": {"type": "string"},
+                    "description": {"type": "string"},
+                    "grade": {"type": "string"},
+                    "offense_date": {"type": "string"},
+                    "otn": {"type": "string"},
+                    "disposition": {"type": "string"},
+                    "disposition_date": {"type": "string"},
+                },
+            },
+        },
+        "bail": {
+            "type": "object",
+            "properties": {
+                "type": {"type": "string"},
+                "amount": {"type": "string"},
+                "status": {"type": "string"},
+                "posting_date": {"type": "string"},
+            },
+        },
+        "sentences": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "charge": {"type": "string"},
+                    "sentence_type": {"type": "string"},
+                    "duration": {"type": "string"},
+                    "conditions": {"type": "string"},
+                    "sentence_date": {"type": "string"},
+                },
+            },
+        },
+        "attorneys": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "role": {"type": "string"},
+                },
+            },
+        },
+        "docket_entries": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "date": {"type": "string"},
+                    "description": {"type": "string"},
+                    "filer": {"type": "string"},
+                },
+            },
+        },
+    },
+}
+
+GEMINI_PROMPT = """Extract all structured data from this PA court docket sheet.
+Return every field you can find. For charges, include the disposition if present.
+For docket entries, include every entry with date and description.
+Be precise with statute numbers, dates, and names. Omit fields you cannot find."""
 
 
 def fetch_docket_pdf(docket_number, out_dir="."):
@@ -86,10 +173,37 @@ def parse_bail(text):
     return bail_info
 
 
-def analyze_docket(docket_number, out_dir="."):
-    """Full pipeline: fetch PDF, extract text, parse key sections."""
+def parse_with_gemini(text, api_key=None):
+    """Send docket text to Gemini Flash for structured extraction."""
+    key = api_key or os.environ.get("GEMINI_API_KEY")
+    if not key:
+        raise RuntimeError("Set GEMINI_API_KEY env var or pass api_key")
+
+    client = genai.Client(api_key=key)
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=GEMINI_PROMPT + "\n\n" + text,
+        config={
+            "response_mime_type": "application/json",
+            "response_schema": GEMINI_SCHEMA,
+        },
+    )
+    return json.loads(response.text)
+
+
+def analyze_docket(docket_number, out_dir=".", use_gemini=True, api_key=None):
+    """Full pipeline: fetch PDF, extract text, parse with Gemini or regex."""
     pdf_path = fetch_docket_pdf(docket_number, out_dir)
     text = extract_text(pdf_path)
+
+    if use_gemini:
+        try:
+            parsed = parse_with_gemini(text, api_key=api_key)
+            parsed["pdf_path"] = pdf_path
+            return parsed
+        except Exception as e:
+            print(f"Gemini parsing failed ({e}), falling back to regex")
+
     return {
         "docket_number": docket_number,
         "pdf_path": pdf_path,
@@ -107,28 +221,19 @@ def main():
     p.add_argument("--out-dir", default="./pdfs", help="Output directory for PDFs")
     p.add_argument("--text-only", action="store_true", help="Just print extracted text")
     p.add_argument("--json", action="store_true", dest="as_json", help="Output JSON")
+    p.add_argument("--no-ai", action="store_true", help="Skip Gemini, use regex parsing only")
     args = p.parse_args()
 
     if args.text_only:
         pdf_path = fetch_docket_pdf(args.docket, args.out_dir)
         print(extract_text(pdf_path))
     else:
-        result = analyze_docket(args.docket, args.out_dir)
+        result = analyze_docket(args.docket, args.out_dir, use_gemini=not args.no_ai)
+        out = {k: v for k, v in result.items() if k not in ("full_text", "pdf_path")}
         if args.as_json:
-            out = {k: v for k, v in result.items() if k != "full_text"}
             print(json.dumps(out, indent=2))
         else:
-            print(f"Docket: {result['docket_number']}")
-            print(f"PDF:    {result['pdf_path']}")
-            print(f"\n--- CHARGES ({len(result['charges'])}) ---")
-            for c in result["charges"]:
-                print(f"  {c}")
-            print(f"\n--- DISPOSITIONS ({len(result['dispositions'])}) ---")
-            for d in result["dispositions"]:
-                print(f"  {d}")
-            print(f"\n--- BAIL ({len(result['bail'])}) ---")
-            for b in result["bail"]:
-                print(f"  {b}")
+            print(json.dumps(out, indent=2))
 
 
 if __name__ == "__main__":
