@@ -12,7 +12,10 @@ You answer questions about court cases, hearings, charges, attorneys, and judges
 Always cite docket numbers. Be concise and factual. If data isn't available, say so clearly.
 Dates are in MM/DD/YYYY format. Never make up case information.
 
-IMPORTANT — Name search strategy:
+IMPORTANT — When answering about a specific case, ALWAYS also call get_docket_events to check
+for upcoming hearings/events. Include any scheduled events in your answer.
+
+Name search strategy:
 - Names in court records are stored as "Last, First Middle" (e.g. "Murphy, Kelli Anne")
 - If search_cases returns 0 results, use fuzzy_name_search which handles misspellings
 - If multiple people share the same name, list ALL of them with their DOB and docket numbers
@@ -34,6 +37,15 @@ TOOLS = [
     {
         "name": "get_case_analysis",
         "description": "Get full parsed analysis of a case: charges, sentences, bail, attorneys, docket entries",
+        "input_schema": {
+            "type": "object",
+            "properties": {"docket_number": {"type": "string"}},
+            "required": ["docket_number"],
+        },
+    },
+    {
+        "name": "get_docket_events",
+        "description": "Get upcoming court events (hearings, trials, arraignments) for a specific docket number. Always call this after looking up a case to include scheduling info.",
         "input_schema": {
             "type": "object",
             "properties": {"docket_number": {"type": "string"}},
@@ -190,6 +202,18 @@ def _execute_tool(name, inputs):
             )
             if not results:
                 return "No cases found."
+            return json.dumps([dict(r) for r in results], default=str)
+
+        elif name == "get_docket_events":
+            import psycopg2.extras as extras
+            cur2 = conn.cursor(cursor_factory=extras.RealDictCursor)
+            cur2.execute("""
+                SELECT event_type, event_status, event_date, event_location
+                FROM events WHERE docket_number = %s ORDER BY event_date ASC
+            """, (inputs["docket_number"],))
+            results = cur2.fetchall()
+            if not results:
+                return f"No upcoming events for {inputs['docket_number']}"
             return json.dumps([dict(r) for r in results], default=str)
 
         elif name == "fuzzy_name_search":
