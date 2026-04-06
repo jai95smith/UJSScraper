@@ -180,8 +180,9 @@ def ingest_appellate(lookback_days=1):
     return total_new
 
 
-def batch_analyze_unanalyzed(limit=50, workers=3):
-    """Find cases in DB that don't have a Gemini analysis yet, analyze them."""
+def batch_analyze_unanalyzed(limit=50, workers=2, delay=3):
+    """Find cases in DB that don't have a Gemini analysis yet, analyze them.
+    delay: seconds between each request to avoid UJS rate limiting."""
     with db.connect() as conn:
         cur = conn.cursor()
         cur.execute("""
@@ -197,25 +198,26 @@ def batch_analyze_unanalyzed(limit=50, workers=3):
         print("[analyze] No unanalyzed dockets")
         return 0
 
-    print(f"[analyze] {len(dockets)} dockets to analyze ({workers} workers)")
-
-    def _analyze_one(dn):
-        try:
-            deep_analyze_docket(dn)
-            return True
-        except Exception as e:
-            print(f"[analyze] Error {dn}: {e}")
-            return False
+    print(f"[analyze] {len(dockets)} dockets to analyze ({workers} workers, {delay}s delay)")
 
     analyzed = 0
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(_analyze_one, dn): dn for dn in dockets}
-        for future in as_completed(futures):
-            if future.result():
-                analyzed += 1
-            print(f"[analyze] {analyzed}/{len(dockets)} done", end="\r")
+    errors = 0
+    for i, dn in enumerate(dockets):
+        try:
+            deep_analyze_docket(dn)
+            analyzed += 1
+        except Exception as e:
+            errors += 1
+            err_str = str(e)
+            if "429" in err_str:
+                print(f"\n[analyze] Rate limited at {i}/{len(dockets)}, pausing 60s...")
+                time.sleep(60)
+            else:
+                print(f"[analyze] Error {dn}: {e}")
+        print(f"[analyze] {analyzed}/{len(dockets)} done ({errors} errors)", end="\r")
+        time.sleep(delay)
 
-    print(f"\n[analyze] Completed {analyzed}/{len(dockets)}")
+    print(f"\n[analyze] Completed {analyzed}/{len(dockets)} ({errors} errors)")
     return analyzed
 
 
