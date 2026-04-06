@@ -256,7 +256,34 @@ def _gemini_extract(text, prompt, schema, api_key=None):
             "response_schema": schema,
         },
     )
-    return json.loads(response.text)
+    result = json.loads(response.text)
+    _clean_result(result)
+    return result
+
+
+def _clean_result(obj):
+    """Post-process Gemini output: fix nulls, deduplicate arrays."""
+    if isinstance(obj, dict):
+        for k, v in list(obj.items()):
+            if v == "null" or v == "None":
+                obj[k] = None
+            elif isinstance(v, list):
+                # Deduplicate list of dicts by converting to tuples
+                if v and isinstance(v[0], dict):
+                    seen = set()
+                    deduped = []
+                    for item in v:
+                        key = tuple(sorted(item.items()))
+                        if key not in seen:
+                            seen.add(key)
+                            deduped.append(item)
+                    obj[k] = deduped
+                _clean_result(obj[k])
+            elif isinstance(v, dict):
+                _clean_result(v)
+    elif isinstance(obj, list):
+        for item in obj:
+            _clean_result(item)
 
 
 def parse_with_gemini(text, api_key=None):
