@@ -348,47 +348,53 @@ def _clean_question(question: str) -> str:
     return question
 
 
-def ask(question: str, api_key: Optional[str] = None) -> str:
-    """Send a natural language question, get an answer using Claude + DB tools."""
-    key = api_key or os.environ.get("ANTHROPIC_API_KEY")
-    if not key:
-        raise RuntimeError("Set ANTHROPIC_API_KEY env var")
-
-    client = anthropic.Anthropic(api_key=key)
+def _run_chat(client, model, question, max_rounds=8):
+    """Run a tool-use chat loop with a given model. Returns (answer, tool_calls_made)."""
     messages = [{"role": "user", "content": question}]
+    tool_calls = 0
 
-    # Tool use loop — Claude may call multiple tools
-    for _ in range(8):  # max 8 tool rounds
+    for _ in range(max_rounds):
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1024,
-            system=SYSTEM_PROMPT,
-            tools=TOOLS,
-            messages=messages,
+            model=model, max_tokens=1024,
+            system=SYSTEM_PROMPT, tools=TOOLS, messages=messages,
         )
 
-        # Check if Claude wants to use tools
         if response.stop_reason == "tool_use":
-            # Add assistant response
             messages.append({"role": "assistant", "content": response.content})
-
-            # Execute each tool call
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
+                    tool_calls += 1
                     result = _execute_tool(block.name, block.input)
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
                         "content": result,
                     })
-
             messages.append({"role": "user", "content": tool_results})
         else:
-            # Final text response
             for block in response.content:
                 if hasattr(block, "text"):
-                    return block.text
-            return ""
+                    return block.text, tool_calls
+            return "", tool_calls
 
-    return "Could not resolve answer after multiple tool calls."
+    return "", tool_calls
+
+
+def ask(question: str, api_key: Optional[str] = None) -> str:
+    """Send a natural language question, get an answer using Claude + DB tools.
+    Tries Haiku first (fast). Falls back to Sonnet if Haiku doesn't use tools."""
+    key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+    if not key:
+        raise RuntimeError("Set ANTHROPIC_API_KEY env var")
+
+    client = anthropic.Anthropic(api_key=key)
+
+    # Try Haiku first — fast and cheap
+    answer, tool_calls = _run_chat(client, "claude-haiku-4-5-20251001", question, max_rounds=6)
+
+    # If Haiku gave up or returned empty, escalate to Sonnet
+    if not answer or tool_calls == 0:
+        answer, _ = _run_chat(client, "claude-sonnet-4-20250514", question, max_rounds=8)
+
+    return answer or "I couldn't find enough data to answer that question. Try being more specific or providing a docket number."
