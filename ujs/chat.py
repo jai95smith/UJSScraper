@@ -358,7 +358,7 @@ def ask(question: str, api_key: Optional[str] = None) -> str:
     messages = [{"role": "user", "content": question}]
 
     # Tool use loop — Claude may call multiple tools
-    for _ in range(5):  # max 5 tool rounds
+    for _ in range(8):  # max 8 tool rounds
         response = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=1024,
