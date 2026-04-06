@@ -2,7 +2,7 @@
 
 import re
 from html import unescape
-from urllib.parse import urljoin
+from urllib.parse import urljoin, quote
 
 import requests
 from bs4 import BeautifulSoup
@@ -114,11 +114,11 @@ def parse_results(html, fields=None):
         vals = [unescape(c.get_text(strip=True)) for c in cells[2:2 + n]]
         rec = dict(zip(fields, vals))
         for a in row.find_all("a", href=True):
-            href = a["href"]
+            href = quote(unescape(a["href"]), safe="/:?=&%")
             if "DocketSheet" in href:
-                rec["docket_sheet_url"] = urljoin(BASE, unescape(href))
+                rec["docket_sheet_url"] = urljoin(BASE, href)
             elif "CourtSummary" in href:
-                rec["court_summary_url"] = urljoin(BASE, unescape(href))
+                rec["court_summary_url"] = urljoin(BASE, href)
         results.append(rec)
     return results
 
