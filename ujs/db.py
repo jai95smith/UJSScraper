@@ -175,7 +175,8 @@ def get_analysis(conn, docket_number, doc_type="docket"):
 # ---------------------------------------------------------------------------
 
 def store_parsed_data(conn, docket_number, analysis):
-    """Break down a Gemini analysis and store in normalized tables."""
+    """Break down a Gemini analysis and store in normalized tables.
+    Clears and re-inserts mutable data (sentences, entries) to avoid stale rows."""
     cur = conn.cursor()
 
     # Participant/defendant
@@ -189,7 +190,7 @@ def store_parsed_data(conn, docket_number, analysis):
         """, (docket_number, defendant.get("name"), defendant.get("dob"),
               defendant.get("address")))
 
-    # Charges
+    # Charges — upsert by seq
     for charge in analysis.get("charges", []):
         cur.execute("""
             INSERT INTO charges (docket_number, seq, statute, description, grade,
@@ -204,7 +205,7 @@ def store_parsed_data(conn, docket_number, analysis):
               charge.get("offense_date"), charge.get("otn"),
               charge.get("disposition"), charge.get("disposition_date")))
 
-    # Bail
+    # Bail — upsert single row per docket
     bail = analysis.get("bail", {})
     if bail and bail.get("amount"):
         cur.execute("""
@@ -216,7 +217,8 @@ def store_parsed_data(conn, docket_number, analysis):
         """, (docket_number, bail.get("type"), bail.get("amount"),
               bail.get("status"), bail.get("posting_date")))
 
-    # Sentences
+    # Sentences — clear and re-insert (no stable unique key)
+    cur.execute("DELETE FROM sentences WHERE docket_number = %s", (docket_number,))
     for sent in analysis.get("sentences", []):
         cur.execute("""
             INSERT INTO sentences (docket_number, charge, sentence_type, duration,
@@ -225,7 +227,7 @@ def store_parsed_data(conn, docket_number, analysis):
         """, (docket_number, sent.get("charge"), sent.get("sentence_type"),
               sent.get("duration"), sent.get("conditions"), sent.get("sentence_date")))
 
-    # Attorneys
+    # Attorneys — upsert by name+role
     for att in analysis.get("attorneys", []):
         if att.get("name"):
             cur.execute("""
@@ -234,12 +236,12 @@ def store_parsed_data(conn, docket_number, analysis):
                 ON CONFLICT (docket_number, name, role) DO NOTHING
             """, (docket_number, att.get("name"), att.get("role")))
 
-    # Docket entries
+    # Docket entries — clear and re-insert (descriptions can change slightly between runs)
+    cur.execute("DELETE FROM docket_entries WHERE docket_number = %s", (docket_number,))
     for entry in analysis.get("docket_entries", []):
         cur.execute("""
             INSERT INTO docket_entries (docket_number, entry_date, description, filer)
             VALUES (%s, %s, %s, %s)
-            ON CONFLICT (docket_number, entry_date, description) DO NOTHING
         """, (docket_number, entry.get("date"), entry.get("description"),
               entry.get("filer")))
 
