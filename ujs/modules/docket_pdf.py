@@ -90,7 +90,12 @@ GEMINI_SCHEMA = {
 GEMINI_PROMPT = """Extract all structured data from this PA court docket sheet.
 Return every field you can find. For charges, include the disposition if present.
 For docket entries, include every entry with date and description.
-Be precise with statute numbers, dates, and names. Omit fields you cannot find."""
+Be precise with statute numbers, dates, and names. Omit fields you cannot find.
+
+IMPORTANT FORMAT RULES:
+- ALL dates MUST be MM/DD/YYYY format (e.g. 01/08/2025, 12/19/2014). Never use YYYY-MM-DD.
+- ALL currency amounts MUST include $ and commas (e.g. $7,500.00, $15,000.00).
+- Statute numbers should be clean (e.g. "18 § 3929 §§ A1"), no extra whitespace or newlines."""
 
 
 def fetch_docket_pdf(docket_number, out_dir="."):
