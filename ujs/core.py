@@ -62,10 +62,21 @@ def get_session():
 
 
 def _post_search(session, token, **params):
+    import time as _time
     data = {"__RequestVerificationToken": token, **params}
-    r = session.post(SEARCH_URL, data=data)
-    r.raise_for_status()
-    return parse_results(r.text)
+    for attempt in range(3):
+        try:
+            r = session.post(SEARCH_URL, data=data, timeout=30)
+            r.raise_for_status()
+            return parse_results(r.text)
+        except Exception as e:
+            if attempt == 2:
+                raise
+            wait = (attempt + 1) * 5
+            print(f"[UJS] Request failed ({e}), retrying in {wait}s...")
+            _time.sleep(wait)
+            session, token = get_session()
+            data["__RequestVerificationToken"] = token
 
 
 def _filter_results(results, county=None, docket_type=None):
@@ -79,20 +90,29 @@ def _filter_results(results, county=None, docket_type=None):
 
 
 def _launch_browser_search(setup_fn, wait_ms=8000):
-    """Shared Playwright logic: launch browser, call setup_fn(page), return HTML."""
+    """Shared Playwright logic with retry on failure."""
+    import time as _time
     from playwright.sync_api import sync_playwright
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        page.goto(SEARCH_URL)
-        page.wait_for_load_state("networkidle")
-        setup_fn(page)
-        page.click('button:has-text("Search")')
-        page.wait_for_timeout(wait_ms)
-        html = page.content()
-        browser.close()
-    return html
+    for attempt in range(3):
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                page = browser.new_page()
+                page.goto(SEARCH_URL, timeout=30000)
+                page.wait_for_load_state("networkidle")
+                setup_fn(page)
+                page.click('button:has-text("Search")')
+                page.wait_for_timeout(wait_ms)
+                html = page.content()
+                browser.close()
+            return html
+        except Exception as e:
+            if attempt == 2:
+                raise
+            wait = (attempt + 1) * 10
+            print(f"[UJS] Browser search failed ({e}), retrying in {wait}s...")
+            _time.sleep(wait)
 
 
 # ---------------------------------------------------------------------------

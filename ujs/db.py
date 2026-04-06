@@ -323,6 +323,29 @@ def queue_ingest(conn, docket_number, priority=0):
     return cur.fetchone()[0], "pending"
 
 
+def retry_failed_jobs(conn, max_attempts=3):
+    """Re-queue failed jobs that haven't exceeded max attempts. Returns count re-queued."""
+    cur = conn.cursor()
+    cur.execute("""
+        WITH failed AS (
+            SELECT docket_number, COUNT(*) as attempts
+            FROM ingest_queue
+            WHERE status = 'failed'
+            GROUP BY docket_number
+            HAVING COUNT(*) < %s
+        )
+        INSERT INTO ingest_queue (docket_number, priority)
+        SELECT f.docket_number, 1 FROM failed f
+        WHERE NOT EXISTS (
+            SELECT 1 FROM ingest_queue q
+            WHERE q.docket_number = f.docket_number AND q.status IN ('pending', 'processing')
+        )
+        RETURNING id
+    """, (max_attempts,))
+    rows = cur.fetchall()
+    return len(rows)
+
+
 def claim_ingest_job(conn):
     """Claim the next pending ingest job. Returns (id, docket_number) or None."""
     cur = conn.cursor()
@@ -475,6 +498,16 @@ def get_changes(conn, docket_number=None, since=None, limit=100):
 # ---------------------------------------------------------------------------
 # Staleness
 # ---------------------------------------------------------------------------
+
+def cleanup_old_data(conn, queue_days=7, changelog_days=90):
+    """Delete old completed/failed queue entries and old change_log entries."""
+    cur = conn.cursor()
+    cur.execute("DELETE FROM ingest_queue WHERE status IN ('completed', 'failed') AND completed_at < NOW() - INTERVAL '%s days'", (queue_days,))
+    queue_deleted = cur.rowcount
+    cur.execute("DELETE FROM change_log WHERE detected_at < NOW() - INTERVAL '%s days'", (changelog_days,))
+    changelog_deleted = cur.rowcount
+    return queue_deleted, changelog_deleted
+
 
 def get_stale_dockets(conn, active_hours=24, closed_days=7, limit=50):
     """Get dockets that need re-scraping based on case status."""

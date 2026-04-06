@@ -319,11 +319,29 @@ def docket_analyze(docket_number: str):
 
 @app.get("/docket/{docket_number}/summary", tags=["Docket"])
 def docket_summary(docket_number: str):
-    """Get court summary (cross-case person history)."""
+    """Get court summary (cross-case person history). Cached by defendant name to avoid duplicates."""
     with db.connect() as conn:
+        # Check if this docket already has a summary
         analysis = db.get_analysis(conn, docket_number, "summary")
         if analysis:
             return analysis
+
+        # Check if another docket for the same person already has a summary
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT a.analysis FROM participants p1
+            JOIN participants p2 ON p1.name = p2.name AND p1.role = p2.role
+            JOIN analyses a ON a.docket_number = p2.docket_number AND a.doc_type = 'summary'
+            WHERE p1.docket_number = %s
+            LIMIT 1
+        """, (docket_number,))
+        row = cur.fetchone()
+        if row:
+            # Cache it under this docket too
+            db.store_analysis(conn, docket_number, row[0], "summary")
+            return row[0]
+
+    # Not cached anywhere — fetch fresh
     with tempfile.TemporaryDirectory() as tmpdir:
         result = analyze_summary(docket_number, out_dir=tmpdir)
         clean = {k: v for k, v in result.items() if k != "pdf_path"}

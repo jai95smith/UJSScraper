@@ -239,6 +239,24 @@ def run_cycle(counties=None, docket_type=None, lookback_days=1,
     except Exception as e:
         print(f"[refresh] Error: {e}")
 
+    # 6. Retry failed jobs (up to 3 attempts)
+    try:
+        with db.connect() as conn:
+            retried = db.retry_failed_jobs(conn)
+        if retried:
+            print(f"[retry] Re-queued {retried} failed jobs")
+    except Exception as e:
+        print(f"[retry] Error: {e}")
+
+    # 7. Cleanup old data
+    try:
+        with db.connect() as conn:
+            q_del, c_del = db.cleanup_old_data(conn)
+        if q_del or c_del:
+            print(f"[cleanup] Deleted {q_del} old queue entries, {c_del} old change logs")
+    except Exception as e:
+        print(f"[cleanup] Error: {e}")
+
     print(f"[{ts}] Cycle complete | {total_new} new cases\n")
 
 
