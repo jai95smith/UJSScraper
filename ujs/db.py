@@ -461,6 +461,286 @@ def get_stale_dockets(conn, active_hours=24, closed_days=7, limit=50):
 
 
 # ---------------------------------------------------------------------------
+# Watchlist
+# ---------------------------------------------------------------------------
+
+def add_to_watchlist(conn, api_key, docket_number, label=None):
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO watchlist (api_key, docket_number, label)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (api_key, docket_number) DO UPDATE SET label = EXCLUDED.label
+        RETURNING id
+    """, (api_key, docket_number, label))
+    # Auto-queue for ingest if not in DB
+    if not get_case(conn, docket_number):
+        queue_ingest(conn, docket_number, priority=5)
+    return cur.fetchone()[0]
+
+
+def remove_from_watchlist(conn, api_key, docket_number):
+    cur = conn.cursor()
+    cur.execute("DELETE FROM watchlist WHERE api_key = %s AND docket_number = %s",
+                (api_key, docket_number))
+    return cur.rowcount > 0
+
+
+def get_watchlist(conn, api_key):
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT w.docket_number, w.label, w.created_at,
+               c.caption, c.status, c.county, c.filing_date, c.last_scraped
+        FROM watchlist w
+        LEFT JOIN cases c ON w.docket_number = c.docket_number
+        WHERE w.api_key = %s
+        ORDER BY w.created_at DESC
+    """, (api_key,))
+    return cur.fetchall()
+
+
+def get_watchlist_changes(conn, api_key, since=None):
+    """Get changes for all watched dockets."""
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    params = [api_key]
+    since_clause = ""
+    if since:
+        since_clause = "AND cl.detected_at >= %s"
+        params.append(since)
+    cur.execute(f"""
+        SELECT cl.*, c.caption FROM change_log cl
+        JOIN watchlist w ON cl.docket_number = w.docket_number
+        LEFT JOIN cases c ON cl.docket_number = c.docket_number
+        WHERE w.api_key = %s {since_clause}
+        ORDER BY cl.detected_at DESC LIMIT 200
+    """, params)
+    return cur.fetchall()
+
+
+# ---------------------------------------------------------------------------
+# Webhooks
+# ---------------------------------------------------------------------------
+
+def create_webhook(conn, api_key, url, events=None, county=None, docket_type=None):
+    cur = conn.cursor()
+    events = events or ["change", "new_filing", "new_event"]
+    cur.execute("""
+        INSERT INTO webhooks (api_key, url, events, county, docket_type)
+        VALUES (%s, %s, %s, %s, %s) RETURNING id
+    """, (api_key, url, events, county, docket_type))
+    return cur.fetchone()[0]
+
+
+def get_webhooks(conn, api_key):
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT * FROM webhooks WHERE api_key = %s ORDER BY created_at DESC", (api_key,))
+    return cur.fetchall()
+
+
+def delete_webhook(conn, api_key, webhook_id):
+    cur = conn.cursor()
+    cur.execute("DELETE FROM webhooks WHERE id = %s AND api_key = %s", (webhook_id, api_key))
+    return cur.rowcount > 0
+
+
+def get_active_webhooks(conn, event_type=None, county=None):
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    clauses = ["active = TRUE"]
+    params = []
+    if event_type:
+        clauses.append("%s = ANY(events)")
+        params.append(event_type)
+    if county:
+        clauses.append("(county IS NULL OR county ILIKE %s)")
+        params.append(county)
+    cur.execute(f"""
+        SELECT * FROM webhooks WHERE {' AND '.join(clauses)}
+    """, params)
+    return cur.fetchall()
+
+
+# ---------------------------------------------------------------------------
+# API keys
+# ---------------------------------------------------------------------------
+
+def create_api_key(conn, name, email=None):
+    import secrets
+    key = f"ujs_{secrets.token_urlsafe(32)}"
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO api_keys (key, name, email) VALUES (%s, %s, %s) RETURNING key
+    """, (key, name, email))
+    return cur.fetchone()[0]
+
+
+def validate_api_key(conn, key):
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT * FROM api_keys WHERE key = %s", (key,))
+    row = cur.fetchone()
+    if not row:
+        return None
+    if row["requests_today"] >= row["daily_limit"]:
+        return None
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE api_keys SET requests_today = requests_today + 1, last_used = NOW()
+        WHERE key = %s
+    """, (key,))
+    return row
+
+
+# ---------------------------------------------------------------------------
+# Search: judges, attorneys, charges
+# ---------------------------------------------------------------------------
+
+def search_by_judge(conn, judge_name, county=None, limit=100):
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    params = [f"%{judge_name}%"]
+    county_clause = ""
+    if county:
+        county_clause = "AND c.county ILIKE %s"
+        params.append(county)
+    params.append(limit)
+    cur.execute(f"""
+        SELECT a.analysis->>'judge' as judge, c.docket_number, c.caption, c.status,
+               c.county, c.filing_date
+        FROM analyses a JOIN cases c ON a.docket_number = c.docket_number
+        WHERE a.analysis->>'judge' ILIKE %s {county_clause}
+        ORDER BY c.filing_date DESC LIMIT %s
+    """, params)
+    return cur.fetchall()
+
+
+def search_by_attorney(conn, attorney_name, role=None, county=None, limit=100):
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    params = [f"%{attorney_name}%"]
+    clauses = ["a.name ILIKE %s"]
+    if role:
+        clauses.append("a.role ILIKE %s")
+        params.append(f"%{role}%")
+    if county:
+        clauses.append("c.county ILIKE %s")
+        params.append(county)
+    params.append(limit)
+    cur.execute(f"""
+        SELECT a.name, a.role, c.docket_number, c.caption, c.status, c.county, c.filing_date
+        FROM attorneys a JOIN cases c ON a.docket_number = c.docket_number
+        WHERE {' AND '.join(clauses)}
+        ORDER BY c.filing_date DESC LIMIT %s
+    """, params)
+    return cur.fetchall()
+
+
+def search_by_charge(conn, statute=None, description=None, county=None,
+                     disposition=None, limit=100):
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    clauses = []
+    params = []
+    if statute:
+        clauses.append("ch.statute ILIKE %s")
+        params.append(f"%{statute}%")
+    if description:
+        clauses.append("ch.description ILIKE %s")
+        params.append(f"%{description}%")
+    if disposition:
+        clauses.append("ch.disposition ILIKE %s")
+        params.append(f"%{disposition}%")
+    if county:
+        clauses.append("c.county ILIKE %s")
+        params.append(county)
+    if not clauses:
+        return []
+    params.append(limit)
+    cur.execute(f"""
+        SELECT ch.*, c.caption, c.status, c.county, c.filing_date
+        FROM charges ch JOIN cases c ON ch.docket_number = c.docket_number
+        WHERE {' AND '.join(clauses)}
+        ORDER BY c.filing_date DESC LIMIT %s
+    """, params)
+    return cur.fetchall()
+
+
+# ---------------------------------------------------------------------------
+# Aggregation / stats
+# ---------------------------------------------------------------------------
+
+def get_filing_stats(conn, county=None, period="daily", days=30):
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    county_clause = ""
+    params = []
+    if county:
+        county_clause = "WHERE county ILIKE %s"
+        params.append(county)
+    # Group by filing_date (already MM/DD/YYYY strings)
+    cur.execute(f"""
+        SELECT filing_date, COUNT(*) as count,
+               SUM(CASE WHEN docket_number LIKE '%%-CR-%%' THEN 1 ELSE 0 END) as criminal,
+               SUM(CASE WHEN docket_number LIKE '%%-TR-%%' THEN 1 ELSE 0 END) as traffic,
+               SUM(CASE WHEN docket_number LIKE '%%-CV-%%' THEN 1 ELSE 0 END) as civil
+        FROM cases {county_clause}
+        GROUP BY filing_date
+        ORDER BY filing_date DESC
+        LIMIT %s
+    """, params + [days])
+    return cur.fetchall()
+
+
+def get_county_stats(conn):
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT county, COUNT(*) as total_cases,
+               SUM(CASE WHEN status ILIKE '%%active%%' THEN 1 ELSE 0 END) as active,
+               SUM(CASE WHEN status ILIKE '%%closed%%' THEN 1 ELSE 0 END) as closed,
+               SUM(CASE WHEN docket_number LIKE '%%-CR-%%' THEN 1 ELSE 0 END) as criminal,
+               SUM(CASE WHEN docket_number LIKE '%%-TR-%%' THEN 1 ELSE 0 END) as traffic
+        FROM cases WHERE county != ''
+        GROUP BY county ORDER BY total_cases DESC
+    """)
+    return cur.fetchall()
+
+
+def get_charge_stats(conn, county=None, limit=25):
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    clauses = []
+    params = []
+    if county:
+        clauses.append("c.county ILIKE %s")
+        params.append(county)
+    where = "WHERE " + " AND ".join(clauses) if clauses else ""
+    params.append(limit)
+    cur.execute(f"""
+        SELECT ch.description, ch.grade, COUNT(*) as count,
+               SUM(CASE WHEN ch.disposition ILIKE '%%guilty%%' THEN 1 ELSE 0 END) as guilty,
+               SUM(CASE WHEN ch.disposition ILIKE '%%dismissed%%' OR ch.disposition ILIKE '%%quashed%%' THEN 1 ELSE 0 END) as dismissed
+        FROM charges ch JOIN cases c ON ch.docket_number = c.docket_number
+        {where}
+        GROUP BY ch.description, ch.grade
+        ORDER BY count DESC LIMIT %s
+    """, params)
+    return cur.fetchall()
+
+
+def get_judge_stats(conn, county=None, limit=25):
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    params = []
+    county_clause = ""
+    if county:
+        county_clause = "AND c.county ILIKE %s"
+        params.append(county)
+    params.append(limit)
+    cur.execute(f"""
+        SELECT a.analysis->>'judge' as judge, COUNT(*) as total_cases,
+               SUM(CASE WHEN c.status ILIKE '%%active%%' THEN 1 ELSE 0 END) as active,
+               SUM(CASE WHEN c.status ILIKE '%%closed%%' THEN 1 ELSE 0 END) as closed
+        FROM analyses a JOIN cases c ON a.docket_number = c.docket_number
+        WHERE a.analysis->>'judge' IS NOT NULL AND a.analysis->>'judge' != ''
+        {county_clause}
+        GROUP BY a.analysis->>'judge'
+        ORDER BY total_cases DESC LIMIT %s
+    """, params)
+    return cur.fetchall()
+
+
+# ---------------------------------------------------------------------------
 # Stats
 # ---------------------------------------------------------------------------
 
