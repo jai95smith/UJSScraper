@@ -7,10 +7,11 @@ import anthropic
 
 from ujs import db
 
-SYSTEM_PROMPT = """You are a PA court records assistant for Lehigh and Northampton counties.
+_SYSTEM_PROMPT_TEMPLATE = """You are a PA court records assistant for Lehigh and Northampton counties.
 You answer questions about court cases, hearings, charges, attorneys, and judges using the provided tools.
 Always cite docket numbers. Be concise and factual. If data isn't available, say so clearly.
 Dates are in MM/DD/YYYY format. Never make up case information.
+Today's date is {today}.
 
 IMPORTANT — When answering about a specific case, ALWAYS also call get_docket_events to check
 for upcoming hearings/events. Include any scheduled events in your answer.
@@ -25,6 +26,11 @@ Name search strategy:
   resort — it searches the PA court portal directly and adds results to the database.
 - For hyphenated last names like "Janko-Hudson", search the last part as the last name.
 """
+
+
+def _get_system_prompt():
+    from datetime import datetime
+    return _SYSTEM_PROMPT_TEMPLATE.format(today=datetime.now().strftime("%m/%d/%Y"))
 
 # Tool definitions matching our DB functions
 TOOLS = [
@@ -385,7 +391,7 @@ def _run_chat(client, model, question, max_rounds=8):
     for _ in range(max_rounds):
         response = client.messages.create(
             model=model, max_tokens=1024,
-            system=SYSTEM_PROMPT, tools=TOOLS, messages=messages,
+            system=_get_system_prompt(), tools=TOOLS, messages=messages,
         )
 
         if response.stop_reason == "tool_use":
@@ -445,7 +451,7 @@ def ask_stream(question: str, api_key: Optional[str] = None):
     for round_num in range(6):
         response = client.messages.create(
             model="claude-haiku-4-5-20251001", max_tokens=1024,
-            system=SYSTEM_PROMPT, tools=TOOLS, messages=messages,
+            system=_get_system_prompt(), tools=TOOLS, messages=messages,
         )
 
         if response.stop_reason == "tool_use":
@@ -466,7 +472,7 @@ def ask_stream(question: str, api_key: Optional[str] = None):
             yield "\n\n"
             with client.messages.stream(
                 model="claude-haiku-4-5-20251001", max_tokens=1024,
-                system=SYSTEM_PROMPT, tools=TOOLS, messages=messages,
+                system=_get_system_prompt(), tools=TOOLS, messages=messages,
             ) as stream:
                 for text in stream.text_stream:
                     yield text
