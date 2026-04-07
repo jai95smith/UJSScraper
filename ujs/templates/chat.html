@@ -5,101 +5,83 @@
 {% endblock %}
 
 {% block extra_css %}
-body { background: var(--navy-light); height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+body { background: #132240; height: 100dvh; overflow: hidden; }
 .prose { line-height: 1.7; overflow-wrap: break-word; word-break: break-word; }
-.prose strong { color: var(--text-bright); font-weight: 600; }
-.chart-wrap { max-width: 100%; }
+.prose strong { color: #e8edf5; font-weight: 600; }
 .chart-wrap canvas { width: 100% !important; height: auto !important; max-height: 300px; }
 {% endblock %}
 
 {% block body %}
-<!-- Nav (desktop) -->
-<div class="nav hidden md:flex">
-  <a href="/" class="nav-left">
-    <div class="nav-seal">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-        <circle cx="12" cy="12" r="9" stroke="var(--gold)" stroke-width="1.2"/>
-        <path d="M8 17l4-10 4 10" stroke="var(--gold)" stroke-width="1.2" stroke-linecap="round"/>
-        <line x1="9.5" y1="14.5" x2="14.5" y2="14.5" stroke="var(--gold)" stroke-width="1"/>
-      </svg>
-    </div>
-    <span class="nav-wordmark">Lehigh Valley <span>Court AI</span></span>
-  </a>
-  <div style="display:flex;gap:12px;align-items:center;">
-    <a href="/" class="nav-link">Home</a>
-    <button onclick="newChat()" class="nav-cta">+ New search</button>
-  </div>
-</div>
+<div class="flex h-[100dvh]">
 
-<!-- Mobile header -->
-<div id="mobile-header" class="md:hidden fixed top-0 left-0 right-0 z-30 px-4 py-3 flex items-center justify-between" style="background:var(--navy);border-bottom:0.5px solid var(--navy-border);">
-  <button onclick="toggleSidebar()" class="w-8 h-8 rounded-lg flex items-center justify-center" style="border:0.5px solid var(--navy-border);color:var(--text-mid);">
-    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-    </svg>
-  </button>
-  <span class="text-sm font-medium" style="color:var(--text-bright);">Court AI</span>
-  <button onclick="newChat()" class="w-8 h-8 rounded-lg flex items-center justify-center" style="border:0.5px solid var(--navy-border);color:var(--text-mid);">
-    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-    </svg>
-  </button>
-</div>
-
-<!-- Mobile overlay -->
-<div id="sidebar-overlay" class="hidden fixed inset-0 z-40 md:hidden">
-  <div class="absolute inset-0 bg-black/60" onclick="toggleSidebar()"></div>
-</div>
-
-<!-- Sidebar -->
-<aside id="sidebar" class="fixed md:relative z-50 w-64 flex flex-col shrink-0 h-full -translate-x-full md:translate-x-0 transition-transform duration-200" style="background:var(--navy);border-right:0.5px solid var(--navy-border);">
-  <div class="p-4 flex items-center justify-between" style="border-bottom:0.5px solid var(--navy-border);">
-    <a href="/" class="flex items-center gap-2 no-underline">
-      <div class="nav-seal" style="width:24px;height:24px;">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="9" stroke="var(--gold)" stroke-width="1.2"/>
-          <path d="M8 17l4-10 4 10" stroke="var(--gold)" stroke-width="1.2" stroke-linecap="round"/>
-        </svg>
-      </div>
-      <span style="font-size:12px;font-weight:500;color:var(--text-bright);">Court AI</span>
-    </a>
-    <button onclick="newChat()" class="w-7 h-7 rounded flex items-center justify-center transition" style="border:0.5px solid var(--navy-border);color:var(--text-mid);" title="New chat">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-      </svg>
+  <!-- Mobile header -->
+  <div class="md:hidden fixed top-0 inset-x-0 z-30 bg-navy border-b border-navy-border px-4 h-12 flex items-center justify-between">
+    <button onclick="toggleSidebar()" class="w-8 h-8 rounded border border-navy-border flex items-center justify-center text-court-mid">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+    <span class="text-sm font-medium text-court-bright">Court AI</span>
+    <button onclick="newChat()" class="w-8 h-8 rounded border border-navy-border flex items-center justify-center text-court-mid">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
     </button>
   </div>
 
-  <div id="chat-list" class="flex-1 overflow-y-auto p-2 space-y-1">
+  <!-- Overlay -->
+  <div id="sidebar-overlay" class="hidden fixed inset-0 z-40 md:hidden">
+    <div class="absolute inset-0 bg-black/60" onclick="toggleSidebar()"></div>
   </div>
 
-  <div class="p-3" style="border-top:0.5px solid var(--navy-border);">
-    <div id="stats" style="font-size:10px;color:var(--text-muted);"></div>
-  </div>
-</aside>
-
-<!-- Main chat area -->
-<div class="flex-1 flex flex-col min-w-0 pt-14 md:pt-0">
-  <main id="chat" class="flex-1 overflow-y-auto" style="background:var(--navy-light);">
-    <div class="max-w-2xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-5" id="messages">
+  <!-- Sidebar -->
+  <aside id="sidebar" class="fixed md:relative z-50 w-60 bg-navy border-r border-navy-border flex flex-col shrink-0 h-full -translate-x-full md:translate-x-0 transition-transform duration-200">
+    <div class="p-3.5 border-b border-navy-border flex items-center justify-between">
+      <a href="/" class="flex items-center gap-2 no-underline">
+        <div class="w-6 h-6 border border-gold rounded-full flex items-center justify-center">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#c8a03a" stroke-width="1.2"/><path d="M8 17l4-10 4 10" stroke="#c8a03a" stroke-width="1.2" stroke-linecap="round"/></svg>
+        </div>
+        <span class="text-xs font-medium text-court-bright">Court AI</span>
+      </a>
+      <button onclick="newChat()" class="w-6 h-6 rounded border border-navy-border flex items-center justify-center text-court-dim hover:text-court-bright transition" title="New search">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      </button>
     </div>
-  </main>
+    <div id="chat-list" class="flex-1 overflow-y-auto p-2 space-y-0.5"></div>
+    <div class="p-3 border-t border-navy-border">
+      <div id="stats" class="text-[10px] text-court-muted"></div>
+    </div>
+  </aside>
 
-  <div class="px-4 md:px-6 py-3 md:py-4 shrink-0" style="background:var(--navy);border-top:0.5px solid var(--navy-border);">
-    <div class="max-w-2xl mx-auto">
-      <div class="flex gap-2 items-center rounded-lg px-4 py-2" style="background:rgba(255,255,255,0.06);border:0.5px solid var(--navy-border);">
-        <input id="q" type="text" placeholder="Ask a question..."
-          class="flex-1 bg-transparent text-sm outline-none py-1.5" style="color:var(--text-bright);font-family:var(--font-sans);" autofocus />
-        <button id="btn" onclick="send()"
-          class="text-sm font-medium px-4 py-1.5 rounded disabled:opacity-40" style="background:var(--gold);color:var(--navy);">
-          <span id="btn-text">Ask →</span>
-          <svg id="btn-spin" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-          </svg>
-        </button>
+  <!-- Main -->
+  <div class="flex-1 flex flex-col min-w-0 pt-12 md:pt-0">
+    <!-- Desktop nav -->
+    <nav class="hidden md:flex bg-navy items-center justify-between px-6 h-12 border-b border-navy-border shrink-0">
+      <a href="/" class="flex items-center gap-2.5 no-underline">
+        <div class="w-7 h-7 border-[1.5px] border-gold rounded-full flex items-center justify-center">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#c8a03a" stroke-width="1.2"/><path d="M8 17l4-10 4 10" stroke="#c8a03a" stroke-width="1.2" stroke-linecap="round"/><line x1="9.5" y1="14.5" x2="14.5" y2="14.5" stroke="#c8a03a" stroke-width="1"/></svg>
+        </div>
+        <span class="text-[13px] font-medium text-court-bright">Lehigh Valley <span class="text-gold">Court AI</span></span>
+      </a>
+      <div class="flex items-center gap-3">
+        <a href="/" class="text-xs text-court-mid hover:text-court-bright">Home</a>
+        <button onclick="newChat()" class="text-[11px] font-medium text-navy bg-gold hover:bg-gold-dim rounded px-3.5 py-1.5">+ New search</button>
       </div>
-      <p style="font-size:10px;color:var(--text-muted);text-align:center;margin-top:6px;">Lehigh & Northampton Counties · Not legal advice</p>
+    </nav>
+
+    <!-- Messages -->
+    <main id="chat" class="flex-1 overflow-y-auto bg-navy-light">
+      <div class="max-w-2xl mx-auto px-4 md:px-6 py-6 space-y-4" id="messages"></div>
+    </main>
+
+    <!-- Input -->
+    <div class="bg-navy border-t border-navy-border px-4 md:px-6 py-3 shrink-0">
+      <div class="max-w-2xl mx-auto">
+        <div class="flex gap-2 items-center rounded-md px-3.5 py-1.5 bg-white/[0.06] border border-navy-border focus-within:border-court-dim transition">
+          <input id="q" type="text" placeholder="Ask a question..." class="flex-1 bg-transparent text-sm text-court-bright placeholder:text-court-dim outline-none py-1.5 font-sans" autofocus />
+          <button id="btn" onclick="send()" class="text-[13px] font-medium bg-gold hover:bg-gold-dim text-navy rounded px-4 py-1.5 disabled:opacity-40 transition">
+            <span id="btn-text">Ask →</span>
+            <svg id="btn-spin" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+          </button>
+        </div>
+        <p class="text-[10px] text-court-muted text-center mt-1.5">Lehigh & Northampton Counties · Not legal advice</p>
+      </div>
     </div>
   </div>
 </div>
@@ -117,183 +99,147 @@ let allChats = [];
 let currentChatId = null;
 let chartInstances = {};
 
-// --- Storage ---
+/* --- Storage --- */
 function loadChatsFromStorage() {
-  try {
-    allChats = JSON.parse(localStorage.getItem('ujs_chats') || '[]');
-  } catch(e) {
-    allChats = [];
-  }
+  try { allChats = JSON.parse(localStorage.getItem('ujs_chats') || '[]'); } catch(e) { allChats = []; }
 }
-
 function saveChats() {
   try {
-    const current = allChats.find(c => c.id === currentChatId);
-    if (current) {
-      current.messages = [...conversationHistory];
-      current.updated = Date.now();
-    }
+    const c = allChats.find(c => c.id === currentChatId);
+    if (c) { c.messages = [...conversationHistory]; c.updated = Date.now(); }
     localStorage.setItem('ujs_chats', JSON.stringify(allChats.slice(0, 50)));
-  } catch(e) { /* localStorage full — ignore */ }
+  } catch(e) {}
   renderChatList();
 }
 
-// --- Sidebar ---
+/* --- Sidebar --- */
 function toggleSidebar() {
-  const sidebar = document.getElementById('sidebar');
-  const overlay = document.getElementById('sidebar-overlay');
-  sidebar.classList.toggle('-translate-x-full');
-  overlay.classList.toggle('hidden');
+  document.getElementById('sidebar').classList.toggle('-translate-x-full');
+  document.getElementById('sidebar-overlay').classList.toggle('hidden');
 }
-
+function closeMobileSidebar() {
+  if (window.innerWidth < 768) {
+    const s = document.getElementById('sidebar');
+    if (!s.classList.contains('-translate-x-full')) toggleSidebar();
+  }
+}
 function renderChatList() {
-  const list = document.getElementById('chat-list');
-  list.innerHTML = allChats.map(c => `
+  document.getElementById('chat-list').innerHTML = allChats.map(c => `
     <div class="flex items-center group">
-      <button onclick="loadChat('${c.id}')" class="flex-1 text-left px-3 py-2 rounded text-xs truncate transition"
-        style="${c.id === currentChatId ? 'background:#192e4f;color:var(--text-bright);border:0.5px solid var(--navy-border);' : 'color:var(--text-dim);border:0.5px solid transparent;'}">
+      <button onclick="loadChat('${c.id}')" class="flex-1 text-left px-2.5 py-1.5 rounded text-[11px] truncate transition
+        ${c.id === currentChatId ? 'bg-navy-hover text-court-bright border border-navy-border' : 'text-court-dim border border-transparent hover:text-court-mid'}">
         ${esc(c.title || 'New chat')}
       </button>
-      <button onclick="event.stopPropagation(); deleteChat('${c.id}')"
-        class="hidden group-hover:flex w-6 h-6 items-center justify-center text-zinc-600 hover:text-red-400 shrink-0">
-        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-        </svg>
+      <button onclick="event.stopPropagation();deleteChat('${c.id}')" class="hidden group-hover:flex w-5 h-5 items-center justify-center text-court-dim hover:text-red-400 shrink-0">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>
     </div>
   `).join('');
 }
 
+/* --- Welcome --- */
 function showWelcome() {
   messages.innerHTML = `
-    <div id="welcome" class="text-center py-16">
-      <div class="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4" style="background:rgba(200,160,58,0.1);">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="9" stroke="var(--gold)" stroke-width="1.2"/>
-          <path d="M8 17l4-10 4 10" stroke="var(--gold)" stroke-width="1.2" stroke-linecap="round"/>
-          <line x1="9.5" y1="14.5" x2="14.5" y2="14.5" stroke="var(--gold)" stroke-width="1"/>
-        </svg>
+    <div id="welcome" class="text-center py-20">
+      <div class="w-12 h-12 rounded-2xl bg-gold/10 flex items-center justify-center mx-auto mb-4">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#c8a03a" stroke-width="1.2"/><path d="M8 17l4-10 4 10" stroke="#c8a03a" stroke-width="1.2" stroke-linecap="round"/><line x1="9.5" y1="14.5" x2="14.5" y2="14.5" stroke="#c8a03a" stroke-width="1"/></svg>
       </div>
-      <h2 style="font-family:var(--font-serif);font-size:18px;font-weight:500;color:var(--text-bright);margin-bottom:8px;">Search Lehigh Valley court records</h2>
-      <p style="font-size:13px;color:var(--text-mid);max-width:400px;margin:0 auto 24px;">Ask in plain English. Get structured results from the PA Unified Judicial System.</p>
-      <div class="flex flex-wrap gap-2 justify-center max-w-lg mx-auto">
-        ${['What hearings are in Lehigh tomorrow?','Show me Smith cases in Northampton','What is Kelli Murphy charged with?','How many criminal cases were filed this week?']
-          .map(s => '<button onclick="prefill(\'' + s + '\')" style="font-size:11px;color:var(--text-mid);border:0.5px solid var(--navy-border);border-radius:4px;padding:4px 10px;cursor:pointer;background:#192e4f;" onmouseover="this.style.borderColor=\'var(--gold)\'" onmouseout="this.style.borderColor=\'var(--navy-border)\'">' + s + '</button>').join('')}
+      <h2 class="font-serif text-lg font-medium text-court-bright mb-2">Search Lehigh Valley court records</h2>
+      <p class="text-[13px] text-court-mid max-w-sm mx-auto mb-6">Ask in plain English. Get structured results from the PA Unified Judicial System.</p>
+      <div class="flex flex-wrap gap-1.5 justify-center max-w-md mx-auto">
+        ${['What hearings are in Lehigh tomorrow?','Show me Smith cases in Northampton','What is Kelli Murphy charged with?','Criminal cases filed this week']
+          .map(s => `<button onclick="prefill('${s}')" class="text-[11px] text-court-mid border border-navy-border rounded px-2.5 py-1 bg-navy-hover hover:border-gold hover:text-court-bright transition">${s}</button>`).join('')}
       </div>
     </div>`;
 }
 
+/* --- Chat management --- */
 function newChat() {
-  currentChatId = null;
-  conversationHistory = [];
-  showWelcome();
-  renderChatList();
-  input.focus();
-  if (window.innerWidth < 768) {
-    const sidebar = document.getElementById('sidebar');
-    if (!sidebar.classList.contains('-translate-x-full')) toggleSidebar();
-  }
+  currentChatId = null; conversationHistory = [];
+  showWelcome(); renderChatList(); input.focus(); closeMobileSidebar();
 }
-
 function loadChat(id) {
   const c = allChats.find(x => x.id === id);
   if (!c) return;
   currentChatId = id;
   conversationHistory = c.messages ? [...c.messages] : [];
-
-  const welcome = document.getElementById('welcome');
-  if (welcome) welcome.remove();
+  const w = document.getElementById('welcome'); if (w) w.remove();
   messages.innerHTML = '';
-
-  for (let i = 0; i < conversationHistory.length; i++) {
-    const m = conversationHistory[i];
+  conversationHistory.forEach((m, i) => {
     if (m.role === 'user') {
       messages.innerHTML += userBubble(m.content);
     } else if (m.role === 'assistant') {
       const rid = 'restored-' + i;
-      messages.innerHTML += `<div class="flex justify-start">
-        <div class="rounded-2xl rounded-bl-md px-4 md:px-5 py-3 md:py-4 max-w-[95%] md:max-w-2xl w-fit min-w-[180px] md:min-w-[200px] overflow-hidden" style="background:var(--navy);border:0.5px solid var(--navy-border);">
-          <div id="${rid}" class="prose text-sm leading-relaxed break-words" style="color:var(--text-mid);"></div>
-        </div>
-      </div>`;
-      setTimeout(() => {
-        const el = document.getElementById(rid);
-        if (el) renderFinalResponse(el, m.content, rid);
-      }, 100);
+      messages.innerHTML += botBubbleStatic(rid);
+      setTimeout(() => { const el = document.getElementById(rid); if (el) renderFinalResponse(el, m.content, rid); }, 100);
     }
-  }
-
-  renderChatList();
-  chat.scrollTop = chat.scrollHeight;
-  input.focus();
-  if (window.innerWidth < 768) {
-    const sidebar = document.getElementById('sidebar');
-    if (!sidebar.classList.contains('-translate-x-full')) toggleSidebar();
-  }
+  });
+  renderChatList(); chat.scrollTop = chat.scrollHeight; input.focus(); closeMobileSidebar();
 }
-
 function deleteChat(id) {
   allChats = allChats.filter(c => c.id !== id);
   localStorage.setItem('ujs_chats', JSON.stringify(allChats));
-  if (currentChatId === id) newChat();
-  else renderChatList();
+  if (currentChatId === id) newChat(); else renderChatList();
 }
 
-// --- Init ---
-loadChatsFromStorage();
-renderChatList();
+/* --- Bubbles --- */
+function userBubble(text) {
+  return `<div class="flex justify-end">
+    <div class="bg-gold/[0.12] border border-gold/25 rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] md:max-w-lg break-words">
+      <p class="text-sm text-court-bright leading-relaxed">${esc(text)}</p>
+    </div>
+  </div>`;
+}
+function botBubbleStart(statusId, contentId) {
+  return `<div class="flex justify-start">
+    <div class="bg-navy border border-navy-border rounded-2xl rounded-bl-md px-4 md:px-5 py-3 md:py-4 max-w-[95%] md:max-w-2xl w-fit min-w-[180px] overflow-hidden">
+      <div id="${statusId}" class="text-[11px] text-court-dim mb-2 font-mono truncate"></div>
+      <div id="${contentId}" class="prose text-sm text-court-mid leading-relaxed break-words"></div>
+    </div>
+  </div>`;
+}
+function botBubbleStatic(contentId) {
+  return `<div class="flex justify-start">
+    <div class="bg-navy border border-navy-border rounded-2xl rounded-bl-md px-4 md:px-5 py-3 md:py-4 max-w-[95%] md:max-w-2xl w-fit min-w-[180px] overflow-hidden">
+      <div id="${contentId}" class="prose text-sm text-court-mid leading-relaxed break-words"></div>
+    </div>
+  </div>`;
+}
 
-// Load stats
+/* --- Init --- */
+loadChatsFromStorage(); renderChatList();
 fetch(API + '/stats').then(r => r.json()).then(d => {
   document.getElementById('stats').textContent = d.cases.toLocaleString() + ' cases indexed';
 }).catch(() => {});
-
-// Save on page close
 window.addEventListener('beforeunload', () => saveChats());
-// Periodic save during streaming (every 2s)
 setInterval(() => { if (btn.disabled) saveChats(); }, 2000);
 
-// Check for initial query from landing page
 const urlParams = new URLSearchParams(window.location.search);
 const initialQuery = urlParams.get('q') || '{{ initial_query|default("", true) }}';
-if (initialQuery) {
-  showWelcome();
-  input.value = initialQuery;
-  setTimeout(() => send(), 500);
-} else if (allChats.length > 0 && allChats[0].messages && allChats[0].messages.length > 0) {
-  loadChat(allChats[0].id);
-} else {
-  showWelcome();
-}
+if (initialQuery) { showWelcome(); input.value = initialQuery; setTimeout(() => send(), 500); }
+else if (allChats.length > 0 && allChats[0].messages && allChats[0].messages.length > 0) { loadChat(allChats[0].id); }
+else { showWelcome(); }
+
 input.addEventListener('keydown', e => { if (e.key === 'Enter' && !btn.disabled) send(); });
 function prefill(q) { input.value = q; input.focus(); }
 
+/* --- Send --- */
 async function send() {
-  const q = input.value.trim();
-  if (!q) return;
-  input.value = '';
-  btn.disabled = true;
+  const q = input.value.trim(); if (!q) return;
+  input.value = ''; btn.disabled = true;
   document.getElementById('btn-text').classList.add('hidden');
   document.getElementById('btn-spin').classList.remove('hidden');
 
-  // Create new chat if none active
   if (!currentChatId) {
     currentChatId = 'c' + Date.now();
     allChats.unshift({ id: currentChatId, title: q.slice(0, 50), messages: [], updated: Date.now() });
     renderChatList();
   }
-  // Set title from first message if empty
-  const currentChat = allChats.find(c => c.id === currentChatId);
-  if (currentChat && !currentChat.title) {
-    currentChat.title = q.slice(0, 50);
-    renderChatList();
-  }
+  const cc = allChats.find(c => c.id === currentChatId);
+  if (cc && !cc.title) { cc.title = q.slice(0, 50); renderChatList(); }
 
-  const welcome = document.getElementById('welcome');
-  if (welcome) welcome.remove();
-
-  conversationHistory.push({role: 'user', content: q});
-  saveChats(); // Save immediately so user message persists if page closes
+  const w = document.getElementById('welcome'); if (w) w.remove();
+  conversationHistory.push({role: 'user', content: q}); saveChats();
 
   const id = 'r' + Date.now();
   messages.innerHTML += userBubble(q) + botBubbleStart(id + '-status', id);
@@ -301,52 +247,38 @@ async function send() {
 
   const statusEl = document.getElementById(id + '-status');
   const contentEl = document.getElementById(id);
-
   let fullText = '';
+
   try {
     const res = await fetch(API + '/ask/stream', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({question: q, history: conversationHistory.slice(-10)})
     });
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buf = '';
-
     while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      const { done, value } = await reader.read(); if (done) break;
       buf += decoder.decode(value, { stream: true });
-      let lines = buf.split('\n');
-      buf = lines.pop();
+      let lines = buf.split('\n'); buf = lines.pop();
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue;
-        const data = line.slice(6);
-        if (data === '[DONE]') continue;
-        if (data.startsWith('Searching') || data.startsWith('..')) {
-          statusEl.textContent += data;
-        } else {
+        const data = line.slice(6); if (data === '[DONE]') continue;
+        if (data.startsWith('Searching') || data.startsWith('..')) { statusEl.textContent += data; }
+        else {
           fullText += data.replace(/\\n/g, '\n');
-          contentEl.innerHTML = renderMd(fullText, false);
-          // Update in-memory history (save throttled below)
+          contentEl.innerHTML = renderMd(fullText);
           const last = conversationHistory[conversationHistory.length - 1];
-          if (last && last.role === 'assistant') {
-            last.content = fullText;
-          } else {
-            conversationHistory.push({role: 'assistant', content: fullText});
-          }
+          if (last && last.role === 'assistant') last.content = fullText;
+          else conversationHistory.push({role: 'assistant', content: fullText});
         }
         chat.scrollTop = chat.scrollHeight;
       }
     }
     if (!fullText.trim()) contentEl.textContent = 'No answer received.';
-    // Final render — split charts into separate artifacts
     renderFinalResponse(contentEl, fullText, id);
-    saveChats();
-    statusEl.classList.add('opacity-50');
-  } catch (e) {
-    contentEl.textContent = 'Error: ' + e.message;
-  }
+    saveChats(); statusEl.classList.add('opacity-50');
+  } catch (e) { contentEl.textContent = 'Error: ' + e.message; }
 
   btn.disabled = false;
   document.getElementById('btn-text').classList.remove('hidden');
@@ -354,123 +286,65 @@ async function send() {
   input.focus();
 }
 
+/* --- Rendering --- */
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-function userBubble(text) {
-  return `<div class="flex justify-end">
-    <div class="rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] md:max-w-lg break-words" style="background:rgba(200,160,58,0.12);border:0.5px solid rgba(200,160,58,0.25);">
-      <p class="text-sm leading-relaxed" style="color:var(--text-bright);">${esc(text)}</p>
-    </div>
-  </div>`;
-}
-
-function botBubbleStart(statusId, contentId) {
-  return `<div class="flex justify-start">
-    <div class="rounded-2xl rounded-bl-md px-4 md:px-5 py-3 md:py-4 max-w-[95%] md:max-w-2xl w-fit min-w-[180px] md:min-w-[200px] overflow-hidden" style="background:var(--navy);border:0.5px solid var(--navy-border);">
-      <div id="${statusId}" class="text-[11px] mb-2 font-mono truncate" style="color:var(--text-dim);"></div>
-      <div id="${contentId}" class="prose text-sm leading-relaxed break-words" style="color:var(--text-mid);"></div>
-    </div>
-  </div>`;
-}
-
-function botBubbleStatic(content) {
-  return `<div class="flex justify-start">
-    <div class="bg-card border border-border rounded-2xl rounded-bl-md px-5 py-4 max-w-[95%] md:max-w-2xl w-fit min-w-[200px]">
-      <div class="prose text-sm text-zinc-300 leading-relaxed">${content}</div>
-    </div>
-  </div>`;
-}
-
 function renderFinalResponse(contentEl, text, msgId) {
-  // Split text around chart blocks — charts become separate artifacts after the text bubble
   const parts = text.split(/```chart\s*\n([\s\S]*?)```/g);
-  // parts = [text_before, chart_json, text_after, chart_json2, text_after2, ...]
-
   let textContent = '';
   const chartConfigs = [];
-
   for (let i = 0; i < parts.length; i++) {
-    if (i % 2 === 0) {
-      textContent += parts[i];
-    } else {
-      chartConfigs.push(parts[i].trim());
-    }
+    if (i % 2 === 0) textContent += parts[i]; else chartConfigs.push(parts[i].trim());
   }
-
-  // Render text in the existing bubble
-  contentEl.innerHTML = renderMd(textContent.trim(), true);
-
-  // Add chart artifacts as separate elements after the message bubble
-  const parentBubble = contentEl.closest('.flex.justify-start');
+  contentEl.innerHTML = renderMd(textContent.trim());
+  const parent = contentEl.closest('.flex.justify-start');
   chartConfigs.forEach((json, i) => {
     try {
       const config = JSON.parse(json);
       const cid = 'chart-' + msgId + '-' + i;
-      const chartEl = document.createElement('div');
-      chartEl.className = 'max-w-2xl mx-auto px-4 md:px-6';
-      chartEl.innerHTML = `
-        <div class="rounded-2xl rounded-bl-md p-5" style="background:var(--navy);border:0.5px solid var(--navy-border);">
-          <canvas id="${cid}" style="width:100%;max-height:320px;"></canvas>
-        </div>`;
-      parentBubble.parentNode.insertBefore(chartEl, parentBubble.nextSibling);
+      const el = document.createElement('div');
+      el.className = 'max-w-2xl mx-auto px-4 md:px-6';
+      el.innerHTML = `<div class="bg-navy border border-navy-border rounded-2xl rounded-bl-md p-5"><canvas id="${cid}" style="width:100%;max-height:320px;"></canvas></div>`;
+      parent.parentNode.insertBefore(el, parent.nextSibling);
       setTimeout(() => renderChart(cid, config), 300);
     } catch(e) {}
   });
 }
 
 function renderMd(text) {
-  // Strip chart blocks (handled separately by renderFinalResponse)
   let html = text.replace(/```chart\s*\n[\s\S]*?```/g,
-    '<div class="my-3 py-2 text-xs text-muted flex items-center gap-2"><svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Preparing chart...</div>');
-
-  // Escape HTML (but not our placeholder divs)
+    '<div class="my-3 py-2 text-[11px] text-court-dim flex items-center gap-2"><svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Preparing chart...</div>');
   html = html.replace(/&(?!amp;)/g, '&amp;');
-
-  // Markdown
-  html = html
+  return html
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/^### (.+)$/gm, '<h4 class="text-zinc-100 font-semibold mt-3 mb-1">$1</h4>')
-    .replace(/^## (.+)$/gm, '<h3 class="text-zinc-100 font-semibold mt-3 mb-1">$1</h3>')
-    .replace(/^- (.+)$/gm, '<div class="pl-3 border-l-2 border-zinc-700 my-0.5">$1</div>')
-    .replace(/^\d+\. (.+)$/gm, '<div class="pl-3 border-l-2 border-accent/30 my-0.5">$1</div>')
-    .replace(/\n\n/g, '<br><br>')
-    .replace(/\n/g, '<br>');
-
-  return html;
+    .replace(/^### (.+)$/gm, '<h4 class="text-court-bright font-semibold mt-3 mb-1">$1</h4>')
+    .replace(/^## (.+)$/gm, '<h3 class="text-court-bright font-semibold mt-3 mb-1">$1</h3>')
+    .replace(/^- (.+)$/gm, '<div class="pl-3 border-l-2 border-navy-border my-0.5">$1</div>')
+    .replace(/^\d+\. (.+)$/gm, '<div class="pl-3 border-l-2 border-gold/30 my-0.5">$1</div>')
+    .replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
 }
 
 function renderChart(id, config) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  // Destroy existing chart on same canvas
-  if (chartInstances[id]) { chartInstances[id].destroy(); }
-  const colors = ['#3b82f6','#8b5cf6','#ec4899','#f59e0b','#10b981','#06b6d4','#f43f5e','#84cc16'];
-  if (config.datasets) {
-    config.datasets.forEach((ds, i) => {
-      if (config.type === 'pie' || config.type === 'doughnut') {
-        ds.backgroundColor = colors.slice(0, config.labels.length).map(c => c + 'cc');
-        ds.borderColor = colors.slice(0, config.labels.length);
-      } else {
-        ds.backgroundColor = ds.backgroundColor || colors[i % colors.length] + '80';
-        ds.borderColor = ds.borderColor || colors[i % colors.length];
-      }
-      ds.borderWidth = ds.borderWidth || 1;
-    });
-  }
+  const el = document.getElementById(id); if (!el) return;
+  if (chartInstances[id]) chartInstances[id].destroy();
+  const colors = ['#c8a03a','#3b82f6','#8b5cf6','#ec4899','#10b981','#06b6d4','#f43f5e','#84cc16'];
+  if (config.datasets) config.datasets.forEach((ds, i) => {
+    if (config.type === 'pie' || config.type === 'doughnut') {
+      ds.backgroundColor = colors.slice(0, config.labels.length).map(c => c + 'cc');
+      ds.borderColor = colors.slice(0, config.labels.length);
+    } else { ds.backgroundColor = colors[i % colors.length] + '80'; ds.borderColor = colors[i % colors.length]; }
+    ds.borderWidth = 1;
+  });
   chartInstances[id] = new Chart(el, {
     type: config.type || 'bar',
     data: { labels: config.labels, datasets: config.datasets },
     options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: {
-        title: { display: !!config.title, text: config.title, color: '#e4e4e7', font: { size: 13 } },
-        legend: { labels: { color: '#a1a1aa', font: { size: 11 } } }
-      },
+      responsive: true, maintainAspectRatio: true,
+      plugins: { title: { display: !!config.title, text: config.title, color: '#e8edf5', font: { size: 13 } }, legend: { labels: { color: '#8fa8c8', font: { size: 11 } } } },
       scales: config.type === 'pie' || config.type === 'doughnut' ? {} : {
-        x: { ticks: { color: '#71717a', font: { size: 10 } }, grid: { color: '#1e1e2408' } },
-        y: { ticks: { color: '#71717a', font: { size: 10 } }, grid: { color: '#1e1e2440' } }
+        x: { ticks: { color: '#5a7aa0', font: { size: 10 } }, grid: { color: '#1e325408' } },
+        y: { ticks: { color: '#5a7aa0', font: { size: 10 } }, grid: { color: '#1e325440' } }
       }
     }
   });
