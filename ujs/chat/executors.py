@@ -153,13 +153,45 @@ def _live_search_ujs(conn, inputs):
     import tempfile
 
     last, first = inputs["last_name"], inputs.get("first_name")
-    results = search_by_name(last, first=first, county=inputs.get("county"))
+    user_county = inputs.get("county")
+
+    # UJS requires county for name search — always search both LV counties + user's county
+    search_counties = ["Lehigh", "Northampton"]
+    if user_county and user_county not in search_counties:
+        search_counties.append(user_county)
+
+    results = []
+    for county in search_counties:
+        try:
+            r = search_by_name(last, first=first, county=county)
+            if r:
+                results.extend(r)
+        except Exception:
+            pass
+
+    # Try hyphenated parts if still nothing
     if not results and "-" in last:
         for part in last.split("-"):
-            results = search_by_name(part.strip(), first=first, county=inputs.get("county"))
+            for county in search_counties:
+                try:
+                    r = search_by_name(part.strip(), first=first, county=county)
+                    if r: results.extend(r)
+                except Exception:
+                    pass
             if results: break
+
     if not results:
-        return f"No cases found on UJS for {first or ''} {last}"
+        return f"No cases found on UJS for {first or ''} {last} (searched: {', '.join(search_counties)})"
+
+    # Deduplicate by docket number
+    seen = set()
+    unique = []
+    for r in results:
+        dn = r.get("docket_number")
+        if dn and dn not in seen:
+            seen.add(dn)
+            unique.append(r)
+    results = unique
 
     with db.connect() as conn_store:
         db.upsert_cases(conn_store, results)
