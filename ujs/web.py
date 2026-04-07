@@ -9,7 +9,16 @@ main_bp = Blueprint('main', __name__)
 @main_bp.route('/')
 def landing():
     api_url = os.environ.get('API_URL', 'http://localhost:8100')
-    return render_template('landing.html', api_url=api_url)
+    case_count = 0
+    try:
+        from ujs import db
+        with db.connect() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM cases")
+            case_count = cur.fetchone()[0]
+    except Exception:
+        pass
+    return render_template('landing.html', api_url=api_url, case_count=case_count)
 
 
 @main_bp.route('/chat')

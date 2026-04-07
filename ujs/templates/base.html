@@ -6,10 +6,26 @@
 <title>{% block title %}Lehigh Valley Court AI{% endblock %}</title>
 <link rel="stylesheet" href="/static/css/main.css">
 <script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        navy: { DEFAULT: '#0f1e38', light: '#132240', border: '#1e3254', hover: '#192e4f' },
+        gold: { DEFAULT: '#c8a03a', dim: '#a07f2a' },
+        court: { bright: '#e8edf5', mid: '#8fa8c8', dim: '#5a7aa0', muted: '#4a6a99', faint: '#6b88aa' }
+      },
+      fontFamily: {
+        serif: ['Source Serif', 'Georgia', 'serif'],
+        sans: ['Inter', '-apple-system', 'system-ui', 'sans-serif']
+      }
+    }
+  }
+}
+</script>
 {% block head %}{% endblock %}
-<style>{% block extra_css %}{% endblock %}</style>
 </head>
-<body>
+<body class="font-sans">
   {% block body %}{% endblock %}
   <script>const API = '{{ api_url }}';</script>
   {% block scripts %}{% endblock %}

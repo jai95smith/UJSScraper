@@ -1,220 +1,128 @@
 {% extends "base.html" %}
 
-{% block extra_css %}
-.hero {
-  background: var(--navy-light);
-  padding: 64px 40px 80px;
-  display: flex; flex-direction: column; align-items: center; text-align: center;
-}
-.hero-eyebrow {
-  font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
-  color: var(--gold); margin-bottom: 16px;
-}
-.hero h1 {
-  font-family: var(--font-serif);
-  font-size: 34px; font-weight: 500; color: var(--text-bright);
-  line-height: 1.22; max-width: 520px; margin-bottom: 12px;
-}
-.hero-sub {
-  font-size: 14px; color: var(--text-mid); max-width: 420px;
-  line-height: 1.65; margin-bottom: 36px;
-}
-.search-row {
-  display: flex; width: 100%; max-width: 620px;
-  border-radius: 6px; overflow: hidden;
-  border: 0.5px solid rgba(255,255,255,0.15);
-}
-.search-icon-cell {
-  background: #fff; display: flex; align-items: center;
-  padding: 0 14px; border-right: 0.5px solid #e5e7eb;
-}
-.search-input {
-  flex: 1; height: 50px; background: #fff;
-  border: none; padding: 0 14px; font-size: 13px; color: #111; outline: none;
-  font-family: var(--font-sans);
-}
-.search-input::placeholder { color: #9ca3af; }
-.search-btn {
-  height: 50px; padding: 0 24px;
-  background: var(--gold); border: none;
-  color: var(--navy); font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap;
-}
-.search-btn:hover { background: var(--gold-dim); }
-.search-source {
-  margin-top: 11px; font-size: 11px; color: var(--text-dim);
-  display: flex; align-items: center; gap: 5px;
-}
-.search-source a { color: #7a9fc8; text-decoration: none; }
-.chips { display: flex; gap: 7px; margin-top: 22px; flex-wrap: wrap; justify-content: center; }
-.chip {
-  font-size: 11px; color: var(--text-mid); border: 0.5px solid #2a4166;
-  border-radius: 4px; padding: 4px 10px; cursor: pointer; background: #192e4f;
-}
-.chip:hover { border-color: var(--gold); color: var(--text-bright); }
-.trust {
-  background: var(--navy); border-top: 0.5px solid var(--navy-border);
-  display: flex; justify-content: center; gap: 36px; padding: 14px 40px; flex-wrap: wrap;
-}
-.trust-item { display: flex; align-items: center; gap: 7px; }
-.trust-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--gold); flex-shrink: 0; }
-.trust-text { font-size: 11px; color: #6b88aa; }
-.features { padding: 48px 40px; background: var(--light-bg); }
-.features-title { font-family: var(--font-serif); font-size: 16px; font-weight: 500; color: #1a2e52; text-align: center; margin-bottom: 6px; }
-.features-sub { font-size: 12px; color: #6b7280; text-align: center; margin-bottom: 28px; }
-.feature-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; max-width: 840px; margin: 0 auto; }
-.fcard { background: #fff; border: 0.5px solid #e5e7eb; border-radius: 10px; padding: 18px 14px; }
-.fcard-icon {
-  width: 30px; height: 30px; border-radius: 6px; background: #eef2f8;
-  display: flex; align-items: center; justify-content: center; margin-bottom: 10px;
-}
-.fcard-label { font-size: 12px; font-weight: 500; color: #1a2e52; margin-bottom: 4px; }
-.fcard-desc { font-size: 11px; color: #6b7280; line-height: 1.5; }
-.counties {
-  background: #fff; border-top: 0.5px solid #e5e7eb; border-bottom: 0.5px solid #e5e7eb;
-  padding: 20px 40px; display: flex; align-items: center; justify-content: center; gap: 36px;
-}
-.county-label { font-size: 10px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.08em; }
-.county-name { font-size: 13px; font-weight: 500; color: #1a2e52; margin-bottom: 2px; }
-.county-sub { font-size: 10px; color: #9ca3af; }
-.county-divider { width: 0.5px; height: 36px; background: #e5e7eb; }
-
-@media (max-width: 768px) {
-  .hero { padding: 40px 20px 60px; }
-  .hero h1 { font-size: 26px; }
-  .search-row { flex-direction: column; border-radius: 8px; }
-  .search-icon-cell { display: none; }
-  .search-input { border-radius: 8px 8px 0 0; }
-  .search-btn { border-radius: 0 0 8px 8px; height: 44px; }
-  .feature-grid { grid-template-columns: repeat(2, 1fr); }
-  .counties { flex-direction: column; gap: 12px; }
-  .county-divider { width: 60px; height: 0.5px; }
-  .trust { gap: 16px; }
-}
-{% endblock %}
-
 {% block body %}
-<div class="nav">
-  <a href="/" class="nav-left">
-    <div class="nav-seal">
+<!-- Nav -->
+<nav class="bg-navy flex items-center justify-between px-6 md:px-10 h-14 border-b border-navy-border">
+  <a href="/" class="flex items-center gap-3 no-underline">
+    <div class="w-[30px] h-[30px] border-[1.5px] border-gold rounded-full flex items-center justify-center shrink-0">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-        <circle cx="12" cy="12" r="9" stroke="var(--gold)" stroke-width="1.2"/>
-        <path d="M8 17l4-10 4 10" stroke="var(--gold)" stroke-width="1.2" stroke-linecap="round"/>
-        <line x1="9.5" y1="14.5" x2="14.5" y2="14.5" stroke="var(--gold)" stroke-width="1"/>
+        <circle cx="12" cy="12" r="9" stroke="#c8a03a" stroke-width="1.2"/>
+        <path d="M8 17l4-10 4 10" stroke="#c8a03a" stroke-width="1.2" stroke-linecap="round"/>
+        <line x1="9.5" y1="14.5" x2="14.5" y2="14.5" stroke="#c8a03a" stroke-width="1"/>
       </svg>
     </div>
-    <span class="nav-wordmark">Lehigh Valley <span>Court AI</span></span>
+    <span class="text-[13px] font-medium text-court-bright">Lehigh Valley <span class="text-gold">Court AI</span></span>
   </a>
-  <div class="nav-links">
-    <a href="/chat" class="nav-link">Search</a>
-    <span class="nav-link">About</span>
-    <span class="nav-link">Disclaimer</span>
+  <div class="hidden md:flex items-center gap-6">
+    <a href="/chat" class="text-xs text-court-mid hover:text-court-bright">Search</a>
+    <span class="text-xs text-court-mid cursor-pointer">About</span>
+    <span class="text-xs text-court-mid cursor-pointer">Disclaimer</span>
   </div>
-  <a href="/chat" class="nav-cta">Start searching</a>
-</div>
+  <a href="/chat" class="text-[11px] font-medium text-navy bg-gold hover:bg-gold-dim rounded px-4 py-[7px]">Start searching</a>
+</nav>
 
-<div class="hero">
-  <div class="hero-eyebrow">Northampton & Lehigh County · Public records</div>
-  <h1>Search court records with plain language</h1>
-  <p class="hero-sub">Ask a question. Get structured results from Pennsylvania's Unified Judicial System — no legal training required.</p>
+<!-- Hero -->
+<section class="bg-navy-light flex flex-col items-center text-center px-5 md:px-10 pt-16 pb-20">
+  <p class="text-[11px] tracking-[0.1em] uppercase text-gold mb-4">Northampton &amp; Lehigh County · Public records</p>
+  <h1 class="font-serif text-[28px] md:text-[34px] font-medium text-court-bright leading-tight max-w-[520px] mb-3">Search court records with plain language</h1>
+  <p class="text-sm text-court-mid max-w-[420px] leading-relaxed mb-9">Ask a question. Get structured results from Pennsylvania's Unified Judicial System — no legal training required.</p>
 
-  <form action="/chat" method="get" class="search-row">
-    <div class="search-icon-cell">
+  <form action="/chat" method="get" class="flex w-full max-w-[620px] rounded-md overflow-hidden border border-white/[0.15]">
+    <div class="hidden md:flex items-center bg-white px-3.5 border-r border-gray-200">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5l4 4" stroke-linecap="round"/></svg>
     </div>
-    <input name="q" class="search-input" placeholder="e.g. Show dockets for Smith filed in Northampton County in 2024…" autofocus />
-    <button type="submit" class="search-btn">Ask →</button>
+    <input name="q" class="flex-1 h-[50px] bg-white border-none px-3.5 text-[13px] text-gray-900 outline-none font-sans placeholder:text-gray-400" placeholder="e.g. Show dockets for Smith filed in Northampton County in 2024…" autofocus />
+    <button type="submit" class="h-[50px] px-6 bg-gold hover:bg-gold-dim border-none text-navy text-[13px] font-medium cursor-pointer whitespace-nowrap">Ask →</button>
   </form>
 
-  <div class="search-source">
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 3"/></svg>
+  <div class="mt-[11px] text-[11px] text-court-dim flex items-center gap-[5px]">
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#5a7aa0" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 3"/></svg>
     Data sourced from
-    <a href="https://ujsportal.pacourts.us/CaseSearch" target="_blank">ujsportal.pacourts.us</a>
-    · <span id="case-count"></span>
+    <a href="https://ujsportal.pacourts.us/CaseSearch" target="_blank" class="text-[#7a9fc8] no-underline">ujsportal.pacourts.us</a>
+    · {{ "{:,}".format(case_count) }} cases indexed
   </div>
 
-  <div class="chips">
-    <span class="chip" onclick="goChat('Civil dockets in Lehigh')">Civil dockets</span>
-    <span class="chip" onclick="goChat('Criminal filings this week')">Criminal filings</span>
-    <span class="chip" onclick="goChat('Active case status')">Case status</span>
-    <span class="chip" onclick="goChat('Hearings tomorrow')">Hearing dates</span>
-    <span class="chip" onclick="goChat('Judge schedule')">Judge schedule</span>
-    <span class="chip" onclick="goChat('MDJ records Northampton')">MDJ records</span>
+  <div class="flex flex-wrap gap-[7px] mt-[22px] justify-center">
+    <span onclick="goChat('Civil dockets in Lehigh')" class="text-[11px] text-court-mid border border-[#2a4166] rounded px-2.5 py-1 cursor-pointer bg-navy-hover hover:border-gold hover:text-court-bright">Civil dockets</span>
+    <span onclick="goChat('Criminal filings this week')" class="text-[11px] text-court-mid border border-[#2a4166] rounded px-2.5 py-1 cursor-pointer bg-navy-hover hover:border-gold hover:text-court-bright">Criminal filings</span>
+    <span onclick="goChat('Active case status')" class="text-[11px] text-court-mid border border-[#2a4166] rounded px-2.5 py-1 cursor-pointer bg-navy-hover hover:border-gold hover:text-court-bright">Case status</span>
+    <span onclick="goChat('Hearings tomorrow')" class="text-[11px] text-court-mid border border-[#2a4166] rounded px-2.5 py-1 cursor-pointer bg-navy-hover hover:border-gold hover:text-court-bright">Hearing dates</span>
+    <span onclick="goChat('Judge schedule')" class="text-[11px] text-court-mid border border-[#2a4166] rounded px-2.5 py-1 cursor-pointer bg-navy-hover hover:border-gold hover:text-court-bright">Judge schedule</span>
+    <span onclick="goChat('MDJ records Northampton')" class="text-[11px] text-court-mid border border-[#2a4166] rounded px-2.5 py-1 cursor-pointer bg-navy-hover hover:border-gold hover:text-court-bright">MDJ records</span>
   </div>
+</section>
+
+<!-- Trust bar -->
+<div class="bg-navy border-t border-navy-border flex flex-wrap justify-center gap-6 md:gap-9 px-5 md:px-10 py-3.5">
+  <div class="flex items-center gap-[7px]"><div class="w-[5px] h-[5px] rounded-full bg-gold shrink-0"></div><span class="text-[11px] text-court-faint">Public records only</span></div>
+  <div class="flex items-center gap-[7px]"><div class="w-[5px] h-[5px] rounded-full bg-gold shrink-0"></div><span class="text-[11px] text-court-faint">Sourced from UJS Portal</span></div>
+  <div class="flex items-center gap-[7px]"><div class="w-[5px] h-[5px] rounded-full bg-gold shrink-0"></div><span class="text-[11px] text-court-faint">No account required</span></div>
+  <div class="flex items-center gap-[7px]"><div class="w-[5px] h-[5px] rounded-full bg-gold shrink-0"></div><span class="text-[11px] text-court-faint">Not legal advice</span></div>
 </div>
 
-<div class="trust">
-  <div class="trust-item"><div class="trust-dot"></div><span class="trust-text">Public records only</span></div>
-  <div class="trust-item"><div class="trust-dot"></div><span class="trust-text">Sourced from UJS Portal</span></div>
-  <div class="trust-item"><div class="trust-dot"></div><span class="trust-text">No account required</span></div>
-  <div class="trust-item"><div class="trust-dot"></div><span class="trust-text">Not legal advice</span></div>
-</div>
-
-<div class="features">
-  <div class="features-title">What you can search</div>
-  <div class="features-sub">Covers both counties across all major court divisions via UJS Portal</div>
-  <div class="feature-grid">
-    <div class="fcard">
-      <div class="fcard-icon">
+<!-- Features -->
+<section class="bg-[#f4f5f7] px-5 md:px-10 py-12">
+  <h2 class="font-serif text-base font-medium text-[#1a2e52] text-center mb-1.5">What you can search</h2>
+  <p class="text-xs text-gray-500 text-center mb-7">Covers both counties across all major court divisions via UJS Portal</p>
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-[840px] mx-auto">
+    <div class="bg-white border border-gray-200 rounded-[10px] p-[18px]">
+      <div class="w-[30px] h-[30px] rounded-md bg-[#eef2f8] flex items-center justify-center mb-2.5">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1a2e52" stroke-width="1.4"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
       </div>
-      <div class="fcard-label">Docket lookup</div>
-      <div class="fcard-desc">Search by docket number, party name, or attorney</div>
+      <div class="text-xs font-medium text-[#1a2e52] mb-1">Docket lookup</div>
+      <div class="text-[11px] text-gray-500 leading-relaxed">Search by docket number, party name, or attorney</div>
     </div>
-    <div class="fcard">
-      <div class="fcard-icon">
+    <div class="bg-white border border-gray-200 rounded-[10px] p-[18px]">
+      <div class="w-[30px] h-[30px] rounded-md bg-[#eef2f8] flex items-center justify-center mb-2.5">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1a2e52" stroke-width="1.4"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
       </div>
-      <div class="fcard-label">Hearing schedules</div>
-      <div class="fcard-desc">Upcoming hearings by judge, courtroom, or date</div>
+      <div class="text-xs font-medium text-[#1a2e52] mb-1">Hearing schedules</div>
+      <div class="text-[11px] text-gray-500 leading-relaxed">Upcoming hearings by judge, courtroom, or date</div>
     </div>
-    <div class="fcard">
-      <div class="fcard-icon">
+    <div class="bg-white border border-gray-200 rounded-[10px] p-[18px]">
+      <div class="w-[30px] h-[30px] rounded-md bg-[#eef2f8] flex items-center justify-center mb-2.5">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1a2e52" stroke-width="1.4"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
       </div>
-      <div class="fcard-label">Case status</div>
-      <div class="fcard-desc">Active, closed, appealed — across civil and criminal</div>
+      <div class="text-xs font-medium text-[#1a2e52] mb-1">Case status</div>
+      <div class="text-[11px] text-gray-500 leading-relaxed">Active, closed, appealed — across civil and criminal</div>
     </div>
-    <div class="fcard">
-      <div class="fcard-icon">
+    <div class="bg-white border border-gray-200 rounded-[10px] p-[18px]">
+      <div class="w-[30px] h-[30px] rounded-md bg-[#eef2f8] flex items-center justify-center mb-2.5">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1a2e52" stroke-width="1.4"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5l4 4" stroke-linecap="round"/></svg>
       </div>
-      <div class="fcard-label">MDJ records</div>
-      <div class="fcard-desc">Magisterial District Judge filings and outcomes</div>
+      <div class="text-xs font-medium text-[#1a2e52] mb-1">MDJ records</div>
+      <div class="text-[11px] text-gray-500 leading-relaxed">Magisterial District Judge filings and outcomes</div>
     </div>
   </div>
+</section>
+
+<!-- Counties -->
+<div class="bg-white border-t border-b border-gray-200 flex flex-col md:flex-row items-center justify-center gap-4 md:gap-9 px-5 md:px-10 py-5">
+  <span class="text-[10px] text-gray-400 uppercase tracking-wider">Coverage</span>
+  <div class="text-center md:text-left">
+    <div class="text-[13px] font-medium text-[#1a2e52] mb-0.5">Northampton County</div>
+    <div class="text-[10px] text-gray-400">Court of Common Pleas · MDJ Districts · Orphans Court</div>
+  </div>
+  <div class="hidden md:block w-px h-9 bg-gray-200"></div>
+  <div class="text-center md:text-left">
+    <div class="text-[13px] font-medium text-[#1a2e52] mb-0.5">Lehigh County</div>
+    <div class="text-[10px] text-gray-400">Court of Common Pleas · MDJ Districts · Family Court</div>
+  </div>
 </div>
 
-<div class="counties">
-  <div class="county-label">Coverage</div>
-  <div>
-    <div class="county-name">Northampton County</div>
-    <div class="county-sub">Court of Common Pleas · MDJ Districts · Orphans Court</div>
+<!-- Footer -->
+<footer class="bg-navy flex flex-col md:flex-row items-center justify-between gap-2 px-5 md:px-10 py-4">
+  <span class="text-[11px] text-court-muted text-center md:text-left">Lehigh Valley Court AI · Data via UJS Portal · Not affiliated with any court · Not legal advice</span>
+  <div class="flex gap-[18px]">
+    <span class="text-[11px] text-court-muted cursor-pointer">Privacy</span>
+    <span class="text-[11px] text-court-muted cursor-pointer">Disclaimer</span>
+    <span class="text-[11px] text-court-muted cursor-pointer">Feedback</span>
   </div>
-  <div class="county-divider"></div>
-  <div>
-    <div class="county-name">Lehigh County</div>
-    <div class="county-sub">Court of Common Pleas · MDJ Districts · Family Court</div>
-  </div>
-</div>
-
-<div class="footer">
-  <span class="footer-left">Lehigh Valley Court AI · Data via UJS Portal · Not affiliated with any court · Not legal advice</span>
-  <div class="footer-links">
-    <span class="footer-link">Privacy</span>
-    <span class="footer-link">Disclaimer</span>
-    <span class="footer-link">Feedback</span>
-  </div>
-</div>
+</footer>
 {% endblock %}
 
 {% block scripts %}
 <script>
-fetch(API + '/stats').then(r => r.json()).then(d => {
-  document.getElementById('case-count').textContent = d.cases.toLocaleString() + ' cases indexed';
-}).catch(() => {});
-
-function goChat(q) {
-  window.location.href = '/chat?q=' + encodeURIComponent(q);
-}
+function goChat(q) { window.location.href = '/chat?q=' + encodeURIComponent(q); }
 </script>
 {% endblock %}
