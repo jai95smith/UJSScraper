@@ -40,7 +40,34 @@ def run(delay=DEFAULT_DELAY):
                 time.sleep(delay)
                 continue
 
-            # 2. Refresh stale dockets (one at a time)
+            # 2. Analyze unanalyzed cases
+            with db.connect() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT c.docket_number FROM cases c
+                    LEFT JOIN analyses a ON c.docket_number = a.docket_number AND a.doc_type = 'docket'
+                    WHERE a.id IS NULL
+                    ORDER BY c.created_at DESC LIMIT 1
+                """)
+                row = cur.fetchone()
+
+            if row:
+                dn = row[0]
+                print(f"[analyzer] Analyze: {dn}")
+                try:
+                    deep_analyze_docket(dn)
+                    print(f"[analyzer] Done: {dn}")
+                except Exception as e:
+                    err = str(e)
+                    print(f"[analyzer] Error: {dn}: {err}")
+                    if "429" in err:
+                        print("[analyzer] Rate limited, pausing 5 min...")
+                        time.sleep(300)
+                        continue
+                time.sleep(delay)
+                continue
+
+            # 3. Refresh stale dockets (one at a time)
             with db.connect() as conn:
                 stale = db.get_stale_dockets(conn, active_hours=24, closed_days=7, limit=1)
 
