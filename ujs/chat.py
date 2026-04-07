@@ -382,6 +382,8 @@ def _execute_tool(name, inputs):
 
         elif name == "live_search_ujs":
             from ujs.core import search_by_name
+            from ujs.modules.docket_pdf import analyze_docket
+            import tempfile
             results = search_by_name(
                 inputs["last_name"],
                 first=inputs.get("first_name"),
@@ -391,12 +393,25 @@ def _execute_tool(name, inputs):
                 return f"No cases found on UJS for {inputs.get('first_name', '')} {inputs['last_name']}"
             # Store discovered cases in DB
             db.upsert_cases(conn, results)
-            # Queue the most recent cases for deep Gemini analysis
-            queued = 0
-            for r in results[:5]:
-                db.queue_ingest(conn, r["docket_number"], priority=3)
-                queued += 1
-            return json.dumps([dict(r) for r in results[:20]], default=str)
+            # Analyze the most recent case inline so Claude can answer fully
+            top = results[0]
+            try:
+                with tempfile.TemporaryDirectory() as d:
+                    analysis = analyze_docket(top["docket_number"], out_dir=d)
+                db.detect_and_store_changes(conn, top["docket_number"], analysis)
+                # Return analysis + list of other cases
+                output = {
+                    "analyzed_case": analysis,
+                    "other_cases": [{"docket_number": r["docket_number"],
+                                     "caption": r["caption"],
+                                     "status": r["status"],
+                                     "county": r["county"]}
+                                    for r in results[1:10]],
+                }
+                return json.dumps(output, default=str)
+            except Exception:
+                # If analysis fails, return metadata only
+                return json.dumps([dict(r) for r in results[:20]], default=str)
 
         elif name == "get_case_changes":
             changes = db.get_changes(conn, docket_number=inputs.get("docket_number"), limit=20)
