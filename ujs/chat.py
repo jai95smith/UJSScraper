@@ -399,26 +399,46 @@ def _execute_tool(name, inputs):
                 return f"No cases found on UJS for {inputs.get('first_name', '')} {inputs['last_name']}"
             # Store discovered cases in DB
             db.upsert_cases(conn, results)
-            # Sort by filing date descending, analyze most recent
-            results.sort(key=lambda r: r.get("filing_date", ""), reverse=True)
-            top = results[0]
-            try:
-                with tempfile.TemporaryDirectory() as d:
-                    analysis = analyze_docket(top["docket_number"], out_dir=d)
-                db.detect_and_store_changes(conn, top["docket_number"], analysis)
-                # Return analysis + list of other cases
-                output = {
-                    "analyzed_case": analysis,
-                    "other_cases": [{"docket_number": r["docket_number"],
-                                     "caption": r["caption"],
-                                     "status": r["status"],
-                                     "county": r["county"]}
-                                    for r in results[1:10]],
-                }
-                return json.dumps(output, default=str)
-            except Exception:
-                # If analysis fails, return metadata only
-                return json.dumps([dict(r) for r in results[:20]], default=str)
+            # Sort by filing date — parse MM/DD/YYYY to sortable format
+            def _parse_date(d):
+                try:
+                    parts = d.split("/")
+                    return f"{parts[2]}{parts[0]}{parts[1]}"
+                except Exception:
+                    return "0"
+            results.sort(key=lambda r: _parse_date(r.get("filing_date", "")), reverse=True)
+            # Analyze active cases (up to 3) so we have real data
+            analyzed = []
+            for r in results:
+                if len(analyzed) >= 3:
+                    break
+                if r.get("status", "").lower() in ("active", ""):
+                    try:
+                        with tempfile.TemporaryDirectory() as d:
+                            analysis = analyze_docket(r["docket_number"], out_dir=d)
+                        db.detect_and_store_changes(conn, r["docket_number"], analysis)
+                        analyzed.append({"docket_number": r["docket_number"], "analysis": analysis})
+                    except Exception:
+                        pass
+            # If no active cases analyzed, try the most recent one
+            if not analyzed:
+                try:
+                    with tempfile.TemporaryDirectory() as d:
+                        analysis = analyze_docket(results[0]["docket_number"], out_dir=d)
+                    db.detect_and_store_changes(conn, results[0]["docket_number"], analysis)
+                    analyzed.append({"docket_number": results[0]["docket_number"], "analysis": analysis})
+                except Exception:
+                    pass
+            output = {
+                "analyzed_cases": analyzed,
+                "all_cases": [{"docket_number": r["docket_number"],
+                               "caption": r["caption"],
+                               "status": r["status"],
+                               "county": r["county"],
+                               "filing_date": r["filing_date"]}
+                              for r in results[:15]],
+            }
+            return json.dumps(output, default=str)
 
         elif name == "get_case_changes":
             changes = db.get_changes(conn, docket_number=inputs.get("docket_number"), limit=20)
