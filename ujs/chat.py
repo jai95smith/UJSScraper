@@ -463,8 +463,8 @@ def _execute_tool(name, inputs):
             # Analyze active cases (up to 3) so we have real data
             analyzed = []
             for r in results:
-                if r.get("status", "").lower() not in ("active", ""):
-                    continue
+                if r.get("status", "").lower() in ("closed",):
+                    continue  # skip closed, analyze active/inactive/adjudicated
                     try:
                         with tempfile.TemporaryDirectory() as d:
                             analysis = analyze_docket(r["docket_number"], out_dir=d)

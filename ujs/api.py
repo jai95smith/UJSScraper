@@ -689,23 +689,31 @@ def rapsheet(
     if not cases:
         return {"name": name, "cases": [], "message": "No cases found in Lehigh, Northampton, or statewide courts"}
 
-    # Step 2b: Analyze active cases that aren't analyzed yet
+    # Step 2b: Analyze any unanalyzed cases
     from ujs.modules.docket_pdf import analyze_docket as _analyze
+    def _parse_date(d):
+        try:
+            parts = d.split("/")
+            return f"{parts[2]}{parts[0]}{parts[1]}"
+        except Exception:
+            return "0"
+    unanalyzed = []
     with db.connect() as conn:
         cur = conn.cursor()
         for case in cases:
-            if "active" not in case["status"].lower():
-                continue
             cur.execute("SELECT id FROM analyses WHERE docket_number = %s AND doc_type = 'docket'", (case["docket_number"],))
-            if cur.fetchone():
-                continue  # already analyzed
-            try:
-                with tempfile.TemporaryDirectory() as d:
-                    analysis = _analyze(case["docket_number"], out_dir=d)
-                with db.connect() as conn2:
-                    db.detect_and_store_changes(conn2, case["docket_number"], analysis)
-            except Exception:
-                pass
+            if not cur.fetchone():
+                unanalyzed.append(case)
+    # Analyze most recent first, cap at 10 to avoid timeout
+    unanalyzed.sort(key=lambda c: _parse_date(c.get("filing_date", "")), reverse=True)
+    for case in unanalyzed[:10]:
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                analysis = _analyze(case["docket_number"], out_dir=d)
+            with db.connect() as conn:
+                db.detect_and_store_changes(conn, case["docket_number"], analysis)
+        except Exception:
+            pass
 
     # Step 3: Build profile
     with db.connect() as conn:
