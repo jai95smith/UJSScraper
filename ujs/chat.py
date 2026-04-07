@@ -21,6 +21,9 @@ Name search strategy:
 - If multiple people share the same name, list ALL of them with their DOB and docket numbers
   so the user can clarify which person they mean. Do not guess.
 - When the user provides a DOB or other detail, use it to narrow to the right person.
+- If search_cases AND fuzzy_name_search both return nothing, use live_search_ujs as a last
+  resort — it searches the PA court portal directly and adds results to the database.
+- For hyphenated last names like "Janko-Hudson", search the last part as the last name.
 """
 
 # Tool definitions matching our DB functions
@@ -138,6 +141,19 @@ TOOLS = [
                 "name": {"type": "string", "description": "The name to search (any format)"},
             },
             "required": ["name"],
+        },
+    },
+    {
+        "name": "live_search_ujs",
+        "description": "Search the UJS portal directly (live scrape) when a person is NOT found in the local database. Use this as a LAST RESORT after search_cases and fuzzy_name_search both fail. Slower (~5s) but searches all PA courts.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "last_name": {"type": "string", "description": "Last name (required)"},
+                "first_name": {"type": "string", "description": "First name (optional)"},
+                "county": {"type": "string", "description": "County (optional)"},
+            },
+            "required": ["last_name"],
         },
     },
     {
@@ -297,6 +313,19 @@ def _execute_tool(name, inputs):
             if not results:
                 return "No upcoming hearings found."
             return json.dumps([dict(r) for r in results], default=str)
+
+        elif name == "live_search_ujs":
+            from ujs.core import search_by_name
+            results = search_by_name(
+                inputs["last_name"],
+                first=inputs.get("first_name"),
+                county=inputs.get("county"),
+            )
+            if not results:
+                return f"No cases found on UJS for {inputs.get('first_name', '')} {inputs['last_name']}"
+            # Store discovered cases in DB for future queries
+            db.upsert_cases(conn, results)
+            return json.dumps([dict(r) for r in results[:20]], default=str)
 
         elif name == "get_case_changes":
             changes = db.get_changes(conn, docket_number=inputs.get("docket_number"), limit=20)
