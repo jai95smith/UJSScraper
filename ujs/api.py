@@ -627,13 +627,13 @@ def rapsheet(
     """Get a person's full court history: all cases, charges, bail, sentences, events."""
     import psycopg2.extras
 
-    # Step 1: Search DB
+    # Step 1: Search DB — always both Lehigh Valley counties
     with db.connect() as conn:
-        cases = db.search_cases(conn, name=name, county=county, limit=50)
+        cases = db.search_cases(conn, name=name, limit=50)
         if not cases:
             fuzzy = db.fuzzy_name_search(conn, name, limit=5)
             if fuzzy and fuzzy[0]["match_score"] >= 0.4:
-                cases = db.search_cases(conn, name=fuzzy[0]["name"], county=county, limit=50)
+                cases = db.search_cases(conn, name=fuzzy[0]["name"], limit=50)
 
     # Step 2: Live search if not in DB
     if not cases:
@@ -646,7 +646,11 @@ def rapsheet(
             search_attempts.append((parts[0], parts[-1]))
         search_attempts.append((name, None))
 
-        for search_county in ([county] if county else ["Lehigh", "Northampton"]):
+        # Always search both Lehigh Valley counties
+        search_counties = ["Lehigh", "Northampton"]
+        if county and county not in search_counties:
+            search_counties.append(county)
+        for search_county in search_counties:
             for last, first in search_attempts:
                 try:
                     results = search_by_name(last, first=first, county=search_county)
