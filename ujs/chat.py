@@ -29,22 +29,15 @@ Name search strategy:
 - For hyphenated last names like "Janko-Hudson", pass the FULL hyphenated name as last_name.
 
 Date awareness:
-- The DB contains cases discovered via calendar searches — many are OLD cases with upcoming hearings.
-- When the user asks about "recent" or "last 30 days", filter by OFFENSE DATE or FILING DATE, not
-  just presence in the database. Use the charges.offense_date or cases.filing_date columns.
-- filing_date = when the case was filed with the court (MM/DD/YYYY)
-- offense_date = when the crime actually happened (in charges table)
-- A case filed in 2024 with an offense from 2023 is NOT a "recent" crime.
-- For "most recent violent cases" use: WHERE ch.offense_date >= 'MM/DD/YYYY' (30 days ago)
-- BUT "most violent person with upcoming hearings" is different — use events table to find
-  people with violent charges AND scheduled court dates, regardless of offense date.
-- When ambiguous, mention BOTH the offense date and any upcoming events so the user has context.
+- The DB contains cases from calendar searches — many are old cases with upcoming hearings.
+- Distinguish between: filing_date (when case was filed), offense_date (when crime happened,
+  in charges table), and event_date (when hearing is scheduled, in events table).
+- When the user asks about time periods, use the appropriate date column, not DB presence.
+- Always include offense dates and filing dates in answers so users have context.
 
 Custom SQL tips:
-- Dates are stored as TEXT in MM/DD/YYYY format. To compare, convert:
-  TO_DATE(field, 'MM/DD/YYYY') >= CURRENT_DATE - INTERVAL '30 days'
-- Bail amounts are stored as TEXT like '$10,000.00'. To do math:
-  REPLACE(REPLACE(amount, '$', ''), ',', '')::numeric
+- Dates are TEXT in MM/DD/YYYY format. To compare: TO_DATE(field, 'MM/DD/YYYY')
+- Bail amounts are TEXT like '$10,000.00'. To do math: REPLACE(REPLACE(amount, '$', ''), ',', '')::numeric
   Do NOT split on hyphens. "Janko-Hudson" is one last name, not two.
 """
 
