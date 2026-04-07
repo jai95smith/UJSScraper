@@ -226,10 +226,18 @@ fetch(API + '/stats').then(r => r.json()).then(d => {
 window.addEventListener('beforeunload', () => saveChats());
 
 const urlParams = new URLSearchParams(window.location.search);
-const initialQuery = urlParams.get('q') || '{{ initial_query|default("", true) }}';
-if (initialQuery) { showWelcome(); input.value = initialQuery; setTimeout(() => send(), 500); }
-else if (allChats.length > 0 && allChats[0].messages && allChats[0].messages.length > 0) { loadChat(allChats[0].id); }
-else { showWelcome(); }
+const initialQuery = urlParams.get('q');
+if (initialQuery) {
+  // Clear the URL param so refresh doesn't re-trigger
+  window.history.replaceState({}, '', '/chat');
+  showWelcome();
+  input.value = initialQuery;
+  setTimeout(() => send(), 300);
+} else if (allChats.length > 0 && allChats[0].messages && allChats[0].messages.length > 0) {
+  loadChat(allChats[0].id);
+} else {
+  showWelcome();
+}
 
 input.addEventListener('keydown', e => { if (e.key === 'Enter' && !btn.disabled) send(); });
 function prefill(q) { input.value = q; input.focus(); }
