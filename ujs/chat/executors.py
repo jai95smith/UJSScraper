@@ -440,10 +440,15 @@ def _get_data_source(conn, inputs):
     cur.execute("SELECT COUNT(*) as cnt FROM events WHERE docket_number = %s", (dn,))
     event_count = cur.fetchone()["cnt"]
 
+    parsed_at = None
     if analysis and "error" not in analysis:
         source = "fully_analyzed"
         available = ["case info", "charges", "bail", "sentences", "attorneys", "judge", "docket entries"]
         note = "Full Gemini-parsed data from docket sheet PDF. All fields available."
+        cur.execute("SELECT parsed_at FROM analyses WHERE docket_number = %s AND doc_type = 'docket'", (dn,))
+        row = cur.fetchone()
+        if row:
+            parsed_at = row["parsed_at"]
     else:
         source = "metadata_only"
         available = ["case info", "status", "county", "filing date", "participant name"]
@@ -458,6 +463,7 @@ def _get_data_source(conn, inputs):
         "available_data": available,
         "has_events": event_count > 0,
         "last_scraped": case["last_scraped"].isoformat() if case.get("last_scraped") else None,
+        "last_analyzed": parsed_at.isoformat() if parsed_at else None,
         "note": note,
     }, default=str)
 
