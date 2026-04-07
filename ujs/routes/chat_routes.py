@@ -63,6 +63,21 @@ def delete_conversation(cid: str):
     return {"status": "deleted"}
 
 
+@router.get("/conversations/{cid}/job")
+def get_conversation_job(cid: str):
+    """Get the latest job for a conversation (for resume on page reload)."""
+    with db.connect() as conn:
+        cur = db._dict_cur(conn)
+        cur.execute("""
+            SELECT id as job_id, status, error FROM chat_jobs
+            WHERE conversation_id = %s ORDER BY created_at DESC LIMIT 1
+        """, (cid,))
+        row = cur.fetchone()
+        if not row:
+            return {"job_id": None, "status": "none"}
+        return dict(row)
+
+
 # --- Ask (creates job, appends to conversation) ---
 
 @router.post("/ask")

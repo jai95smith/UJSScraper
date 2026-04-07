@@ -181,10 +181,10 @@ async function loadChat(id) {
       setTimeout(() => { const el = document.getElementById(rid); if (el) renderFinalResponse(el, m.content, rid); }, 50);
     }
   });
-  // If last message is user with no response, show retry
+  // If last message is user with no response, check for running job
   const last = msgs[msgs.length - 1];
   if (last && last.role === 'user') {
-    messages.innerHTML += retryBubble(last.content);
+    checkRunningJob(id);
   }
   renderChatList(); chat.scrollTop = chat.scrollHeight; input.focus(); closeMobileSidebar();
 }
@@ -294,6 +294,44 @@ async function send() {
   document.getElementById('btn-spin').classList.add('hidden');
   statusEl.classList.add('opacity-50');
   input.focus();
+}
+
+/* --- Check for running job on page load --- */
+async function checkRunningJob(convId) {
+  try {
+    const res = await fetch(API + '/conversations/' + convId + '/job');
+    const data = await res.json();
+    if (data.job_id && (data.status === 'running')) {
+      // Resume polling
+      const id = 'resume-' + Date.now();
+      messages.innerHTML += botBubbleStart(id + '-status', id);
+      const statusEl = document.getElementById(id + '-status');
+      const contentEl = document.getElementById(id);
+      statusEl.textContent = 'Resuming...';
+      btn.disabled = true;
+      document.getElementById('btn-text').classList.add('hidden');
+      document.getElementById('btn-spin').classList.remove('hidden');
+      await pollJob(data.job_id, statusEl, contentEl, id);
+      loadConversations();
+      btn.disabled = false;
+      document.getElementById('btn-text').classList.remove('hidden');
+      document.getElementById('btn-spin').classList.add('hidden');
+      statusEl.classList.add('opacity-50');
+    } else if (data.status === 'completed' && data.job_id) {
+      // Job finished while we were away — reload conversation to show response
+      await loadChat(convId);
+    } else {
+      // No job found — show retry
+      const conv = await loadConversation(convId);
+      const lastMsg = (conv.messages || []).slice(-1)[0];
+      if (lastMsg && lastMsg.role === 'user') {
+        messages.innerHTML += retryBubble(lastMsg.content);
+      }
+    }
+  } catch(e) {
+    // No job endpoint or error — show retry
+    messages.innerHTML += retryBubble('');
+  }
 }
 
 /* --- Poll job --- */
