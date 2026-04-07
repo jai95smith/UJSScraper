@@ -55,20 +55,6 @@
 <div class="flex-1 flex flex-col min-w-0 pt-14 md:pt-0">
   <main id="chat" class="flex-1 overflow-y-auto">
     <div class="max-w-3xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-4 md:space-y-6" id="messages">
-      <div id="welcome" class="text-center py-16">
-        <div class="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center mx-auto mb-4">
-          <svg class="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/>
-          </svg>
-        </div>
-        <h2 class="text-lg font-semibold text-zinc-100 mb-2">Ask about PA court records</h2>
-        <p class="text-sm text-muted max-w-md mx-auto mb-6">Search cases, check hearings, look up charges, find attorneys — ask in plain English.</p>
-        <div class="flex flex-wrap gap-2 justify-center max-w-lg mx-auto">
-          {% for suggestion in suggestions %}
-          <button onclick="prefill('{{ suggestion }}')" class="text-xs bg-card border border-border rounded-full px-3 py-1.5 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition">{{ suggestion }}</button>
-          {% endfor %}
-        </div>
-      </div>
     </div>
   </main>
 
@@ -100,10 +86,32 @@ const input = document.getElementById('q');
 const btn = document.getElementById('btn');
 
 let conversationHistory = [];
-let allChats = JSON.parse(localStorage.getItem('ujs_chats') || '[]');
+let allChats = [];
 let currentChatId = null;
 let chartInstances = {};
 
+// --- Storage ---
+function loadChatsFromStorage() {
+  try {
+    allChats = JSON.parse(localStorage.getItem('ujs_chats') || '[]');
+  } catch(e) {
+    allChats = [];
+  }
+}
+
+function saveChats() {
+  try {
+    const current = allChats.find(c => c.id === currentChatId);
+    if (current) {
+      current.messages = [...conversationHistory];
+      current.updated = Date.now();
+    }
+    localStorage.setItem('ujs_chats', JSON.stringify(allChats.slice(0, 50)));
+  } catch(e) { /* localStorage full — ignore */ }
+  renderChatList();
+}
+
+// --- Sidebar ---
 function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('sidebar-overlay');
@@ -111,62 +119,104 @@ function toggleSidebar() {
   overlay.classList.toggle('hidden');
 }
 
-// Load stats
-fetch(API + '/stats').then(r => r.json()).then(d => {
-  document.getElementById('stats').textContent = d.cases.toLocaleString() + ' cases indexed';
-}).catch(() => {});
-
-// Sidebar
 function renderChatList() {
   const list = document.getElementById('chat-list');
   list.innerHTML = allChats.map(c => `
-    <button onclick="loadChat('${c.id}')" class="w-full text-left px-3 py-2 rounded-lg text-xs truncate
-      ${c.id === currentChatId ? 'bg-card text-zinc-200 border border-border' : 'text-zinc-500 hover:text-zinc-300 hover:bg-card/50'}
-      transition">
-      ${esc(c.title || 'New chat')}
-    </button>
+    <div class="flex items-center group">
+      <button onclick="loadChat('${c.id}')" class="flex-1 text-left px-3 py-2 rounded-lg text-xs truncate
+        ${c.id === currentChatId ? 'bg-card text-zinc-200 border border-border' : 'text-zinc-500 hover:text-zinc-300 hover:bg-card/50'}
+        transition">
+        ${esc(c.title || 'New chat')}
+      </button>
+      <button onclick="event.stopPropagation(); deleteChat('${c.id}')"
+        class="hidden group-hover:flex w-6 h-6 items-center justify-center text-zinc-600 hover:text-red-400 shrink-0">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
   `).join('');
 }
 
+function showWelcome() {
+  messages.innerHTML = `
+    <div id="welcome" class="text-center py-16">
+      <div class="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center mx-auto mb-4">
+        <svg class="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/>
+        </svg>
+      </div>
+      <h2 class="text-lg font-semibold text-zinc-100 mb-2">Ask about PA court records</h2>
+      <p class="text-sm text-muted max-w-md mx-auto mb-6">Search cases, check hearings, look up charges — ask in plain English.</p>
+      <div class="flex flex-wrap gap-2 justify-center max-w-lg mx-auto">
+        ${['What hearings are in Lehigh tomorrow?','Show me Smith cases in Northampton','What is Kelli Murphy charged with?','How many criminal cases were filed this week?']
+          .map(s => '<button onclick="prefill(\'' + s + '\')" class="text-xs bg-card border border-border rounded-full px-3 py-1.5 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition">' + s + '</button>').join('')}
+      </div>
+    </div>`;
+}
+
 function newChat() {
-  currentChatId = 'c' + Date.now();
+  currentChatId = null;
   conversationHistory = [];
-  allChats.unshift({ id: currentChatId, title: '', messages: [] });
-  saveChats();
-  messages.innerHTML = document.getElementById('welcome') ? '' : '';
-  location.reload();
+  showWelcome();
+  renderChatList();
+  input.focus();
+  if (window.innerWidth < 768) {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar.classList.contains('-translate-x-full')) toggleSidebar();
+  }
 }
 
 function loadChat(id) {
   const c = allChats.find(x => x.id === id);
   if (!c) return;
   currentChatId = id;
-  conversationHistory = c.messages || [];
-  // Rebuild UI
+  conversationHistory = c.messages ? [...c.messages] : [];
+
   const welcome = document.getElementById('welcome');
   if (welcome) welcome.remove();
   messages.innerHTML = '';
-  conversationHistory.forEach(m => {
+
+  for (let i = 0; i < conversationHistory.length; i++) {
+    const m = conversationHistory[i];
     if (m.role === 'user') {
       messages.innerHTML += `<div class="flex justify-end"><div class="bg-accent/10 border border-accent/20 rounded-2xl rounded-tr-sm px-4 py-2.5 max-w-lg"><p class="text-sm text-zinc-200">${esc(m.content)}</p></div></div>`;
-    } else {
+    } else if (m.role === 'assistant') {
       messages.innerHTML += `<div class="flex justify-start"><div class="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3 max-w-2xl w-full"><div class="prose text-sm text-zinc-300">${renderMd(m.content)}</div></div></div>`;
     }
-  });
+  }
+
   renderChatList();
   chat.scrollTop = chat.scrollHeight;
-  // Close sidebar on mobile after selecting
-  if (window.innerWidth < 768) toggleSidebar();
+  input.focus();
+  if (window.innerWidth < 768) {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar.classList.contains('-translate-x-full')) toggleSidebar();
+  }
 }
 
-function saveChats() {
-  const current = allChats.find(c => c.id === currentChatId);
-  if (current) current.messages = conversationHistory;
-  localStorage.setItem('ujs_chats', JSON.stringify(allChats.slice(0, 50)));
-  renderChatList();
+function deleteChat(id) {
+  allChats = allChats.filter(c => c.id !== id);
+  localStorage.setItem('ujs_chats', JSON.stringify(allChats));
+  if (currentChatId === id) newChat();
+  else renderChatList();
 }
 
+// --- Init ---
+loadChatsFromStorage();
 renderChatList();
+
+// Load stats
+fetch(API + '/stats').then(r => r.json()).then(d => {
+  document.getElementById('stats').textContent = d.cases.toLocaleString() + ' cases indexed';
+}).catch(() => {});
+
+// Show welcome or restore last chat
+if (allChats.length > 0 && allChats[0].messages && allChats[0].messages.length > 0) {
+  loadChat(allChats[0].id);
+} else {
+  showWelcome();
+}
 input.addEventListener('keydown', e => { if (e.key === 'Enter' && !btn.disabled) send(); });
 function prefill(q) { input.value = q; input.focus(); }
 
@@ -178,14 +228,18 @@ async function send() {
   document.getElementById('btn-text').classList.add('hidden');
   document.getElementById('btn-spin').classList.remove('hidden');
 
-  // Init chat if needed
+  // Create new chat if none active
   if (!currentChatId) {
     currentChatId = 'c' + Date.now();
-    allChats.unshift({ id: currentChatId, title: q.slice(0, 40), messages: [] });
+    allChats.unshift({ id: currentChatId, title: q.slice(0, 50), messages: [], updated: Date.now() });
+    renderChatList();
   }
-  // Set title from first message
-  const current = allChats.find(c => c.id === currentChatId);
-  if (current && !current.title) current.title = q.slice(0, 40);
+  // Set title from first message if empty
+  const currentChat = allChats.find(c => c.id === currentChatId);
+  if (currentChat && !currentChat.title) {
+    currentChat.title = q.slice(0, 50);
+    renderChatList();
+  }
 
   const welcome = document.getElementById('welcome');
   if (welcome) welcome.remove();
