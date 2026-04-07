@@ -11,26 +11,48 @@ from ujs.modules.docket_pdf import analyze_docket
 
 
 def ingest_filings(county=None, docket_type=None, lookback_days=1):
-    """Scrape recent filings and upsert into DB."""
+    """Scrape recent filings and upsert into DB.
+    For lookback > 7 days, chunks into weekly batches to stay under UJS result caps."""
     today = datetime.now()
-    start = (today - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
-    end = today.strftime("%Y-%m-%d")
+    total_found = 0
+    total_new = 0
 
-    print(f"[filings] Scraping {start} to {end} | county={county} type={docket_type}")
-    results = search_by_date(start, end, county=county, docket_type=docket_type)
+    # Chunk into 7-day windows to avoid UJS 1000-result cap
+    chunk_days = min(lookback_days, 7)
+    chunks = max(1, lookback_days // chunk_days)
 
-    with db.connect() as conn:
-        total, new = db.upsert_cases(conn, results)
-        # Log the scrape
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO scrape_log (scrape_type, county, docket_type, date_range,
-                                    cases_found, cases_new, completed_at)
-            VALUES ('filings', %s, %s, %s, %s, %s, NOW())
-        """, (county, docket_type, f"{start}/{end}", total, new))
+    for i in range(chunks):
+        chunk_end = today - timedelta(days=i * chunk_days)
+        chunk_start = chunk_end - timedelta(days=chunk_days)
+        start = chunk_start.strftime("%Y-%m-%d")
+        end = chunk_end.strftime("%Y-%m-%d")
 
-    print(f"[filings] {total} found, {new} new")
-    return total, new
+        print(f"[filings] Scraping {start} to {end} | county={county} type={docket_type}")
+        try:
+            results = search_by_date(start, end, county=county, docket_type=docket_type)
+        except Exception as e:
+            print(f"[filings] Error on chunk {start}-{end}: {e}")
+            if "429" in str(e):
+                break
+            continue
+
+        with db.connect() as conn:
+            total, new = db.upsert_cases(conn, results)
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO scrape_log (scrape_type, county, docket_type, date_range,
+                                        cases_found, cases_new, completed_at)
+                VALUES ('filings', %s, %s, %s, %s, %s, NOW())
+            """, (county, docket_type, f"{start}/{end}", total, new))
+
+        total_found += total
+        total_new += new
+        print(f"[filings] {total} found, {new} new")
+
+        if chunks > 1:
+            time.sleep(5)  # gentle delay between chunks
+
+    return total_found, total_new
 
 
 def ingest_events(county=None, docket_type=None, lookahead_days=7):
@@ -268,7 +290,7 @@ def run_cycle(counties=None, docket_type=None, lookback_days=1,
 
     # 5. Refresh stale records
     try:
-        refreshed = refresh_stale(batch_size=refresh_batch, workers=workers)
+        refreshed = refresh_stale(batch_size=refresh_batch)
         print(f"[refresh] Refreshed {refreshed} dockets")
     except Exception as e:
         print(f"[refresh] Error: {e}")
@@ -332,7 +354,7 @@ def main():
     elif args.queue_only:
         process_queue(workers=args.workers)
     elif args.refresh_only:
-        refresh_stale(workers=args.workers)
+        refresh_stale()
     elif args.once:
         run_cycle(counties=counties, docket_type=args.docket_type,
                   lookback_days=args.lookback, lookahead_days=args.lookahead,
