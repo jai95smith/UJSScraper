@@ -174,6 +174,11 @@ function loadChat(id) {
       setTimeout(() => { const el = document.getElementById(rid); if (el) renderFinalResponse(el, m.content, rid); }, 100);
     }
   });
+  // If last message is user with no response, show retry
+  const last = conversationHistory[conversationHistory.length - 1];
+  if (last && last.role === 'user') {
+    messages.innerHTML += retryBubble(last.content);
+  }
   renderChatList(); chat.scrollTop = chat.scrollHeight; input.focus(); closeMobileSidebar();
 }
 function deleteChat(id) {
@@ -198,6 +203,16 @@ function botBubbleStart(statusId, contentId) {
     </div>
   </div>`;
 }
+function retryBubble(question) {
+  return `<div class="flex justify-start">
+    <div class="bg-navy border border-navy-border rounded-2xl rounded-bl-md px-4 py-3 max-w-[95%] md:max-w-2xl">
+      <p class="text-sm text-court-dim mb-2">Response was interrupted.</p>
+      <button onclick="retryQuestion('${esc(question).replace(/'/g, "\\'")}')" class="text-[12px] font-medium text-navy bg-gold hover:bg-gold-dim rounded px-3 py-1.5 transition">
+        Retry →
+      </button>
+    </div>
+  </div>`;
+}
 function botBubbleStatic(contentId) {
   return `<div class="flex justify-start">
     <div class="bg-navy border border-navy-border rounded-2xl rounded-bl-md px-4 md:px-5 py-3 md:py-4 max-w-[95%] md:max-w-2xl w-fit min-w-[180px] overflow-hidden">
@@ -212,7 +227,6 @@ fetch(API + '/stats').then(r => r.json()).then(d => {
   document.getElementById('stats').textContent = d.cases.toLocaleString() + ' cases indexed';
 }).catch(() => {});
 window.addEventListener('beforeunload', () => saveChats());
-setInterval(() => { if (btn.disabled) saveChats(); }, 2000);
 
 const urlParams = new URLSearchParams(window.location.search);
 const initialQuery = urlParams.get('q') || '{{ initial_query|default("", true) }}';
@@ -222,8 +236,9 @@ else { showWelcome(); }
 
 input.addEventListener('keydown', e => { if (e.key === 'Enter' && !btn.disabled) send(); });
 function prefill(q) { input.value = q; input.focus(); }
+function retryQuestion(q) { input.value = q; send(); }
 
-/* --- Send --- */
+/* --- Send (job-based) --- */
 async function send() {
   const q = input.value.trim(); if (!q) return;
   input.value = ''; btn.disabled = true;
@@ -247,44 +262,119 @@ async function send() {
 
   const statusEl = document.getElementById(id + '-status');
   const contentEl = document.getElementById(id);
-  let fullText = '';
 
   try {
-    const res = await fetch(API + '/ask/stream', {
+    // Create job
+    const res = await fetch(API + '/ask', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({question: q, history: conversationHistory.slice(-10)})
     });
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
-    while (true) {
-      const { done, value } = await reader.read(); if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      let lines = buf.split('\n'); buf = lines.pop();
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const data = line.slice(6); if (data === '[DONE]') continue;
-        if (data.startsWith('Searching') || data.startsWith('..')) { statusEl.textContent += data; }
-        else {
-          fullText += data.replace(/\\n/g, '\n');
-          contentEl.innerHTML = renderMd(fullText);
-          const last = conversationHistory[conversationHistory.length - 1];
-          if (last && last.role === 'assistant') last.content = fullText;
-          else conversationHistory.push({role: 'assistant', content: fullText});
-        }
-        chat.scrollTop = chat.scrollHeight;
-      }
-    }
-    if (!fullText.trim()) contentEl.textContent = 'No answer received.';
-    renderFinalResponse(contentEl, fullText, id);
-    saveChats(); statusEl.classList.add('opacity-50');
+    const { job_id } = await res.json();
+
+    // Save job_id so we can resume on page reload
+    const chat_entry = allChats.find(c => c.id === currentChatId);
+    if (chat_entry) { chat_entry.pending_job = job_id; saveChats(); }
+
+    // Poll for response
+    await pollJob(job_id, statusEl, contentEl, id);
+
+    // Clear pending job
+    if (chat_entry) { delete chat_entry.pending_job; }
+
+    // Save completed response
+    const job = await fetch(API + '/ask/job/' + job_id).then(r => r.json());
+    const fullResponse = extractResponseText(job.response);
+    conversationHistory.push({role: 'assistant', content: fullResponse});
+    saveChats();
+
   } catch (e) { contentEl.textContent = 'Error: ' + e.message; }
 
   btn.disabled = false;
   document.getElementById('btn-text').classList.remove('hidden');
   document.getElementById('btn-spin').classList.add('hidden');
+  statusEl.classList.add('opacity-50');
   input.focus();
 }
+
+async function pollJob(jobId, statusEl, contentEl, msgId) {
+  let seen = 0;
+  let lastStatus = '';
+  while (true) {
+    const res = await fetch(API + '/ask/job/' + jobId + '?after=' + seen);
+    const data = await res.json();
+
+    if (data.response) {
+      seen = data.total_length;
+      const fullResponse = data.response;
+
+      // Split status (tool names) from content
+      const parts = fullResponse.split('\n\n');
+      if (parts.length > 1) {
+        const toolsPart = parts[0];
+        const textPart = parts.slice(1).join('\n\n');
+        if (toolsPart !== lastStatus) { statusEl.textContent = toolsPart; lastStatus = toolsPart; }
+        if (textPart) {
+          contentEl.innerHTML = renderMd(textPart);
+          chat.scrollTop = chat.scrollHeight;
+        }
+      } else {
+        statusEl.textContent = fullResponse;
+      }
+    }
+
+    if (data.status === 'completed' || data.status === 'error') {
+      if (data.error) contentEl.textContent = 'Error: ' + data.error;
+      // Final render with charts
+      const fullJob = await fetch(API + '/ask/job/' + jobId).then(r => r.json());
+      const fullText = extractResponseText(fullJob.response);
+      if (fullText) renderFinalResponse(contentEl, fullText, msgId);
+      break;
+    }
+
+    await new Promise(r => setTimeout(r, 500)); // Poll every 500ms
+  }
+}
+
+function extractResponseText(response) {
+  // Response format: "Searching court records..tool1..tool2\n\nactual text here"
+  const idx = response.indexOf('\n\n');
+  return idx >= 0 ? response.slice(idx + 2) : response;
+}
+
+/* --- Resume pending jobs on page load --- */
+function checkPendingJobs() {
+  const chat_entry = allChats.find(c => c.id === currentChatId);
+  if (!chat_entry || !chat_entry.pending_job) return;
+
+  const jobId = chat_entry.pending_job;
+  // Find the last bot bubble or create one
+  const lastUser = conversationHistory[conversationHistory.length - 1];
+  if (!lastUser || lastUser.role !== 'user') return;
+
+  const id = 'resume-' + Date.now();
+  messages.innerHTML += botBubbleStart(id + '-status', id);
+  const statusEl = document.getElementById(id + '-status');
+  const contentEl = document.getElementById(id);
+  statusEl.textContent = 'Resuming...';
+
+  btn.disabled = true;
+  document.getElementById('btn-text').classList.add('hidden');
+  document.getElementById('btn-spin').classList.remove('hidden');
+
+  pollJob(jobId, statusEl, contentEl, id).then(async () => {
+    delete chat_entry.pending_job;
+    const job = await fetch(API + '/ask/job/' + jobId).then(r => r.json());
+    const fullResponse = extractResponseText(job.response);
+    conversationHistory.push({role: 'assistant', content: fullResponse});
+    saveChats();
+    btn.disabled = false;
+    document.getElementById('btn-text').classList.remove('hidden');
+    document.getElementById('btn-spin').classList.add('hidden');
+    statusEl.classList.add('opacity-50');
+  });
+}
+// Run after chat loads
+setTimeout(checkPendingJobs, 300);
 
 /* --- Rendering --- */
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
