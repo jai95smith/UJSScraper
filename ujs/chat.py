@@ -205,7 +205,24 @@ TOOLS = [
     },
     {
         "name": "run_custom_query",
-        "description": "Run a custom read-only SQL query against the court database for questions the other stats tools can't answer. Tables: cases (docket_number, court_type, caption, status, filing_date, county), participants (docket_number, name, dob), charges (docket_number, seq, statute, description, grade, disposition, disposition_date), bail (docket_number, bail_type, amount, status), sentences (docket_number, charge, sentence_type, duration, sentence_date), attorneys (docket_number, name, role), events (docket_number, event_type, event_status, event_date), docket_entries (docket_number, entry_date, description, filer). Write SELECT queries only.",
+        "description": """Run a custom read-only SQL query. SELECT only. Schema:
+- cases: docket_number (PK), court_type, caption, status, filing_date, county
+- participants: docket_number, name, dob
+- charges: docket_number, seq, statute, description, grade, disposition, disposition_date, offense_date
+- bail: docket_number, bail_type, amount, status
+- sentences: docket_number, charge, sentence_type, duration, sentence_date
+- attorneys: docket_number, name, role
+- events: docket_number, event_type, event_status, event_date
+- docket_entries: docket_number, entry_date, description, filer
+- analyses: docket_number, analysis (JSONB with keys: judge, defendant, case_caption, case_status)
+
+Key patterns:
+- Get judge: a.analysis->>'judge' FROM analyses a
+- Date compare: TO_DATE(filing_date, 'MM/DD/YYYY') >= CURRENT_DATE - INTERVAL '30 days'
+- Bail math: REPLACE(REPLACE(amount, '$', ''), ',', '')::numeric
+- Case type: docket_number LIKE '%-CR-%' (criminal), '%-TR-%' (traffic), '%-CV-%' (civil)
+- Join charges to judge: charges ch JOIN analyses a ON ch.docket_number = a.docket_number
+- ILIKE for fuzzy text match, %% for wildcards inside queries""",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -627,7 +644,7 @@ def _execute_tool(name, inputs):
                     rows = rows[:100]
                 return json.dumps([dict(r) for r in rows], default=str)
             except Exception as e:
-                return f"Query error: {str(e)[:200]}"
+                return f"Query error: {str(e)[:300]}. Fix the SQL and try again."
 
         elif name == "get_case_changes":
             changes = db.get_changes(conn, docket_number=inputs.get("docket_number"), limit=20)
