@@ -209,6 +209,16 @@ Key patterns:
         },
     },
     {
+        "name": "get_analyzer_throughput",
+        "description": "Get how many dockets were analyzed per hour over a time period. Use this for questions about analysis rate, throughput, or system activity.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "hours": {"type": "integer", "default": 24, "description": "Hours to look back"},
+            },
+        },
+    },
+    {
         "name": "get_data_source",
         "description": "Check where data comes from for a docket — metadata only, fully analyzed, or not indexed. Call this before answering about a specific case so you can tell the user the data source and completeness.",
         "input_schema": {

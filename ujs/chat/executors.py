@@ -375,6 +375,32 @@ def _render_chart(conn, inputs):
     return f"CHART_RENDERED. Include this exact block in your response:\n```chart\n{chart_json}\n```"
 
 
+def _get_analyzer_throughput(conn, inputs):
+    hours = inputs.get("hours", 24)
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT date_trunc('hour', parsed_at) as hour, COUNT(*) as count
+        FROM analyses
+        WHERE parsed_at >= NOW() - INTERVAL '%s hours'
+        GROUP BY date_trunc('hour', parsed_at)
+        ORDER BY hour
+    """, (hours,))
+    hourly = [dict(r) for r in cur.fetchall()]
+
+    cur.execute("SELECT COUNT(*) as total FROM analyses")
+    total = cur.fetchone()["total"]
+    cur.execute("SELECT COUNT(*) as total FROM cases")
+    total_cases = cur.fetchone()["total"]
+
+    return json.dumps({
+        "hourly_breakdown": hourly,
+        "total_analyzed": total,
+        "total_cases": total_cases,
+        "remaining": total_cases - total,
+        "coverage_pct": round(total / total_cases * 100, 1) if total_cases > 0 else 0,
+    }, default=str)
+
+
 def _get_data_source(conn, inputs):
     dn = inputs["docket_number"]
     case = db.get_case(conn, dn)
@@ -445,6 +471,7 @@ HANDLERS = {
     "run_custom_query": _run_custom_query,
     "get_analysis_coverage": _get_analysis_coverage,
     "render_chart": _render_chart,
+    "get_analyzer_throughput": _get_analyzer_throughput,
     "get_data_source": _get_data_source,
     "get_case_changes": _get_case_changes,
     "get_filing_stats": _get_filing_stats,
