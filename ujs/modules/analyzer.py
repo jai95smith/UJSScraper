@@ -8,6 +8,7 @@ from ujs import db
 from ujs.modules.ingest import deep_analyze_docket
 
 DEFAULT_DELAY = 10  # seconds between each analysis
+_failed_dockets = set()  # skip dockets that keep failing
 
 
 def run(delay=DEFAULT_DELAY):
@@ -53,6 +54,11 @@ def run(delay=DEFAULT_DELAY):
 
             if row:
                 dn = row[0]
+                if dn in _failed_dockets:
+                    # Skip known failures — mark as analyzed with empty to unblock queue
+                    with db.connect() as conn:
+                        db.store_analysis(conn, dn, {"error": "analysis_failed"}, "docket")
+                    continue
                 print(f"[analyzer] Analyze: {dn}")
                 try:
                     deep_analyze_docket(dn)
@@ -60,6 +66,7 @@ def run(delay=DEFAULT_DELAY):
                 except Exception as e:
                     err = str(e)
                     print(f"[analyzer] Error: {dn}: {err}")
+                    _failed_dockets.add(dn)
                     if "429" in err:
                         print("[analyzer] Rate limited, pausing 5 min...")
                         time.sleep(300)

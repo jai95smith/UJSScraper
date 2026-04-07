@@ -253,9 +253,14 @@ def store_parsed_data(conn, docket_number, analysis):
         """, (docket_number, bail.get("type"), bail.get("amount"),
               bail.get("status"), bail.get("posting_date")))
 
-    # Sentences — clear and re-insert (no stable unique key)
+    # Sentences — clear and re-insert, skip duplicates
     cur.execute("DELETE FROM sentences WHERE docket_number = %s", (docket_number,))
+    seen_sents = set()
     for sent in analysis.get("sentences", []):
+        key = (sent.get("charge"), sent.get("sentence_type"), sent.get("duration"), sent.get("sentence_date"))
+        if key in seen_sents:
+            continue
+        seen_sents.add(key)
         cur.execute("""
             INSERT INTO sentences (docket_number, charge, sentence_type, duration,
                                    conditions, sentence_date)
@@ -272,9 +277,14 @@ def store_parsed_data(conn, docket_number, analysis):
                 ON CONFLICT (docket_number, name, role) DO NOTHING
             """, (docket_number, att.get("name"), att.get("role")))
 
-    # Docket entries — clear and re-insert (descriptions can change slightly between runs)
+    # Docket entries — clear and re-insert, skip duplicates within same analysis
     cur.execute("DELETE FROM docket_entries WHERE docket_number = %s", (docket_number,))
+    seen_entries = set()
     for entry in analysis.get("docket_entries", []):
+        key = (entry.get("date"), entry.get("description"))
+        if key in seen_entries:
+            continue
+        seen_entries.add(key)
         cur.execute("""
             INSERT INTO docket_entries (docket_number, entry_date, description, filer)
             VALUES (%s, %s, %s, %s)
