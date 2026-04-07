@@ -7,8 +7,26 @@
 {% endblock %}
 
 {% block layout %}
+<!-- Mobile header -->
+<div id="mobile-header" class="md:hidden fixed top-0 left-0 right-0 z-30 bg-background border-b border-border px-4 py-3 flex items-center justify-between">
+  <button onclick="toggleSidebar()" class="w-8 h-8 rounded-lg border border-border flex items-center justify-center text-muted">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+    </svg>
+  </button>
+  <span class="text-sm font-semibold text-zinc-100">PA Court Search</span>
+  <button onclick="newChat()" class="w-8 h-8 rounded-lg border border-border flex items-center justify-center text-muted">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+    </svg>
+  </button>
+</div>
+
+<!-- Sidebar overlay (mobile) -->
+<div id="sidebar-overlay" onclick="toggleSidebar()" class="hidden fixed inset-0 bg-black/50 z-40 md:hidden"></div>
+
 <!-- Sidebar -->
-<aside id="sidebar" class="w-64 bg-sidebar border-r border-border flex flex-col shrink-0">
+<aside id="sidebar" class="fixed md:relative z-50 w-64 bg-sidebar border-r border-border flex flex-col shrink-0 h-full -translate-x-full md:translate-x-0 transition-transform">
   <div class="p-4 border-b border-border flex items-center justify-between">
     <div class="flex items-center gap-2">
       <div class="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center">
@@ -34,9 +52,9 @@
 </aside>
 
 <!-- Main chat area -->
-<div class="flex-1 flex flex-col min-w-0">
+<div class="flex-1 flex flex-col min-w-0 pt-14 md:pt-0">
   <main id="chat" class="flex-1 overflow-y-auto">
-    <div class="max-w-3xl mx-auto px-6 py-8 space-y-6" id="messages">
+    <div class="max-w-3xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-4 md:space-y-6" id="messages">
       <div id="welcome" class="text-center py-16">
         <div class="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center mx-auto mb-4">
           <svg class="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -54,7 +72,7 @@
     </div>
   </main>
 
-  <div class="border-t border-border px-6 py-4 shrink-0">
+  <div class="border-t border-border px-4 md:px-6 py-3 md:py-4 shrink-0">
     <div class="max-w-3xl mx-auto">
       <div class="flex gap-2 items-center bg-card border border-border rounded-xl px-4 py-2 focus-within:border-zinc-600 transition">
         <input id="q" type="text" placeholder="Ask a question..."
@@ -85,6 +103,13 @@ let conversationHistory = [];
 let allChats = JSON.parse(localStorage.getItem('ujs_chats') || '[]');
 let currentChatId = null;
 let chartInstances = {};
+
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  sidebar.classList.toggle('-translate-x-full');
+  overlay.classList.toggle('hidden');
+}
 
 // Load stats
 fetch(API + '/stats').then(r => r.json()).then(d => {
@@ -130,6 +155,8 @@ function loadChat(id) {
   });
   renderChatList();
   chat.scrollTop = chat.scrollHeight;
+  // Close sidebar on mobile after selecting
+  if (window.innerWidth < 768) toggleSidebar();
 }
 
 function saveChats() {
