@@ -49,7 +49,7 @@ DTYPE_MAP = {
 def get_session():
     """Create a requests session with CSRF token."""
     s = requests.Session()
-    s.headers["User-Agent"] = "Mozilla/5.0"
+    s.headers["User-Agent"] = "UJSCourtSearch/1.0 (Jai Smith; LehighDaily.com; jsmith@lehighdaily.com)"
     r = s.get(SEARCH_URL)
     r.raise_for_status()
     m = re.search(
