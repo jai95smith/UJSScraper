@@ -191,11 +191,11 @@ TOOLS = [
     },
     {
         "name": "get_stats_query",
-        "description": "Get computed statistics from the database. Use this for any question involving counts, averages, percentages, trends, or comparisons. Available stat types: case_counts, bail_stats, charge_breakdown, filing_trend, hearing_counts, repeat_offenders",
+        "description": "Get computed statistics from the database. Use this for any question involving counts, averages, percentages, trends, or comparisons. Available stat types: case_counts, bail_stats, charge_breakdown, filing_trend, hearing_counts, repeat_offenders, judge_performance",
         "input_schema": {
             "type": "object",
             "properties": {
-                "stat_type": {"type": "string", "enum": ["case_counts", "bail_stats", "charge_breakdown", "filing_trend", "hearing_counts", "repeat_offenders"]},
+                "stat_type": {"type": "string", "enum": ["case_counts", "bail_stats", "charge_breakdown", "filing_trend", "hearing_counts", "repeat_offenders", "judge_performance"]},
                 "county": {"type": "string"},
                 "case_type": {"type": "string", "description": "Criminal, Traffic, Civil"},
                 "days": {"type": "integer", "default": 30},
@@ -574,6 +574,27 @@ def _execute_tool(name, inputs):
                     WHERE TRUE {county_clause}
                     GROUP BY p.name HAVING COUNT(DISTINCT p.docket_number) >= 5
                     ORDER BY case_count DESC LIMIT 15
+                """, county_params)
+                return json.dumps([dict(r) for r in cur2.fetchall()], default=str)
+
+            elif stat == "judge_performance":
+                cur2.execute(f"""
+                    SELECT a.analysis->>'judge' as judge,
+                        COUNT(DISTINCT ch.docket_number) as total_cases,
+                        COUNT(*) as total_charges,
+                        SUM(CASE WHEN ch.disposition ILIKE '%%guilty%%' THEN 1 ELSE 0 END) as guilty,
+                        SUM(CASE WHEN ch.disposition ILIKE '%%dismissed%%' OR ch.disposition ILIKE '%%quashed%%' THEN 1 ELSE 0 END) as dismissed,
+                        SUM(CASE WHEN ch.disposition ILIKE '%%proceed%%' OR ch.disposition ILIKE '%%waived%%' THEN 1 ELSE 0 END) as proceeded,
+                        SUM(CASE WHEN ch.disposition IS NULL OR ch.disposition = '' THEN 1 ELSE 0 END) as pending,
+                        ROUND(SUM(CASE WHEN ch.disposition ILIKE '%%guilty%%' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0) * 100, 1) as guilty_rate,
+                        ROUND(SUM(CASE WHEN ch.disposition ILIKE '%%dismissed%%' OR ch.disposition ILIKE '%%quashed%%' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0) * 100, 1) as dismissal_rate
+                    FROM charges ch
+                    JOIN analyses a ON ch.docket_number = a.docket_number
+                    WHERE a.analysis->>'judge' IS NOT NULL AND a.analysis->>'judge' != ''
+                    {"AND EXISTS (SELECT 1 FROM cases c WHERE c.docket_number = ch.docket_number AND c.county ILIKE %s)" if county else ""}
+                    GROUP BY a.analysis->>'judge'
+                    HAVING COUNT(*) >= 3
+                    ORDER BY COUNT(DISTINCT ch.docket_number) DESC LIMIT 15
                 """, county_params)
                 return json.dumps([dict(r) for r in cur2.fetchall()], default=str)
 
