@@ -552,6 +552,37 @@ def filing_stats(
         return [dict(r) for r in db.get_filing_stats(conn, county=county, days=days)]
 
 
+@app.get("/stats/daily", tags=["Analytics"])
+def daily_stats(
+    county: Optional[str] = None,
+    days: int = Query(30, le=180),
+):
+    """New cases per day with type breakdown."""
+    with db.connect() as conn:
+        cur = conn.cursor(cursor_factory=__import__("psycopg2").extras.RealDictCursor)
+        params = []
+        county_clause = ""
+        if county:
+            county_clause = "AND county ILIKE %s"
+            params.append(county)
+        params.append(days)
+        cur.execute(f"""
+            SELECT filing_date,
+                COUNT(*) as total,
+                SUM(CASE WHEN docket_number LIKE '%%-CR-%%' THEN 1 ELSE 0 END) as criminal,
+                SUM(CASE WHEN docket_number LIKE '%%-TR-%%' THEN 1 ELSE 0 END) as traffic,
+                SUM(CASE WHEN docket_number LIKE '%%-CV-%%' THEN 1 ELSE 0 END) as civil,
+                SUM(CASE WHEN docket_number LIKE '%%-NT-%%' THEN 1 ELSE 0 END) as non_traffic,
+                SUM(CASE WHEN docket_number LIKE '%%-LT-%%' THEN 1 ELSE 0 END) as landlord_tenant
+            FROM cases
+            WHERE filing_date != '' {county_clause}
+            AND TO_DATE(filing_date, 'MM/DD/YYYY') >= CURRENT_DATE - INTERVAL '%s days'
+            GROUP BY filing_date
+            ORDER BY TO_DATE(filing_date, 'MM/DD/YYYY') DESC
+        """, params)
+        return [dict(r) for r in cur.fetchall()]
+
+
 @app.get("/stats/counties", tags=["Analytics"])
 def county_stats():
     """Case counts by county."""
