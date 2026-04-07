@@ -1,30 +1,30 @@
-"""Chat UI for PA Court Search."""
+"""Web UI for Lehigh Valley Court AI."""
 
 import os
-from flask import Flask, Blueprint, render_template
+from flask import Flask, Blueprint, render_template, request
 
-chat_bp = Blueprint('chat', __name__)
-
-SUGGESTIONS = [
-    "What hearings are in Lehigh tomorrow?",
-    "Show me Smith cases in Northampton",
-    "What is Kelli Murphy charged with?",
-    "How many criminal cases were filed this week?",
-]
+main_bp = Blueprint('main', __name__)
 
 
-@chat_bp.route('/')
-def index():
+@main_bp.route('/')
+def landing():
     api_url = os.environ.get('API_URL', 'http://localhost:8100')
-    return render_template('chat.html', api_url=api_url, suggestions=SUGGESTIONS)
+    return render_template('landing.html', api_url=api_url)
+
+
+@main_bp.route('/chat')
+def chat():
+    api_url = os.environ.get('API_URL', 'http://localhost:8100')
+    initial_query = request.args.get('q', '')
+    return render_template('chat.html', api_url=api_url, initial_query=initial_query)
 
 
 def create_app():
-    app = Flask(__name__, template_folder='templates')
-    app.register_blueprint(chat_bp)
+    app = Flask(__name__, template_folder='templates', static_folder='static')
+    app.register_blueprint(main_bp)
     return app
 
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(port=8101, debug=True)
+    app.run(port=8000, debug=True)

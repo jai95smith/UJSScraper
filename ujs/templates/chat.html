@@ -1,23 +1,45 @@
 {% extends "base.html" %}
 
-{% block extra_css %}
-.prose { line-height: 1.7; }
-.prose strong { color: #e4e4e7; font-weight: 600; }
-.chart-wrap { max-width: 100%; }
-.chart-wrap canvas { width: 100% !important; height: auto !important; max-height: 300px; }
-.prose { overflow-wrap: break-word; word-break: break-word; }
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 {% endblock %}
 
-{% block layout %}
+{% block extra_css %}
+body { background: var(--navy-light); height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+.prose { line-height: 1.7; overflow-wrap: break-word; word-break: break-word; }
+.prose strong { color: var(--text-bright); font-weight: 600; }
+.chart-wrap { max-width: 100%; }
+.chart-wrap canvas { width: 100% !important; height: auto !important; max-height: 300px; }
+{% endblock %}
+
+{% block body %}
+<!-- Nav (desktop) -->
+<div class="nav hidden md:flex">
+  <a href="/" class="nav-left">
+    <div class="nav-seal">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="9" stroke="var(--gold)" stroke-width="1.2"/>
+        <path d="M8 17l4-10 4 10" stroke="var(--gold)" stroke-width="1.2" stroke-linecap="round"/>
+        <line x1="9.5" y1="14.5" x2="14.5" y2="14.5" stroke="var(--gold)" stroke-width="1"/>
+      </svg>
+    </div>
+    <span class="nav-wordmark">Lehigh Valley <span>Court AI</span></span>
+  </a>
+  <div style="display:flex;gap:12px;align-items:center;">
+    <a href="/" class="nav-link">Home</a>
+    <button onclick="newChat()" class="nav-cta">+ New search</button>
+  </div>
+</div>
+
 <!-- Mobile header -->
-<div id="mobile-header" class="md:hidden fixed top-0 left-0 right-0 z-30 bg-background border-b border-border px-4 py-3 flex items-center justify-between">
-  <button onclick="toggleSidebar()" class="w-8 h-8 rounded-lg border border-border flex items-center justify-center text-muted">
+<div id="mobile-header" class="md:hidden fixed top-0 left-0 right-0 z-30 px-4 py-3 flex items-center justify-between" style="background:var(--navy);border-bottom:0.5px solid var(--navy-border);">
+  <button onclick="toggleSidebar()" class="w-8 h-8 rounded-lg flex items-center justify-center" style="border:0.5px solid var(--navy-border);color:var(--text-mid);">
     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
     </svg>
   </button>
-  <span class="text-sm font-semibold text-zinc-100">PA Court Search</span>
-  <button onclick="newChat()" class="w-8 h-8 rounded-lg border border-border flex items-center justify-center text-muted">
+  <span class="text-sm font-medium" style="color:var(--text-bright);">Court AI</span>
+  <button onclick="newChat()" class="w-8 h-8 rounded-lg flex items-center justify-center" style="border:0.5px solid var(--navy-border);color:var(--text-mid);">
     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
     </svg>
@@ -30,17 +52,18 @@
 </div>
 
 <!-- Sidebar -->
-<aside id="sidebar" class="fixed md:relative z-50 w-64 bg-sidebar border-r border-border flex flex-col shrink-0 h-full -translate-x-full md:translate-x-0 transition-transform duration-200">
-  <div class="p-4 border-b border-border flex items-center justify-between">
-    <div class="flex items-center gap-2">
-      <div class="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center">
-        <svg class="w-3.5 h-3.5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+<aside id="sidebar" class="fixed md:relative z-50 w-64 flex flex-col shrink-0 h-full -translate-x-full md:translate-x-0 transition-transform duration-200" style="background:var(--navy);border-right:0.5px solid var(--navy-border);">
+  <div class="p-4 flex items-center justify-between" style="border-bottom:0.5px solid var(--navy-border);">
+    <a href="/" class="flex items-center gap-2 no-underline">
+      <div class="nav-seal" style="width:24px;height:24px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="9" stroke="var(--gold)" stroke-width="1.2"/>
+          <path d="M8 17l4-10 4 10" stroke="var(--gold)" stroke-width="1.2" stroke-linecap="round"/>
         </svg>
       </div>
-      <span class="text-sm font-semibold text-zinc-100">PA Court Search</span>
-    </div>
-    <button onclick="newChat()" class="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted hover:text-zinc-200 hover:border-zinc-600 transition" title="New chat">
+      <span style="font-size:12px;font-weight:500;color:var(--text-bright);">Court AI</span>
+    </a>
+    <button onclick="newChat()" class="w-7 h-7 rounded flex items-center justify-center transition" style="border:0.5px solid var(--navy-border);color:var(--text-mid);" title="New chat">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
       </svg>
@@ -50,33 +73,33 @@
   <div id="chat-list" class="flex-1 overflow-y-auto p-2 space-y-1">
   </div>
 
-  <div class="p-3 border-t border-border">
-    <div id="stats" class="text-[10px] text-muted"></div>
+  <div class="p-3" style="border-top:0.5px solid var(--navy-border);">
+    <div id="stats" style="font-size:10px;color:var(--text-muted);"></div>
   </div>
 </aside>
 
 <!-- Main chat area -->
 <div class="flex-1 flex flex-col min-w-0 pt-14 md:pt-0">
-  <main id="chat" class="flex-1 overflow-y-auto">
+  <main id="chat" class="flex-1 overflow-y-auto" style="background:var(--navy-light);">
     <div class="max-w-2xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-5" id="messages">
     </div>
   </main>
 
-  <div class="border-t border-border px-4 md:px-6 py-3 md:py-4 shrink-0">
-    <div class="max-w-3xl mx-auto">
-      <div class="flex gap-2 items-center bg-card border border-border rounded-xl px-4 py-2 focus-within:border-zinc-600 transition">
+  <div class="px-4 md:px-6 py-3 md:py-4 shrink-0" style="background:var(--navy);border-top:0.5px solid var(--navy-border);">
+    <div class="max-w-2xl mx-auto">
+      <div class="flex gap-2 items-center rounded-lg px-4 py-2" style="background:rgba(255,255,255,0.06);border:0.5px solid var(--navy-border);">
         <input id="q" type="text" placeholder="Ask a question..."
-          class="flex-1 bg-transparent text-sm text-zinc-100 placeholder-zinc-600 outline-none py-1.5" autofocus />
+          class="flex-1 bg-transparent text-sm outline-none py-1.5" style="color:var(--text-bright);font-family:var(--font-sans);" autofocus />
         <button id="btn" onclick="send()"
-          class="bg-accent hover:bg-blue-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition">
-          <span id="btn-text">Send</span>
+          class="text-sm font-medium px-4 py-1.5 rounded disabled:opacity-40" style="background:var(--gold);color:var(--navy);">
+          <span id="btn-text">Ask →</span>
           <svg id="btn-spin" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
           </svg>
         </button>
       </div>
-      <p class="text-[10px] text-zinc-700 text-center mt-2">Lehigh & Northampton Counties</p>
+      <p style="font-size:10px;color:var(--text-muted);text-align:center;margin-top:6px;">Lehigh & Northampton Counties · Not legal advice</p>
     </div>
   </div>
 </div>
@@ -127,9 +150,8 @@ function renderChatList() {
   const list = document.getElementById('chat-list');
   list.innerHTML = allChats.map(c => `
     <div class="flex items-center group">
-      <button onclick="loadChat('${c.id}')" class="flex-1 text-left px-3 py-2 rounded-lg text-xs truncate
-        ${c.id === currentChatId ? 'bg-card text-zinc-200 border border-border' : 'text-zinc-500 hover:text-zinc-300 hover:bg-card/50'}
-        transition">
+      <button onclick="loadChat('${c.id}')" class="flex-1 text-left px-3 py-2 rounded text-xs truncate transition"
+        style="${c.id === currentChatId ? 'background:#192e4f;color:var(--text-bright);border:0.5px solid var(--navy-border);' : 'color:var(--text-dim);border:0.5px solid transparent;'}">
         ${esc(c.title || 'New chat')}
       </button>
       <button onclick="event.stopPropagation(); deleteChat('${c.id}')"
@@ -145,16 +167,18 @@ function renderChatList() {
 function showWelcome() {
   messages.innerHTML = `
     <div id="welcome" class="text-center py-16">
-      <div class="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center mx-auto mb-4">
-        <svg class="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/>
+      <div class="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4" style="background:rgba(200,160,58,0.1);">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="9" stroke="var(--gold)" stroke-width="1.2"/>
+          <path d="M8 17l4-10 4 10" stroke="var(--gold)" stroke-width="1.2" stroke-linecap="round"/>
+          <line x1="9.5" y1="14.5" x2="14.5" y2="14.5" stroke="var(--gold)" stroke-width="1"/>
         </svg>
       </div>
-      <h2 class="text-lg font-semibold text-zinc-100 mb-2">Ask about PA court records</h2>
-      <p class="text-sm text-muted max-w-md mx-auto mb-6">Search cases, check hearings, look up charges — ask in plain English.</p>
+      <h2 style="font-family:var(--font-serif);font-size:18px;font-weight:500;color:var(--text-bright);margin-bottom:8px;">Search Lehigh Valley court records</h2>
+      <p style="font-size:13px;color:var(--text-mid);max-width:400px;margin:0 auto 24px;">Ask in plain English. Get structured results from the PA Unified Judicial System.</p>
       <div class="flex flex-wrap gap-2 justify-center max-w-lg mx-auto">
         ${['What hearings are in Lehigh tomorrow?','Show me Smith cases in Northampton','What is Kelli Murphy charged with?','How many criminal cases were filed this week?']
-          .map(s => '<button onclick="prefill(\'' + s + '\')" class="text-xs bg-card border border-border rounded-full px-3 py-1.5 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition">' + s + '</button>').join('')}
+          .map(s => '<button onclick="prefill(\'' + s + '\')" style="font-size:11px;color:var(--text-mid);border:0.5px solid var(--navy-border);border-radius:4px;padding:4px 10px;cursor:pointer;background:#192e4f;" onmouseover="this.style.borderColor=\'var(--gold)\'" onmouseout="this.style.borderColor=\'var(--navy-border)\'">' + s + '</button>').join('')}
       </div>
     </div>`;
 }
@@ -188,8 +212,8 @@ function loadChat(id) {
     } else if (m.role === 'assistant') {
       const rid = 'restored-' + i;
       messages.innerHTML += `<div class="flex justify-start">
-        <div class="bg-card border border-border rounded-2xl rounded-bl-md px-4 md:px-5 py-3 md:py-4 max-w-[95%] md:max-w-2xl w-fit min-w-[180px] md:min-w-[200px] overflow-hidden">
-          <div id="${rid}" class="prose text-sm text-zinc-300 leading-relaxed break-words"></div>
+        <div class="rounded-2xl rounded-bl-md px-4 md:px-5 py-3 md:py-4 max-w-[95%] md:max-w-2xl w-fit min-w-[180px] md:min-w-[200px] overflow-hidden" style="background:var(--navy);border:0.5px solid var(--navy-border);">
+          <div id="${rid}" class="prose text-sm leading-relaxed break-words" style="color:var(--text-mid);"></div>
         </div>
       </div>`;
       setTimeout(() => {
@@ -229,8 +253,14 @@ window.addEventListener('beforeunload', () => saveChats());
 // Periodic save during streaming (every 2s)
 setInterval(() => { if (btn.disabled) saveChats(); }, 2000);
 
-// Show welcome or restore last chat
-if (allChats.length > 0 && allChats[0].messages && allChats[0].messages.length > 0) {
+// Check for initial query from landing page
+const urlParams = new URLSearchParams(window.location.search);
+const initialQuery = urlParams.get('q') || '{{ initial_query|default("", true) }}';
+if (initialQuery) {
+  showWelcome();
+  input.value = initialQuery;
+  setTimeout(() => send(), 500);
+} else if (allChats.length > 0 && allChats[0].messages && allChats[0].messages.length > 0) {
   loadChat(allChats[0].id);
 } else {
   showWelcome();
@@ -328,17 +358,17 @@ function esc(s) { const d = document.createElement('div'); d.textContent = s; re
 
 function userBubble(text) {
   return `<div class="flex justify-end">
-    <div class="bg-zinc-800 border border-zinc-700/50 rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] md:max-w-lg break-words">
-      <p class="text-sm text-zinc-100 leading-relaxed">${esc(text)}</p>
+    <div class="rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] md:max-w-lg break-words" style="background:rgba(200,160,58,0.12);border:0.5px solid rgba(200,160,58,0.25);">
+      <p class="text-sm leading-relaxed" style="color:var(--text-bright);">${esc(text)}</p>
     </div>
   </div>`;
 }
 
 function botBubbleStart(statusId, contentId) {
   return `<div class="flex justify-start">
-    <div class="bg-card border border-border rounded-2xl rounded-bl-md px-4 md:px-5 py-3 md:py-4 max-w-[95%] md:max-w-2xl w-fit min-w-[180px] md:min-w-[200px] overflow-hidden">
-      <div id="${statusId}" class="text-[11px] text-zinc-600 mb-2 font-mono truncate"></div>
-      <div id="${contentId}" class="prose text-sm text-zinc-300 leading-relaxed break-words"></div>
+    <div class="rounded-2xl rounded-bl-md px-4 md:px-5 py-3 md:py-4 max-w-[95%] md:max-w-2xl w-fit min-w-[180px] md:min-w-[200px] overflow-hidden" style="background:var(--navy);border:0.5px solid var(--navy-border);">
+      <div id="${statusId}" class="text-[11px] mb-2 font-mono truncate" style="color:var(--text-dim);"></div>
+      <div id="${contentId}" class="prose text-sm leading-relaxed break-words" style="color:var(--text-mid);"></div>
     </div>
   </div>`;
 }
@@ -379,7 +409,7 @@ function renderFinalResponse(contentEl, text, msgId) {
       const chartEl = document.createElement('div');
       chartEl.className = 'max-w-2xl mx-auto px-4 md:px-6';
       chartEl.innerHTML = `
-        <div class="bg-card border border-border rounded-2xl rounded-bl-md p-5">
+        <div class="rounded-2xl rounded-bl-md p-5" style="background:var(--navy);border:0.5px solid var(--navy-border);">
           <canvas id="${cid}" style="width:100%;max-height:320px;"></canvas>
         </div>`;
       parentBubble.parentNode.insertBefore(chartEl, parentBubble.nextSibling);
