@@ -176,10 +176,10 @@ async function loadChat(id) {
   const msgs = conv.messages || [];
   msgs.forEach((m, i) => {
     if (m.role === 'user') {
-      messages.innerHTML += userBubble(m.content);
+      messages.insertAdjacentHTML('beforeend', userBubble(m.content));
     } else if (m.role === 'assistant') {
       const rid = 'restored-' + i;
-      messages.innerHTML += botBubbleStatic(rid);
+      messages.insertAdjacentHTML('beforeend', botBubbleStatic(rid));
       setTimeout(() => { const el = document.getElementById(rid); if (el) renderFinalResponse(el, m.content, rid); }, 50);
     }
   });
@@ -264,7 +264,7 @@ async function send() {
   const w = document.getElementById('welcome'); if (w) w.remove();
 
   const id = 'r' + Date.now();
-  messages.innerHTML += userBubble(q) + botBubbleStart(id + '-status', id);
+  messages.insertAdjacentHTML('beforeend', userBubble(q) + botBubbleStart(id + '-status', id));
   chat.scrollTop = chat.scrollHeight;
 
   const statusEl = document.getElementById(id + '-status');
@@ -306,7 +306,7 @@ async function checkRunningJob(convId) {
     if (data.job_id && (data.status === 'running')) {
       // Resume polling
       const id = 'resume-' + Date.now();
-      messages.innerHTML += botBubbleStart(id + '-status', id);
+      messages.insertAdjacentHTML('beforeend', botBubbleStart(id + '-status', id));
       const statusEl = document.getElementById(id + '-status');
       const contentEl = document.getElementById(id);
       statusEl.textContent = 'Resuming...';
@@ -327,12 +327,12 @@ async function checkRunningJob(convId) {
       const conv = await loadConversation(convId);
       const lastMsg = (conv.messages || []).slice(-1)[0];
       if (lastMsg && lastMsg.role === 'user') {
-        messages.innerHTML += retryBubble(lastMsg.content);
+        messages.insertAdjacentHTML('beforeend', retryBubble(lastMsg.content));
       }
     }
   } catch(e) {
     // No job endpoint or error — show retry
-    messages.innerHTML += retryBubble('');
+    messages.insertAdjacentHTML('beforeend', retryBubble(''));
   }
 }
 
