@@ -22,10 +22,12 @@ def landing():
 
 
 @main_bp.route('/chat')
-def chat():
+@main_bp.route('/chat/<conversation_id>')
+def chat(conversation_id=None):
     api_url = os.environ.get('API_URL', 'http://localhost:8100')
     initial_query = request.args.get('q', '')
-    return render_template('chat.html', api_url=api_url, initial_query=initial_query)
+    return render_template('chat.html', api_url=api_url, initial_query=initial_query,
+                           conversation_id=conversation_id or '')
 
 
 def create_app():

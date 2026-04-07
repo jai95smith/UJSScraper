@@ -97,22 +97,24 @@ const messages = document.getElementById('messages');
 const input = document.getElementById('q');
 const btn = document.getElementById('btn');
 
-let conversationHistory = [];
 let allChats = [];
 let currentChatId = null;
 let chartInstances = {};
 
-/* --- Storage --- */
-function loadChatsFromStorage() {
-  try { allChats = JSON.parse(localStorage.getItem('ujs_chats') || '[]'); } catch(e) { allChats = []; }
-}
-function saveChats() {
+/* --- Server-side conversations --- */
+async function loadConversations() {
   try {
-    const c = allChats.find(c => c.id === currentChatId);
-    if (c) { c.messages = [...conversationHistory]; c.updated = Date.now(); }
-    localStorage.setItem('ujs_chats', JSON.stringify(allChats.slice(0, 50)));
-  } catch(e) {}
+    const res = await fetch(API + '/conversations');
+    allChats = await res.json();
+  } catch(e) { allChats = []; }
   renderChatList();
+}
+async function loadConversation(id) {
+  try {
+    const res = await fetch(API + '/conversations/' + id);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch(e) { return null; }
 }
 
 /* --- Sidebar --- */
@@ -158,42 +160,44 @@ function showWelcome() {
 
 /* --- Chat management --- */
 function newChat() {
-  currentChatId = null; conversationHistory = [];
+  currentChatId = null;
+  history.pushState({}, '', '/chat');
   showWelcome(); renderChatList(); input.focus(); closeMobileSidebar();
 }
-function loadChat(id) {
-  const c = allChats.find(x => x.id === id);
-  if (!c) return;
+async function loadChat(id) {
+  const conv = await loadConversation(id);
+  if (!conv) return;
   currentChatId = id;
-  conversationHistory = c.messages ? [...c.messages] : [];
+  history.pushState({}, '', '/chat/' + id);
   const w = document.getElementById('welcome'); if (w) w.remove();
   messages.innerHTML = '';
-  conversationHistory.forEach((m, i) => {
+  const msgs = conv.messages || [];
+  msgs.forEach((m, i) => {
     if (m.role === 'user') {
       messages.innerHTML += userBubble(m.content);
     } else if (m.role === 'assistant') {
       const rid = 'restored-' + i;
       messages.innerHTML += botBubbleStatic(rid);
-      setTimeout(() => { const el = document.getElementById(rid); if (el) renderFinalResponse(el, m.content, rid); }, 100);
+      setTimeout(() => { const el = document.getElementById(rid); if (el) renderFinalResponse(el, m.content, rid); }, 50);
     }
   });
   // If last message is user with no response, show retry
-  const last = conversationHistory[conversationHistory.length - 1];
+  const last = msgs[msgs.length - 1];
   if (last && last.role === 'user') {
     messages.innerHTML += retryBubble(last.content);
   }
   renderChatList(); chat.scrollTop = chat.scrollHeight; input.focus(); closeMobileSidebar();
 }
-function deleteChat(id) {
+async function deleteChat(id) {
+  await fetch(API + '/conversations/' + id, {method: 'DELETE'});
   allChats = allChats.filter(c => c.id !== id);
-  localStorage.setItem('ujs_chats', JSON.stringify(allChats));
   if (currentChatId === id) newChat(); else renderChatList();
 }
 
 /* --- Bubbles --- */
 function userBubble(text) {
   return `<div class="flex justify-end">
-    <div class="bg-gold/[0.12] border border-gold/25 rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] md:max-w-lg break-words">
+    <div class="bg-gold/[0.12] border border-gold/25 rounded-xl px-4 py-2.5 max-w-[85%] md:max-w-lg break-words">
       <p class="text-sm text-court-bright leading-relaxed">${esc(text)}</p>
     </div>
   </div>`;
@@ -219,47 +223,43 @@ function botBubbleStatic(contentId) {
 }
 
 /* --- Init --- */
-loadChatsFromStorage(); renderChatList();
+loadConversations();
 fetch(API + '/stats').then(r => r.json()).then(d => {
   document.getElementById('stats').textContent = d.cases.toLocaleString() + ' cases indexed';
 }).catch(() => {});
-window.addEventListener('beforeunload', () => saveChats());
 
-const urlParams = new URLSearchParams(window.location.search);
-const initialQuery = urlParams.get('q');
-if (initialQuery) {
-  // Clear the URL param so refresh doesn't re-trigger
-  window.history.replaceState({}, '', '/chat');
+// Route: /chat/{id} → load conversation, /chat?q= → new with query, /chat → welcome
+const CONV_ID = '{{ conversation_id }}';
+const initialQuery = new URLSearchParams(window.location.search).get('q');
+if (CONV_ID) {
+  loadChat(CONV_ID);
+} else if (initialQuery) {
+  history.replaceState({}, '', '/chat');
   showWelcome();
   input.value = initialQuery;
   setTimeout(() => send(), 300);
-} else if (allChats.length > 0 && allChats[0].messages && allChats[0].messages.length > 0) {
-  loadChat(allChats[0].id);
 } else {
   showWelcome();
 }
+
+// Handle browser back/forward
+window.addEventListener('popstate', () => {
+  const m = window.location.pathname.match(/^\/chat\/(.+)$/);
+  if (m) loadChat(m[1]); else newChat();
+});
 
 input.addEventListener('keydown', e => { if (e.key === 'Enter' && !btn.disabled) send(); });
 function prefill(q) { input.value = q; input.focus(); }
 function retryQuestion(q) { input.value = q; send(); }
 
-/* --- Send (job-based) --- */
+/* --- Send (server-side job) --- */
 async function send() {
   const q = input.value.trim(); if (!q) return;
   input.value = ''; btn.disabled = true;
   document.getElementById('btn-text').classList.add('hidden');
   document.getElementById('btn-spin').classList.remove('hidden');
 
-  if (!currentChatId) {
-    currentChatId = 'c' + Date.now();
-    allChats.unshift({ id: currentChatId, title: q.slice(0, 50), messages: [], updated: Date.now() });
-    renderChatList();
-  }
-  const cc = allChats.find(c => c.id === currentChatId);
-  if (cc && !cc.title) { cc.title = q.slice(0, 50); renderChatList(); }
-
   const w = document.getElementById('welcome'); if (w) w.remove();
-  conversationHistory.push({role: 'user', content: q}); saveChats();
 
   const id = 'r' + Date.now();
   messages.innerHTML += userBubble(q) + botBubbleStart(id + '-status', id);
@@ -269,28 +269,23 @@ async function send() {
   const contentEl = document.getElementById(id);
 
   try {
-    // Create job
+    // Submit question — server creates/updates conversation
     const res = await fetch(API + '/ask', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({question: q, history: conversationHistory.slice(-10)})
+      body: JSON.stringify({ question: q, conversation_id: currentChatId })
     });
-    const { job_id } = await res.json();
+    const { job_id, conversation_id } = await res.json();
 
-    // Save job_id so we can resume on page reload
-    const chat_entry = allChats.find(c => c.id === currentChatId);
-    if (chat_entry) { chat_entry.pending_job = job_id; saveChats(); }
+    // Update URL and state
+    if (!currentChatId) {
+      currentChatId = conversation_id;
+      history.pushState({}, '', '/chat/' + conversation_id);
+      loadConversations();
+    }
 
     // Poll for response
     await pollJob(job_id, statusEl, contentEl, id);
-
-    // Clear pending job
-    if (chat_entry) { delete chat_entry.pending_job; }
-
-    // Save completed response
-    const job = await fetch(API + '/ask/job/' + job_id).then(r => r.json());
-    const fullResponse = extractResponseText(job.response);
-    conversationHistory.push({role: 'assistant', content: fullResponse});
-    saveChats();
+    loadConversations(); // Refresh sidebar
 
   } catch (e) { contentEl.textContent = 'Error: ' + e.message; }
 
@@ -301,85 +296,37 @@ async function send() {
   input.focus();
 }
 
+/* --- Poll job --- */
 async function pollJob(jobId, statusEl, contentEl, msgId) {
   let seen = 0;
-  let lastStatus = '';
   while (true) {
-    const res = await fetch(API + '/ask/job/' + jobId + '?after=' + seen);
-    const data = await res.json();
-
-    if (data.response) {
-      seen = data.total_length;
-      const fullResponse = data.response;
-
-      // Split status (tool names) from content
-      const parts = fullResponse.split('\n\n');
-      if (parts.length > 1) {
-        const toolsPart = parts[0];
-        const textPart = parts.slice(1).join('\n\n');
-        if (toolsPart !== lastStatus) { statusEl.textContent = toolsPart; lastStatus = toolsPart; }
-        if (textPart) {
-          contentEl.innerHTML = renderMd(textPart);
-          chat.scrollTop = chat.scrollHeight;
+    try {
+      const res = await fetch(API + '/ask/job/' + jobId + '?after=' + seen);
+      const data = await res.json();
+      if (data.total_length > seen) {
+        seen = data.total_length;
+        const full = data.response;
+        const parts = full.split('\n\n');
+        if (parts.length > 1) {
+          statusEl.textContent = parts[0];
+          contentEl.innerHTML = renderMd(parts.slice(1).join('\n\n'));
+        } else {
+          statusEl.textContent = full;
         }
-      } else {
-        statusEl.textContent = fullResponse;
+        chat.scrollTop = chat.scrollHeight;
       }
-    }
-
-    if (data.status === 'completed' || data.status === 'error') {
-      if (data.error) contentEl.textContent = 'Error: ' + data.error;
-      // Final render with charts
-      const fullJob = await fetch(API + '/ask/job/' + jobId).then(r => r.json());
-      const fullText = extractResponseText(fullJob.response);
-      if (fullText) renderFinalResponse(contentEl, fullText, msgId);
-      break;
-    }
-
-    await new Promise(r => setTimeout(r, 500)); // Poll every 500ms
+      if (data.status === 'completed' || data.status === 'error') {
+        if (data.error) contentEl.textContent = 'Error: ' + data.error;
+        const fullJob = await fetch(API + '/ask/job/' + jobId).then(r => r.json());
+        const idx = fullJob.response.indexOf('\n\n');
+        const text = idx >= 0 ? fullJob.response.slice(idx + 2) : fullJob.response;
+        if (text) renderFinalResponse(contentEl, text, msgId);
+        break;
+      }
+    } catch(e) { break; }
+    await new Promise(r => setTimeout(r, 500));
   }
 }
-
-function extractResponseText(response) {
-  // Response format: "Searching court records..tool1..tool2\n\nactual text here"
-  const idx = response.indexOf('\n\n');
-  return idx >= 0 ? response.slice(idx + 2) : response;
-}
-
-/* --- Resume pending jobs on page load --- */
-function checkPendingJobs() {
-  const chat_entry = allChats.find(c => c.id === currentChatId);
-  if (!chat_entry || !chat_entry.pending_job) return;
-
-  const jobId = chat_entry.pending_job;
-  // Find the last bot bubble or create one
-  const lastUser = conversationHistory[conversationHistory.length - 1];
-  if (!lastUser || lastUser.role !== 'user') return;
-
-  const id = 'resume-' + Date.now();
-  messages.innerHTML += botBubbleStart(id + '-status', id);
-  const statusEl = document.getElementById(id + '-status');
-  const contentEl = document.getElementById(id);
-  statusEl.textContent = 'Resuming...';
-
-  btn.disabled = true;
-  document.getElementById('btn-text').classList.add('hidden');
-  document.getElementById('btn-spin').classList.remove('hidden');
-
-  pollJob(jobId, statusEl, contentEl, id).then(async () => {
-    delete chat_entry.pending_job;
-    const job = await fetch(API + '/ask/job/' + jobId).then(r => r.json());
-    const fullResponse = extractResponseText(job.response);
-    conversationHistory.push({role: 'assistant', content: fullResponse});
-    saveChats();
-    btn.disabled = false;
-    document.getElementById('btn-text').classList.remove('hidden');
-    document.getElementById('btn-spin').classList.add('hidden');
-    statusEl.classList.add('opacity-50');
-  });
-}
-// Run after chat loads
-setTimeout(checkPendingJobs, 300);
 
 /* --- Rendering --- */
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
