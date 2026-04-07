@@ -83,6 +83,7 @@ async function send() {
   const statusEl = document.getElementById(id + '-status');
   const contentEl = document.getElementById(id);
 
+  let fullText = '';
   try {
     const res = await fetch(API + '/ask/stream?q=' + encodeURIComponent(q));
     const reader = res.body.getReader();
@@ -102,12 +103,13 @@ async function send() {
         if (data.startsWith('Searching') || data.startsWith('..')) {
           statusEl.textContent += data;
         } else {
-          contentEl.textContent += data;
+          fullText += data;
+          contentEl.innerHTML = renderMd(fullText);
         }
         chat.scrollTop = chat.scrollHeight;
       }
     }
-    if (!contentEl.textContent.trim()) contentEl.textContent = 'No answer received.';
+    if (!fullText.trim()) contentEl.textContent = 'No answer received.';
     statusEl.classList.add('opacity-50');
   } catch (e) {
     contentEl.textContent = 'Error: ' + e.message;
@@ -120,5 +122,18 @@ async function send() {
 }
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function renderMd(text) {
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/^### (.+)$/gm, '<h4 class="text-zinc-100 font-semibold mt-3 mb-1">$1</h4>')
+    .replace(/^## (.+)$/gm, '<h3 class="text-zinc-100 font-semibold mt-3 mb-1">$1</h3>')
+    .replace(/^- (.+)$/gm, '<div class="pl-3 border-l-2 border-zinc-700 my-0.5">$1</div>')
+    .replace(/^\d+\. (.+)$/gm, '<div class="pl-3 border-l-2 border-accent/30 my-0.5">$1</div>')
+    .replace(/\n\n/g, '<br><br>')
+    .replace(/\n/g, '<br>');
+}
 </script>
 {% endblock %}
