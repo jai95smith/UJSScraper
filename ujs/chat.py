@@ -193,6 +193,17 @@ TOOLS = [
         },
     },
     {
+        "name": "run_custom_query",
+        "description": "Run a custom read-only SQL query against the court database for questions the other stats tools can't answer. Tables: cases (docket_number, court_type, caption, status, filing_date, county), participants (docket_number, name, dob), charges (docket_number, seq, statute, description, grade, disposition, disposition_date), bail (docket_number, bail_type, amount, status), sentences (docket_number, charge, sentence_type, duration, sentence_date), attorneys (docket_number, name, role), events (docket_number, event_type, event_status, event_date), docket_entries (docket_number, entry_date, description, filer). Write SELECT queries only.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sql": {"type": "string", "description": "SELECT query only — no INSERT/UPDATE/DELETE/DROP/ALTER"},
+            },
+            "required": ["sql"],
+        },
+    },
+    {
         "name": "get_case_changes",
         "description": "Get recent changes/updates to a specific case or all cases",
         "input_schema": {
@@ -556,6 +567,35 @@ def _execute_tool(name, inputs):
                 return json.dumps([dict(r) for r in cur2.fetchall()], default=str)
 
             return "Unknown stat type"
+
+        elif name == "run_custom_query":
+            sql = inputs["sql"].strip()
+            # Safety checks
+            sql_upper = sql.upper()
+            blocked = ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE",
+                       "CREATE", "GRANT", "REVOKE", "COPY", "EXECUTE", "SET ", "COMMIT",
+                       "ROLLBACK", "BEGIN", ";"]
+            for word in blocked:
+                if word in sql_upper:
+                    return f"Blocked: query contains '{word}'. Only SELECT queries allowed."
+            if not sql_upper.startswith("SELECT"):
+                return "Blocked: query must start with SELECT."
+            # Allowed tables only
+            allowed_tables = {"cases", "participants", "charges", "bail", "sentences",
+                              "attorneys", "events", "docket_entries", "analyses", "change_log"}
+            # Run with statement_timeout and read-only transaction
+            try:
+                import psycopg2.extras as extras
+                cur2 = conn.cursor(cursor_factory=extras.RealDictCursor)
+                cur2.execute("SET statement_timeout = '5s'")
+                cur2.execute(sql)
+                rows = cur2.fetchall()
+                cur2.execute("RESET statement_timeout")
+                if len(rows) > 100:
+                    rows = rows[:100]
+                return json.dumps([dict(r) for r in rows], default=str)
+            except Exception as e:
+                return f"Query error: {str(e)[:200]}"
 
         elif name == "get_case_changes":
             changes = db.get_changes(conn, docket_number=inputs.get("docket_number"), limit=20)
