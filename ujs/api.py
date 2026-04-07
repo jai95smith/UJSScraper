@@ -689,6 +689,24 @@ def rapsheet(
     if not cases:
         return {"name": name, "cases": [], "message": "No cases found in Lehigh, Northampton, or statewide courts"}
 
+    # Step 2b: Analyze active cases that aren't analyzed yet
+    from ujs.modules.docket_pdf import analyze_docket as _analyze
+    with db.connect() as conn:
+        cur = conn.cursor()
+        for case in cases:
+            if "active" not in case["status"].lower():
+                continue
+            cur.execute("SELECT id FROM analyses WHERE docket_number = %s AND doc_type = 'docket'", (case["docket_number"],))
+            if cur.fetchone():
+                continue  # already analyzed
+            try:
+                with tempfile.TemporaryDirectory() as d:
+                    analysis = _analyze(case["docket_number"], out_dir=d)
+                with db.connect() as conn2:
+                    db.detect_and_store_changes(conn2, case["docket_number"], analysis)
+            except Exception:
+                pass
+
     # Step 3: Build profile
     with db.connect() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
