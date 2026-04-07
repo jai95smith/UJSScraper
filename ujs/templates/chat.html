@@ -183,7 +183,12 @@ function loadChat(id) {
     if (m.role === 'user') {
       messages.innerHTML += `<div class="flex justify-end"><div class="bg-accent/10 border border-accent/20 rounded-2xl rounded-tr-sm px-4 py-2.5 max-w-lg"><p class="text-sm text-zinc-200">${esc(m.content)}</p></div></div>`;
     } else if (m.role === 'assistant') {
-      messages.innerHTML += `<div class="flex justify-start"><div class="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3 max-w-2xl w-full"><div class="prose text-sm text-zinc-300">${renderMd(m.content, true)}</div></div></div>`;
+      const rid = 'restored-' + i;
+      messages.innerHTML += `<div class="flex justify-start"><div class="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3 max-w-2xl w-full"><div id="${rid}" class="prose text-sm text-zinc-300"></div></div></div>`;
+      setTimeout(() => {
+        const el = document.getElementById(rid);
+        if (el) renderFinalResponse(el, m.content, rid);
+      }, 100);
     }
   }
 
@@ -309,8 +314,8 @@ async function send() {
       }
     }
     if (!fullText.trim()) contentEl.textContent = 'No answer received.';
-    // Final render with charts
-    contentEl.innerHTML = renderMd(fullText, true);
+    // Final render — split charts into separate artifacts
+    renderFinalResponse(contentEl, fullText, id);
     saveChats();
     statusEl.classList.add('opacity-50');
   } catch (e) {
@@ -325,16 +330,50 @@ async function send() {
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-function renderMd(text, isFinal = false) {
-  // Extract chart blocks FIRST before any escaping
-  const charts = [];
-  let html = text.replace(/```chart\s*\n([\s\S]*?)```/g, (match, json) => {
-    charts.push(json.trim());
-    return `%%CHART_${charts.length - 1}%%`;
-  });
+function renderFinalResponse(contentEl, text, msgId) {
+  // Split text around chart blocks — charts become separate artifacts after the text bubble
+  const parts = text.split(/```chart\s*\n([\s\S]*?)```/g);
+  // parts = [text_before, chart_json, text_after, chart_json2, text_after2, ...]
 
-  // Escape HTML
-  html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  let textContent = '';
+  const chartConfigs = [];
+
+  for (let i = 0; i < parts.length; i++) {
+    if (i % 2 === 0) {
+      textContent += parts[i];
+    } else {
+      chartConfigs.push(parts[i].trim());
+    }
+  }
+
+  // Render text in the existing bubble
+  contentEl.innerHTML = renderMd(textContent.trim(), true);
+
+  // Add chart artifacts as separate elements after the message bubble
+  const parentBubble = contentEl.closest('.flex.justify-start');
+  chartConfigs.forEach((json, i) => {
+    try {
+      const config = JSON.parse(json);
+      const cid = 'chart-' + msgId + '-' + i;
+      const chartEl = document.createElement('div');
+      chartEl.className = 'max-w-3xl mx-auto';
+      chartEl.innerHTML = `
+        <div class="bg-card border border-border rounded-2xl p-5 my-2">
+          <canvas id="${cid}" style="width:100%;max-height:320px;"></canvas>
+        </div>`;
+      parentBubble.parentNode.insertBefore(chartEl, parentBubble.nextSibling);
+      setTimeout(() => renderChart(cid, config), 300);
+    } catch(e) {}
+  });
+}
+
+function renderMd(text) {
+  // Strip chart blocks (handled separately by renderFinalResponse)
+  let html = text.replace(/```chart\s*\n[\s\S]*?```/g,
+    '<div class="my-3 py-2 text-xs text-muted flex items-center gap-2"><svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Preparing chart...</div>');
+
+  // Escape HTML (but not our placeholder divs)
+  html = html.replace(/&(?!amp;)/g, '&amp;');
 
   // Markdown
   html = html
@@ -346,29 +385,6 @@ function renderMd(text, isFinal = false) {
     .replace(/^\d+\. (.+)$/gm, '<div class="pl-3 border-l-2 border-accent/30 my-0.5">$1</div>')
     .replace(/\n\n/g, '<br><br>')
     .replace(/\n/g, '<br>');
-
-  // Charts: placeholder during stream, render only on final
-  charts.forEach((json, i) => {
-    if (!isFinal) {
-      html = html.replace(`%%CHART_${i}%%`,
-        `<div class="my-3 py-3 text-xs text-muted flex items-center gap-2">
-          <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-          Preparing chart...
-        </div>`);
-    } else {
-      try {
-        const config = JSON.parse(json);
-        const cid = 'chart-' + Date.now() + '-' + i;
-        html = html.replace(`%%CHART_${i}%%`,
-          `<div class="chart-wrap my-4 -mx-4 p-4 bg-zinc-900/50 rounded-xl border border-border">
-            <canvas id="${cid}" style="width:100%;max-height:300px;"></canvas>
-          </div>`);
-        setTimeout(() => renderChart(cid, config), 300);
-      } catch(e) {
-        html = html.replace(`%%CHART_${i}%%`, `<div class="text-red-400 text-xs">Chart error: ${e.message}</div>`);
-      }
-    }
-  });
 
   return html;
 }
