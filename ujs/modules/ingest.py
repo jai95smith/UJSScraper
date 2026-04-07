@@ -55,7 +55,7 @@ def ingest_filings(county=None, docket_type=None, lookback_days=1):
     return total_found, total_new
 
 
-def ingest_events(county=None, docket_type=None, lookahead_days=7):
+def ingest_events(county=None, docket_type=None, lookahead_days=14):
     """Scrape upcoming calendar events and store."""
     today = datetime.now()
     start = today.strftime("%Y-%m-%d")
@@ -240,7 +240,7 @@ def batch_analyze_unanalyzed(limit=50, workers=1, delay=8):
 
 
 def run_cycle(counties=None, docket_type=None, lookback_days=1,
-              lookahead_days=7, analyze_batch=20, refresh_batch=20,
+              lookahead_days=14, analyze_batch=20, refresh_batch=20,
               auto_analyze=False, workers=3):
     """Full ingest cycle: filings → events → auto-analyze → queue → stale refresh."""
     counties = counties or ["Lehigh"]
