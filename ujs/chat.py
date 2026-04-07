@@ -22,9 +22,8 @@ Name search strategy:
 - If multiple people share the same name, list ALL of them with their DOB and docket numbers
   so the user can clarify which person they mean. Do not guess.
 - When the user provides a DOB or other detail, use it to narrow to the right person.
-- If a person has MULTIPLE cases, mention all of them with docket numbers and status.
-  Then go deeper on the most relevant one (most recent, or the one matching the question).
-  Example: "Kelli Murphy has 3 cases: [list]. Here are the details on the most recent..."
+- If a person has MULTIPLE cases, use get_person_history to get ALL cases with details in
+  one call. Do NOT call get_case_analysis + get_docket_events separately for each case.
 - If search_cases AND fuzzy_name_search both return nothing, use live_search_ujs as a last
   resort — it searches the PA court portal directly and adds results to the database.
 - For hyphenated last names like "Janko-Hudson", pass the FULL hyphenated name as last_name.
@@ -494,12 +493,16 @@ def _clean_question(question: str) -> str:
     return question
 
 
-def _run_chat(client, model, question, max_rounds=8):
+def _run_chat(client, model, question, max_rounds=10):
     """Run a tool-use chat loop with a given model. Returns (answer, tool_calls_made)."""
+    import time as _t
+    start_time = _t.time()
     messages = [{"role": "user", "content": question}]
     tool_calls = 0
 
-    for _ in range(max_rounds):
+    for _ in range(20):  # safety cap
+        if _t.time() - start_time > 120:  # 2 min timeout
+            return "Request timed out. Try a more specific question.", tool_calls
         response = client.messages.create(
             model=model, max_tokens=1024,
             system=_get_system_prompt(), tools=TOOLS, messages=messages,
@@ -536,7 +539,7 @@ def ask(question: str, api_key: Optional[str] = None) -> str:
 
     client = anthropic.Anthropic(api_key=key)
 
-    answer, _ = _run_chat(client, "claude-sonnet-4-20250514", question, max_rounds=8)
+    answer, _ = _run_chat(client, "claude-sonnet-4-20250514", question, max_rounds=10)
 
     return answer or "I couldn't find enough data to answer that question. Try being more specific or providing a docket number."
 
@@ -554,7 +557,7 @@ def ask_stream(question: str, api_key: Optional[str] = None):
 
     yield "Searching court records"
 
-    for round_num in range(6):
+    for round_num in range(20):
         response = client.messages.create(
             model="claude-sonnet-4-20250514", max_tokens=1024,
             system=_get_system_prompt(), tools=TOOLS, messages=messages,
