@@ -7,7 +7,7 @@ from datetime import datetime
 from ujs import db
 from ujs.modules.ingest import deep_analyze_docket
 
-DEFAULT_DELAY = 10  # seconds between each analysis
+DEFAULT_DELAY = 5  # seconds between each analysis (~12/min)
 _failed_dockets = set()  # skip dockets that keep failing
 
 
