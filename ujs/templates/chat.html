@@ -211,6 +211,11 @@ fetch(API + '/stats').then(r => r.json()).then(d => {
   document.getElementById('stats').textContent = d.cases.toLocaleString() + ' cases indexed';
 }).catch(() => {});
 
+// Save on page close
+window.addEventListener('beforeunload', () => saveChats());
+// Periodic save during streaming (every 2s)
+setInterval(() => { if (btn.disabled) saveChats(); }, 2000);
+
 // Show welcome or restore last chat
 if (allChats.length > 0 && allChats[0].messages && allChats[0].messages.length > 0) {
   loadChat(allChats[0].id);
@@ -245,6 +250,7 @@ async function send() {
   if (welcome) welcome.remove();
 
   conversationHistory.push({role: 'user', content: q});
+  saveChats(); // Save immediately so user message persists if page closes
 
   const id = 'r' + Date.now();
   messages.innerHTML += `
@@ -290,12 +296,19 @@ async function send() {
         } else {
           fullText += data.replace(/\\n/g, '\n');
           contentEl.innerHTML = renderMd(fullText);
+          // Update in-memory history (save throttled below)
+          const last = conversationHistory[conversationHistory.length - 1];
+          if (last && last.role === 'assistant') {
+            last.content = fullText;
+          } else {
+            conversationHistory.push({role: 'assistant', content: fullText});
+          }
         }
         chat.scrollTop = chat.scrollHeight;
       }
     }
     if (!fullText.trim()) contentEl.textContent = 'No answer received.';
-    conversationHistory.push({role: 'assistant', content: fullText});
+    // Final save (progressive saves already happened during stream)
     saveChats();
     statusEl.classList.add('opacity-50');
   } catch (e) {
