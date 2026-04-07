@@ -652,7 +652,9 @@ async def ask_stream(q: str = Query(..., description="Your question")):
 
     def _sse_wrap(gen):
         for chunk in gen:
-            yield f"data: {chunk}\n\n"
+            # Encode newlines so SSE doesn't split them into separate events
+            encoded = chunk.replace("\n", "\\n")
+            yield f"data: {encoded}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(

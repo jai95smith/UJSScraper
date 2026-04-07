@@ -103,7 +103,7 @@ async function send() {
         if (data.startsWith('Searching') || data.startsWith('..')) {
           statusEl.textContent += data;
         } else {
-          fullText += data;
+          fullText += data.replace(/\\n/g, '\n');
           contentEl.innerHTML = renderMd(fullText);
         }
         chat.scrollTop = chat.scrollHeight;
