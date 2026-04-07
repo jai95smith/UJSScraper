@@ -13,7 +13,7 @@ PATTERNS = [
     (r'^(CP|MJ)-\d+-\w+-\d+-\d{4}$', None),
 
     # Appellate: 138 MD 2026 or 138MD2026
-    (r'^(\d+)\s*(MD|CD|EAL|MAL|WAL|MAP|EAP|WAP|FR)\s*(\d{4})$', lambda m: f"{m.group(1)} {m.group(2).upper()} {m.group(3)}"),
+    (r'^(\d+)\s*(MD|CD|EAL|MAL|WAL|MAP|EAP|WAP|FR|EDA|WDA|MDA)\s*(\d{4})$', lambda m: f"{m.group(1)} {m.group(2).upper()} {m.group(3)}"),
 
     # Missing dashes: CP39CR00012342025
     (r'^(CP|MJ)(\d{2,5})(\w{2})([\d]+?)(\d{4})$',
@@ -42,7 +42,7 @@ def normalize_docket(raw):
         return f"{m.group(1).upper()}-{m.group(2)}-{m.group(3).upper()}-{m.group(4).zfill(7)}-{m.group(5)}", "exact"
 
     # Appellate — already has spaces
-    if re.match(r'^\d+\s+(MD|CD|EAL|MAL|WAL|MAP|EAP|WAP|FR)\s+\d{4}$', raw, re.IGNORECASE):
+    if re.match(r'^\d+\s+(MD|CD|EAL|MAL|WAL|MAP|EAP|WAP|FR|EDA|WDA|MDA)\s+\d{4}$', raw, re.IGNORECASE):
         parts = raw.split()
         return f"{parts[0]} {parts[1].upper()} {parts[2]}", "exact"
 
@@ -61,7 +61,7 @@ def find_docket_in_text(text):
     """Find any docket-like patterns in free text."""
     patterns = [
         r'(CP|MJ)-\d+-\w+-\d+-\d{4}',
-        r'\d+\s+(?:MD|CD|EAL|MAL|WAL)\s+\d{4}',
+        r'\d+\s+(?:MD|CD|EAL|MAL|WAL|MAP|EAP|WAP|FR|EDA|WDA|MDA)\s+\d{4}',
     ]
     for p in patterns:
         m = re.search(p, text, re.IGNORECASE)
