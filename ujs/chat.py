@@ -393,7 +393,8 @@ def _execute_tool(name, inputs):
                 return f"No cases found on UJS for {inputs.get('first_name', '')} {inputs['last_name']}"
             # Store discovered cases in DB
             db.upsert_cases(conn, results)
-            # Analyze the most recent case inline so Claude can answer fully
+            # Sort by filing date descending, analyze most recent
+            results.sort(key=lambda r: r.get("filing_date", ""), reverse=True)
             top = results[0]
             try:
                 with tempfile.TemporaryDirectory() as d:
