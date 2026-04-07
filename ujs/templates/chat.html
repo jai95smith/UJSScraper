@@ -6,7 +6,10 @@
 
 {% block extra_css %}
 body { background: #132240; height: 100dvh; overflow: hidden; }
-.prose { line-height: 1.7; overflow-wrap: break-word; word-break: break-word; }
+.prose { line-height: 1.55; overflow-wrap: break-word; word-break: break-word; }
+.prose p { margin: 0; }
+.prose p + p { margin-top: 6px; }
+.prose strong { color: #e8edf5; }
 .prose strong { color: #e8edf5; font-weight: 600; }
 .chart-wrap canvas { width: 100% !important; height: auto !important; max-height: 300px; }
 {% endblock %}
@@ -405,14 +408,25 @@ function renderMd(text) {
   let html = text.replace(/```chart\s*\n[\s\S]*?```/g,
     '<div class="my-3 py-2 text-[11px] text-court-dim flex items-center gap-2"><svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Preparing chart...</div>');
   html = html.replace(/&(?!amp;)/g, '&amp;');
-  return html
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/^### (.+)$/gm, '<h4 class="text-court-bright font-semibold mt-3 mb-1">$1</h4>')
-    .replace(/^## (.+)$/gm, '<h3 class="text-court-bright font-semibold mt-3 mb-1">$1</h3>')
-    .replace(/^- (.+)$/gm, '<div class="pl-3 border-l-2 border-navy-border my-0.5">$1</div>')
-    .replace(/^\d+\. (.+)$/gm, '<div class="pl-3 border-l-2 border-gold/30 my-0.5">$1</div>')
-    .replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
+  // Trim excessive newlines (3+ → 2)
+  html = html.replace(/\n{3,}/g, '\n\n');
+  // Headers
+  html = html.replace(/^### (.+)$/gm, '<h4 class="text-court-bright font-semibold text-[13px] mt-3 mb-0.5">$1</h4>');
+  html = html.replace(/^## (.+)$/gm, '<h3 class="text-court-bright font-semibold text-sm mt-4 mb-1">$1</h3>');
+  // Bold/italic
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // Lists — tight spacing
+  html = html.replace(/^- (.+)$/gm, '<div class="pl-3 border-l-2 border-navy-border py-[1px]">$1</div>');
+  html = html.replace(/^\d+\. (.+)$/gm, '<div class="pl-3 border-l-2 border-gold/30 py-[1px]">$1</div>');
+  // Paragraphs — single break between, not double
+  html = html.replace(/\n\n/g, '</p><p class="mt-2">');
+  html = html.replace(/\n/g, '<br>');
+  html = '<p>' + html + '</p>';
+  // Clean empty paragraphs
+  html = html.replace(/<p class="mt-2"><\/p>/g, '');
+  html = html.replace(/<p><\/p>/g, '');
+  return html;
 }
 
 function renderChart(id, config) {
