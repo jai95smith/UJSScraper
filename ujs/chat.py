@@ -27,6 +27,24 @@ Name search strategy:
 - If search_cases AND fuzzy_name_search both return nothing, use live_search_ujs as a last
   resort — it searches the PA court portal directly and adds results to the database.
 - For hyphenated last names like "Janko-Hudson", pass the FULL hyphenated name as last_name.
+
+Date awareness:
+- The DB contains cases discovered via calendar searches — many are OLD cases with upcoming hearings.
+- When the user asks about "recent" or "last 30 days", filter by OFFENSE DATE or FILING DATE, not
+  just presence in the database. Use the charges.offense_date or cases.filing_date columns.
+- filing_date = when the case was filed with the court (MM/DD/YYYY)
+- offense_date = when the crime actually happened (in charges table)
+- A case filed in 2024 with an offense from 2023 is NOT a "recent" crime.
+- For "most recent violent cases" use: WHERE ch.offense_date >= 'MM/DD/YYYY' (30 days ago)
+- BUT "most violent person with upcoming hearings" is different — use events table to find
+  people with violent charges AND scheduled court dates, regardless of offense date.
+- When ambiguous, mention BOTH the offense date and any upcoming events so the user has context.
+
+Custom SQL tips:
+- Dates are stored as TEXT in MM/DD/YYYY format. To compare, convert:
+  TO_DATE(field, 'MM/DD/YYYY') >= CURRENT_DATE - INTERVAL '30 days'
+- Bail amounts are stored as TEXT like '$10,000.00'. To do math:
+  REPLACE(REPLACE(amount, '$', ''), ',', '')::numeric
   Do NOT split on hyphens. "Janko-Hudson" is one last name, not two.
 """
 
