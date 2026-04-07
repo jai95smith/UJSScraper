@@ -119,8 +119,8 @@ def process_queue(batch_size=10, workers=3):
     return processed
 
 
-def refresh_stale(active_hours=24, closed_days=7, batch_size=20, workers=3):
-    """Re-analyze stale dockets to detect changes, with parallel workers."""
+def refresh_stale(active_hours=24, closed_days=7, batch_size=10, delay=8):
+    """Re-analyze stale dockets sequentially with delay to avoid rate limiting."""
     with db.connect() as conn:
         stale = db.get_stale_dockets(conn, active_hours, closed_days, limit=batch_size)
 
@@ -128,25 +128,21 @@ def refresh_stale(active_hours=24, closed_days=7, batch_size=20, workers=3):
         print("[refresh] No stale dockets")
         return 0
 
-    print(f"[refresh] {len(stale)} stale dockets to re-analyze ({workers} workers)")
-
-    def _refresh_one(row):
+    print(f"[refresh] {len(stale)} stale dockets to re-analyze ({delay}s delay)")
+    refreshed = 0
+    for row in stale:
         dn = row["docket_number"]
         try:
             changes = deep_analyze_docket(dn)
+            refreshed += 1
             if changes:
                 print(f"[refresh] {dn}: {len(changes)} change(s)")
-            return True
         except Exception as e:
+            if "429" in str(e):
+                print(f"[refresh] Rate limited, stopping refresh")
+                break
             print(f"[refresh] Error {dn}: {e}")
-            return False
-
-    refreshed = 0
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(_refresh_one, row): row for row in stale}
-        for future in as_completed(futures):
-            if future.result():
-                refreshed += 1
+        time.sleep(delay)
 
     return refreshed
 
@@ -180,7 +176,7 @@ def ingest_appellate(lookback_days=1):
     return total_new
 
 
-def batch_analyze_unanalyzed(limit=50, workers=2, delay=3):
+def batch_analyze_unanalyzed(limit=50, workers=1, delay=8):
     """Find cases in DB that don't have a Gemini analysis yet, analyze them.
     delay: seconds between each request to avoid UJS rate limiting."""
     with db.connect() as conn:
