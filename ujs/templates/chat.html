@@ -324,19 +324,18 @@ async function send() {
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
 function renderMd(text) {
-  let html = text;
-
-  // Extract and preserve chart blocks
+  // Extract chart blocks FIRST before any escaping
   const charts = [];
-  html = html.replace(/```chart\n([\s\S]*?)```/g, (match, json) => {
-    const placeholder = `__CHART_${charts.length}__`;
-    charts.push(json);
-    return placeholder;
+  let html = text.replace(/```chart\s*\n([\s\S]*?)```/g, (match, json) => {
+    charts.push(json.trim());
+    return `%%CHART_${charts.length - 1}%%`;
   });
 
-  // Markdown rendering
+  // Escape HTML
+  html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+  // Markdown
   html = html
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/^### (.+)$/gm, '<h4 class="text-zinc-100 font-semibold mt-3 mb-1">$1</h4>')
@@ -346,18 +345,18 @@ function renderMd(text) {
     .replace(/\n\n/g, '<br><br>')
     .replace(/\n/g, '<br>');
 
-  // Re-insert chart blocks
+  // Re-insert chart blocks (after escaping so they don't get mangled)
   charts.forEach((json, i) => {
     try {
       const config = JSON.parse(json);
-      const cid = 'chart-' + Date.now() + '-' + i;
-      html = html.replace(`__CHART_${i}__`,
+      const cid = 'chart-' + Date.now() + '-' + i + '-' + Math.random().toString(36).slice(2,6);
+      html = html.replace(`%%CHART_${i}%%`,
         `<div class="my-4 p-4 bg-zinc-900/50 rounded-xl border border-border">
           <div class="chart-container"><canvas id="${cid}"></canvas></div>
         </div>`);
-      setTimeout(() => renderChart(cid, config), 150);
+      setTimeout(() => renderChart(cid, config), 200);
     } catch(e) {
-      html = html.replace(`__CHART_${i}__`, '<div class="text-red-400 text-xs">Chart error</div>');
+      html = html.replace(`%%CHART_${i}%%`, `<div class="text-red-400 text-xs">Chart error: ${e.message}</div>`);
     }
   });
 
