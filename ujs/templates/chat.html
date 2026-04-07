@@ -3,7 +3,8 @@
 {% block extra_css %}
 .prose { line-height: 1.7; }
 .prose strong { color: #e4e4e7; font-weight: 600; }
-.chart-container { position: relative; width: 100%; max-height: 250px; }
+.chart-wrap { max-width: 100%; }
+.chart-wrap canvas { width: 100% !important; height: auto !important; max-height: 300px; }
 {% endblock %}
 
 {% block layout %}
@@ -182,7 +183,7 @@ function loadChat(id) {
     if (m.role === 'user') {
       messages.innerHTML += `<div class="flex justify-end"><div class="bg-accent/10 border border-accent/20 rounded-2xl rounded-tr-sm px-4 py-2.5 max-w-lg"><p class="text-sm text-zinc-200">${esc(m.content)}</p></div></div>`;
     } else if (m.role === 'assistant') {
-      messages.innerHTML += `<div class="flex justify-start"><div class="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3 max-w-2xl w-full"><div class="prose text-sm text-zinc-300">${renderMd(m.content)}</div></div></div>`;
+      messages.innerHTML += `<div class="flex justify-start"><div class="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3 max-w-2xl w-full"><div class="prose text-sm text-zinc-300">${renderMd(m.content, true)}</div></div></div>`;
     }
   }
 
@@ -295,7 +296,7 @@ async function send() {
           statusEl.textContent += data;
         } else {
           fullText += data.replace(/\\n/g, '\n');
-          contentEl.innerHTML = renderMd(fullText);
+          contentEl.innerHTML = renderMd(fullText, false);
           // Update in-memory history (save throttled below)
           const last = conversationHistory[conversationHistory.length - 1];
           if (last && last.role === 'assistant') {
@@ -308,7 +309,8 @@ async function send() {
       }
     }
     if (!fullText.trim()) contentEl.textContent = 'No answer received.';
-    // Final save (progressive saves already happened during stream)
+    // Final render with charts
+    contentEl.innerHTML = renderMd(fullText, true);
     saveChats();
     statusEl.classList.add('opacity-50');
   } catch (e) {
@@ -323,7 +325,7 @@ async function send() {
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-function renderMd(text) {
+function renderMd(text, isFinal = false) {
   // Extract chart blocks FIRST before any escaping
   const charts = [];
   let html = text.replace(/```chart\s*\n([\s\S]*?)```/g, (match, json) => {
@@ -345,18 +347,26 @@ function renderMd(text) {
     .replace(/\n\n/g, '<br><br>')
     .replace(/\n/g, '<br>');
 
-  // Re-insert chart blocks (after escaping so they don't get mangled)
+  // Charts: placeholder during stream, render only on final
   charts.forEach((json, i) => {
-    try {
-      const config = JSON.parse(json);
-      const cid = 'chart-' + Date.now() + '-' + i + '-' + Math.random().toString(36).slice(2,6);
+    if (!isFinal) {
       html = html.replace(`%%CHART_${i}%%`,
-        `<div class="my-4 p-4 bg-zinc-900/50 rounded-xl border border-border">
-          <div class="chart-container"><canvas id="${cid}"></canvas></div>
+        `<div class="my-3 py-3 text-xs text-muted flex items-center gap-2">
+          <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+          Preparing chart...
         </div>`);
-      setTimeout(() => renderChart(cid, config), 200);
-    } catch(e) {
-      html = html.replace(`%%CHART_${i}%%`, `<div class="text-red-400 text-xs">Chart error: ${e.message}</div>`);
+    } else {
+      try {
+        const config = JSON.parse(json);
+        const cid = 'chart-' + Date.now() + '-' + i;
+        html = html.replace(`%%CHART_${i}%%`,
+          `<div class="chart-wrap my-4 -mx-4 p-4 bg-zinc-900/50 rounded-xl border border-border">
+            <canvas id="${cid}" style="width:100%;max-height:300px;"></canvas>
+          </div>`);
+        setTimeout(() => renderChart(cid, config), 300);
+      } catch(e) {
+        html = html.replace(`%%CHART_${i}%%`, `<div class="text-red-400 text-xs">Chart error: ${e.message}</div>`);
+      }
     }
   });
 
