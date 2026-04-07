@@ -48,7 +48,14 @@ def run(delay=DEFAULT_DELAY):
                     SELECT c.docket_number FROM cases c
                     LEFT JOIN analyses a ON c.docket_number = a.docket_number AND a.doc_type = 'docket'
                     WHERE a.id IS NULL
-                    ORDER BY c.created_at DESC LIMIT 1
+                    ORDER BY
+                        -- Priority: cases with upcoming events first
+                        CASE WHEN EXISTS (SELECT 1 FROM events e WHERE e.docket_number = c.docket_number) THEN 0 ELSE 1 END,
+                        -- Then active over closed
+                        CASE WHEN c.status ILIKE '%%active%%' THEN 0 ELSE 1 END,
+                        -- Then most recent
+                        c.created_at DESC
+                    LIMIT 1
                 """)
                 row = cur.fetchone()
 
