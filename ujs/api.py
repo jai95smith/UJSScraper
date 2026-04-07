@@ -621,27 +621,33 @@ class AskRequest(BaseModel):
 
 @app.post("/ask", tags=["Chat"])
 def ask_question(body: AskRequest):
-    """Ask a natural language question about court records.
-    Examples: 'Did Taiba Sultana's ballot appeal pass?',
-    'What hearings are in Lehigh tomorrow?', 'Show me DUI cases this month'"""
+    """Ask a natural language question about court records."""
     from ujs.chat import ask
     try:
         answer = ask(body.question)
         return {"question": body.question, "answer": answer}
     except Exception as e:
-        return JSONResponse(status_code=500, content= {"error": str(e)})
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 @app.get("/ask", tags=["Chat"])
 def ask_question_get(q: str = Query(..., description="Your question")):
-    """Ask a question via GET (browser-friendly).
-    Example: /ask?q=What hearings are in Lehigh today?"""
+    """Ask a question via GET (browser-friendly)."""
     from ujs.chat import ask
     try:
         answer = ask(q)
         return {"question": q, "answer": answer}
     except Exception as e:
-        return JSONResponse(status_code=500, content= {"error": str(e)})
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/ask/stream", tags=["Chat"])
+async def ask_stream(q: str = Query(..., description="Your question")):
+    """Ask a question with streaming response — text appears as it's generated."""
+    from starlette.responses import StreamingResponse
+    from ujs.chat import ask_stream as _ask_stream
+
+    return StreamingResponse(_ask_stream(q), media_type="text/plain")
 
 
 # -------------------------------------------------------------------
