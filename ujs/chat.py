@@ -22,6 +22,9 @@ Name search strategy:
 - If multiple people share the same name, list ALL of them with their DOB and docket numbers
   so the user can clarify which person they mean. Do not guess.
 - When the user provides a DOB or other detail, use it to narrow to the right person.
+- If a person has MULTIPLE cases, mention all of them with docket numbers and status.
+  Then go deeper on the most relevant one (most recent, or the one matching the question).
+  Example: "Kelli Murphy has 3 cases: [list]. Here are the details on the most recent..."
 - If search_cases AND fuzzy_name_search both return nothing, use live_search_ujs as a last
   resort — it searches the PA court portal directly and adds results to the database.
 - For hyphenated last names like "Janko-Hudson", search the last part as the last name.
@@ -50,6 +53,18 @@ TOOLS = [
             "type": "object",
             "properties": {"docket_number": {"type": "string"}},
             "required": ["docket_number"],
+        },
+    },
+    {
+        "name": "get_person_history",
+        "description": "Get ALL cases, charges, and events for a person across all their dockets. Use this instead of calling get_case_analysis multiple times when someone has several cases.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Person name"},
+                "county": {"type": "string"},
+            },
+            "required": ["name"],
         },
     },
     {
@@ -226,6 +241,38 @@ def _execute_tool(name, inputs):
             if not results:
                 return "No cases found."
             return json.dumps([dict(r) for r in results], default=str)
+
+        elif name == "get_person_history":
+            # Find all cases for this person
+            cases = db.search_cases(conn, name=inputs["name"],
+                                     county=inputs.get("county"), limit=20)
+            if not cases:
+                return f"No cases found for {inputs['name']}"
+            history = []
+            for case in cases:
+                dn = case["docket_number"]
+                entry = {
+                    "docket_number": dn,
+                    "caption": case["caption"],
+                    "status": case["status"],
+                    "county": case["county"],
+                    "filing_date": case["filing_date"],
+                }
+                # Get analysis if available
+                analysis = db.get_analysis(conn, dn, "docket")
+                if analysis:
+                    entry["charges"] = analysis.get("charges", [])
+                    entry["sentences"] = analysis.get("sentences", [])
+                    entry["bail"] = analysis.get("bail", {})
+                    entry["judge"] = analysis.get("judge")
+                # Get events
+                cur3 = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                cur3.execute("SELECT event_type, event_date, event_status FROM events WHERE docket_number = %s", (dn,))
+                events = cur3.fetchall()
+                if events:
+                    entry["events"] = [dict(e) for e in events]
+                history.append(entry)
+            return json.dumps(history, default=str)
 
         elif name == "get_docket_events":
             import psycopg2.extras as extras
