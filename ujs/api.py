@@ -671,15 +671,16 @@ def rapsheet(
                     return f"{parts[2]}{parts[0]}{parts[1]}"
                 except Exception:
                     return "0"
-            for c in sorted(cases, key=lambda c: _parse_date(c.get("filing_date", "")), reverse=True)[:5]:
-                if "active" in c["status"].lower():
-                    try:
-                        with tempfile.TemporaryDirectory() as d:
-                            analysis = analyze_docket(c["docket_number"], out_dir=d)
-                        with db.connect() as conn:
-                            db.detect_and_store_changes(conn, c["docket_number"], analysis)
-                    except Exception:
-                        pass
+            active_cases = [c for c in cases if "active" in c["status"].lower()]
+            active_cases.sort(key=lambda c: _parse_date(c.get("filing_date", "")), reverse=True)
+            for c in active_cases:
+                try:
+                    with tempfile.TemporaryDirectory() as d:
+                        analysis = analyze_docket(c["docket_number"], out_dir=d)
+                    with db.connect() as conn:
+                        db.detect_and_store_changes(conn, c["docket_number"], analysis)
+                except Exception:
+                    pass
 
         # Re-fetch
         with db.connect() as conn:
