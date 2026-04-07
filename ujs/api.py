@@ -626,18 +626,60 @@ def rapsheet(
 ):
     """Get a person's full court history: all cases, charges, bail, sentences, events."""
     import psycopg2.extras
+
+    # Step 1: Search DB
     with db.connect() as conn:
         cases = db.search_cases(conn, name=name, county=county, limit=50)
         if not cases:
-            # Try fuzzy
             fuzzy = db.fuzzy_name_search(conn, name, limit=5)
-            if fuzzy:
+            if fuzzy and fuzzy[0]["match_score"] >= 0.4:
                 cases = db.search_cases(conn, name=fuzzy[0]["name"], county=county, limit=50)
 
-        if not cases:
-            return {"name": name, "cases": [], "message": "No cases found"}
+    # Step 2: Live search if not in DB
+    if not cases:
+        from ujs.core import search_by_name
+        from ujs.modules.docket_pdf import analyze_docket
+        parts = name.strip().split()
+        search_attempts = []
+        if len(parts) >= 2:
+            search_attempts.append((parts[-1], parts[0]))
+            search_attempts.append((parts[0], parts[-1]))
+        search_attempts.append((name, None))
 
-        # Get the canonical name from first result
+        for search_county in ([county] if county else ["Lehigh", "Northampton"]):
+            for last, first in search_attempts:
+                try:
+                    results = search_by_name(last, first=first, county=search_county)
+                    if results:
+                        with db.connect() as conn:
+                            db.upsert_cases(conn, results)
+                        break
+                except Exception:
+                    pass
+
+        # Analyze top 3 active cases
+        with db.connect() as conn:
+            cases = db.search_cases(conn, name=name, limit=50)
+        if cases:
+            for c in sorted(cases, key=lambda c: c.get("filing_date", ""), reverse=True)[:5]:
+                if "active" in c["status"].lower():
+                    try:
+                        with tempfile.TemporaryDirectory() as d:
+                            analysis = analyze_docket(c["docket_number"], out_dir=d)
+                        with db.connect() as conn:
+                            db.detect_and_store_changes(conn, c["docket_number"], analysis)
+                    except Exception:
+                        pass
+
+        # Re-fetch
+        with db.connect() as conn:
+            cases = db.search_cases(conn, name=name, limit=50)
+
+    if not cases:
+        return {"name": name, "cases": [], "message": "No cases found in Lehigh, Northampton, or statewide courts"}
+
+    # Step 3: Build profile
+    with db.connect() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         docket_numbers = [c["docket_number"] for c in cases]
 
