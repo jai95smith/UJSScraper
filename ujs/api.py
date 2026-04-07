@@ -849,24 +849,37 @@ def ask_question_get(q: str = Query(..., description="Your question")):
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
+class AskStreamRequest(BaseModel):
+    question: str
+    history: Optional[List[dict]] = None
+
 @app.get("/ask/stream", tags=["Chat"])
-async def ask_stream(q: str = Query(..., description="Your question")):
-    """Ask a question with streaming response — text appears as it's generated."""
+async def ask_stream_get(q: str = Query(..., description="Your question")):
+    """Ask via GET (browser URL bar)."""
     from starlette.responses import StreamingResponse
     from ujs.chat import ask_stream as _ask_stream
-
-    def _sse_wrap(gen):
-        for chunk in gen:
-            # Encode newlines so SSE doesn't split them into separate events
-            encoded = chunk.replace("\n", "\\n")
-            yield f"data: {encoded}\n\n"
-        yield "data: [DONE]\n\n"
-
     return StreamingResponse(
         _sse_wrap(_ask_stream(q)),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+@app.post("/ask/stream", tags=["Chat"])
+async def ask_stream_post(body: AskStreamRequest):
+    """Ask with conversation history for follow-up questions."""
+    from starlette.responses import StreamingResponse
+    from ujs.chat import ask_stream as _ask_stream
+    return StreamingResponse(
+        _sse_wrap(_ask_stream(body.question, history=body.history)),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+def _sse_wrap(gen):
+    for chunk in gen:
+        encoded = chunk.replace("\n", "\\n")
+        yield f"data: {encoded}\n\n"
+    yield "data: [DONE]\n\n"
 
 
 # -------------------------------------------------------------------

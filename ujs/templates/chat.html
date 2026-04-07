@@ -50,6 +50,7 @@ const chat = document.getElementById('chat');
 const messages = document.getElementById('messages');
 const input = document.getElementById('q');
 const btn = document.getElementById('btn');
+let conversationHistory = [];
 
 input.addEventListener('keydown', e => { if (e.key === 'Enter' && !btn.disabled) send(); });
 function prefill(q) { input.value = q; input.focus(); }
@@ -83,9 +84,15 @@ async function send() {
   const statusEl = document.getElementById(id + '-status');
   const contentEl = document.getElementById(id);
 
+  conversationHistory.push({role: 'user', content: q});
+
   let fullText = '';
   try {
-    const res = await fetch(API + '/ask/stream?q=' + encodeURIComponent(q));
+    const res = await fetch(API + '/ask/stream', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({question: q, history: conversationHistory.slice(-10)})
+    });
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buf = '';
@@ -110,6 +117,7 @@ async function send() {
       }
     }
     if (!fullText.trim()) contentEl.textContent = 'No answer received.';
+    conversationHistory.push({role: 'assistant', content: fullText});
     statusEl.classList.add('opacity-50');
   } catch (e) {
     contentEl.textContent = 'Error: ' + e.message;

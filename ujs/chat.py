@@ -746,7 +746,7 @@ def ask(question: str, api_key: Optional[str] = None) -> str:
     return answer or "I couldn't find enough data to answer that question. Try being more specific or providing a docket number."
 
 
-def ask_stream(question: str, api_key: Optional[str] = None):
+def ask_stream(question: str, api_key: Optional[str] = None, history: Optional[list] = None):
     """Generator that yields answer chunks as Claude streams them.
     Sends status updates during tool calls so the user sees activity immediately."""
     key = api_key or os.environ.get("ANTHROPIC_API_KEY")
@@ -755,7 +755,13 @@ def ask_stream(question: str, api_key: Optional[str] = None):
         return
 
     client = anthropic.Anthropic(api_key=key)
-    messages = [{"role": "user", "content": question}]
+    # Build messages with conversation history for follow-ups
+    messages = []
+    if history:
+        for h in history[:-1]:  # exclude current question (it's the last one)
+            if h.get("role") in ("user", "assistant") and h.get("content"):
+                messages.append({"role": h["role"], "content": h["content"]})
+    messages.append({"role": "user", "content": question})
 
     yield "Searching court records"
 
