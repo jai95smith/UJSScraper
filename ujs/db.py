@@ -468,6 +468,18 @@ def _diff_analysis(old, new):
             "new": str(new_entry_count),
         })
 
+    # Attorney changes
+    old_attys = set((a.get("name", ""), a.get("role", "")) for a in old.get("attorneys", []))
+    new_attys = set((a.get("name", ""), a.get("role", "")) for a in new.get("attorneys", []))
+    added = new_attys - old_attys
+    removed = old_attys - new_attys
+    if added or removed:
+        changes.append({
+            "field": "attorneys_changed",
+            "old": ", ".join(f"{n} ({r})" for n, r in removed) or None,
+            "new": ", ".join(f"{n} ({r})" for n, r in added) or None,
+        })
+
     # Catch-all: if hashes differ but nothing specific found
     if not changes:
         changes.append({"field": "data_changed", "old": "see analysis", "new": "updated"})
