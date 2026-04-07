@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}PA Court Search{% endblock %}</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        background: '#09090b',
+        card: '#0f0f13',
+        border: '#1e1e24',
+        muted: '#71717a',
+        accent: '#3b82f6',
+      }
+    }
+  }
+}
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 3px; }
+  {% block extra_css %}{% endblock %}
+</style>
+</head>
+<body class="bg-background text-zinc-300 h-screen flex flex-col">
+  <header class="border-b border-border px-6 py-4 flex items-center justify-between shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
+        <svg class="w-4 h-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-sm font-semibold text-zinc-100">PA Court Search</h1>
+        <p class="text-xs text-muted">Lehigh & Northampton Counties</p>
+      </div>
+    </div>
+    <div id="stats" class="text-xs text-muted"></div>
+  </header>
+
+  {% block content %}{% endblock %}
+
+  <script>
+    const API = '{{ api_url }}';
+    fetch(API + '/stats').then(r => r.json()).then(d => {
+      document.getElementById('stats').textContent = d.cases + ' cases indexed';
+    }).catch(() => {});
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

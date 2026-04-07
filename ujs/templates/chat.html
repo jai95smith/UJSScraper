@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+.prose { line-height: 1.7; }
+.prose strong { color: #e4e4e7; font-weight: 600; }
+{% endblock %}
+
+{% block content %}
+<main id="chat" class="flex-1 overflow-y-auto">
+  <div class="max-w-3xl mx-auto px-6 py-8 space-y-6" id="messages">
+    <div id="welcome" class="text-center py-12">
+      <div class="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center mx-auto mb-4">
+        <svg class="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/>
+        </svg>
+      </div>
+      <h2 class="text-lg font-semibold text-zinc-100 mb-2">Ask about PA court records</h2>
+      <p class="text-sm text-muted max-w-md mx-auto mb-6">Search cases, check hearings, look up charges, find attorneys — ask in plain English.</p>
+      <div class="flex flex-wrap gap-2 justify-center">
+        {% for suggestion in suggestions %}
+        <button onclick="prefill('{{ suggestion }}')" class="text-xs bg-card border border-border rounded-full px-3 py-1.5 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition">{{ suggestion }}</button>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="border-t border-border px-6 py-4 shrink-0">
+  <div class="max-w-3xl mx-auto">
+    <div class="flex gap-2 items-center bg-card border border-border rounded-xl px-4 py-2 focus-within:border-zinc-600 transition">
+      <input id="q" type="text" placeholder="Ask a question..."
+        class="flex-1 bg-transparent text-sm text-zinc-100 placeholder-zinc-600 outline-none py-1.5" autofocus />
+      <button id="btn" onclick="send()"
+        class="bg-accent hover:bg-blue-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition">
+        <span id="btn-text">Send</span>
+        <svg id="btn-spin" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+        </svg>
+      </button>
+    </div>
+    <p class="text-[10px] text-zinc-700 text-center mt-2">Powered by Claude AI + PA UJS Portal data</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const chat = document.getElementById('chat');
+const messages = document.getElementById('messages');
+const input = document.getElementById('q');
+const btn = document.getElementById('btn');
+
+input.addEventListener('keydown', e => { if (e.key === 'Enter' && !btn.disabled) send(); });
+function prefill(q) { input.value = q; input.focus(); }
+
+async function send() {
+  const q = input.value.trim();
+  if (!q) return;
+  input.value = '';
+  btn.disabled = true;
+  document.getElementById('btn-text').classList.add('hidden');
+  document.getElementById('btn-spin').classList.remove('hidden');
+
+  const welcome = document.getElementById('welcome');
+  if (welcome) welcome.remove();
+
+  const id = 'r' + Date.now();
+  messages.innerHTML += `
+    <div class="flex justify-end">
+      <div class="bg-accent/10 border border-accent/20 rounded-2xl rounded-tr-sm px-4 py-2.5 max-w-lg">
+        <p class="text-sm text-zinc-200">${esc(q)}</p>
+      </div>
+    </div>
+    <div class="flex justify-start">
+      <div class="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3 max-w-2xl w-full">
+        <div id="${id}-status" class="text-xs text-muted mb-1"></div>
+        <div id="${id}" class="prose text-sm text-zinc-300 whitespace-pre-wrap"></div>
+      </div>
+    </div>`;
+  chat.scrollTop = chat.scrollHeight;
+
+  const statusEl = document.getElementById(id + '-status');
+  const contentEl = document.getElementById(id);
+
+  try {
+    const res = await fetch(API + '/ask/stream?q=' + encodeURIComponent(q));
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6);
+        if (data === '[DONE]') continue;
+        if (data.startsWith('Searching') || data.startsWith('..')) {
+          statusEl.textContent += data;
+        } else {
+          contentEl.textContent += data;
+        }
+        chat.scrollTop = chat.scrollHeight;
+      }
+    }
+    if (!contentEl.textContent.trim()) contentEl.textContent = 'No answer received.';
+    statusEl.classList.add('opacity-50');
+  } catch (e) {
+    contentEl.textContent = 'Error: ' + e.message;
+  }
+
+  btn.disabled = false;
+  document.getElementById('btn-text').classList.remove('hidden');
+  document.getElementById('btn-spin').classList.add('hidden');
+  input.focus();
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+</script>
+{% endblock %}
