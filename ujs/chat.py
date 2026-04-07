@@ -389,8 +389,13 @@ def _execute_tool(name, inputs):
             )
             if not results:
                 return f"No cases found on UJS for {inputs.get('first_name', '')} {inputs['last_name']}"
-            # Store discovered cases in DB for future queries
+            # Store discovered cases in DB
             db.upsert_cases(conn, results)
+            # Queue the most recent cases for deep Gemini analysis
+            queued = 0
+            for r in results[:5]:
+                db.queue_ingest(conn, r["docket_number"], priority=3)
+                queued += 1
             return json.dumps([dict(r) for r in results[:20]], default=str)
 
         elif name == "get_case_changes":
