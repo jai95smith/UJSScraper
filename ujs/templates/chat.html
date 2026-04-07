@@ -5,6 +5,7 @@
 .prose strong { color: #e4e4e7; font-weight: 600; }
 .chart-wrap { max-width: 100%; }
 .chart-wrap canvas { width: 100% !important; height: auto !important; max-height: 300px; }
+.prose { overflow-wrap: break-word; word-break: break-word; }
 {% endblock %}
 
 {% block layout %}
@@ -23,11 +24,13 @@
   </button>
 </div>
 
-<!-- Sidebar overlay (mobile) -->
-<div id="sidebar-overlay" onclick="toggleSidebar()" class="hidden fixed inset-0 bg-black/50 z-40 md:hidden"></div>
+<!-- Mobile overlay -->
+<div id="sidebar-overlay" class="hidden fixed inset-0 z-40 md:hidden">
+  <div class="absolute inset-0 bg-black/60" onclick="toggleSidebar()"></div>
+</div>
 
 <!-- Sidebar -->
-<aside id="sidebar" class="fixed md:relative z-50 w-64 bg-sidebar border-r border-border flex flex-col shrink-0 h-full -translate-x-full md:translate-x-0 transition-transform">
+<aside id="sidebar" class="fixed md:relative z-50 w-64 bg-sidebar border-r border-border flex flex-col shrink-0 h-full -translate-x-full md:translate-x-0 transition-transform duration-200">
   <div class="p-4 border-b border-border flex items-center justify-between">
     <div class="flex items-center gap-2">
       <div class="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center">
@@ -185,8 +188,8 @@ function loadChat(id) {
     } else if (m.role === 'assistant') {
       const rid = 'restored-' + i;
       messages.innerHTML += `<div class="flex justify-start">
-        <div class="bg-card border border-border rounded-2xl rounded-bl-md px-5 py-4 max-w-[95%] md:max-w-2xl w-fit min-w-[200px]">
-          <div id="${rid}" class="prose text-sm text-zinc-300 leading-relaxed"></div>
+        <div class="bg-card border border-border rounded-2xl rounded-bl-md px-4 md:px-5 py-3 md:py-4 max-w-[95%] md:max-w-2xl w-fit min-w-[180px] md:min-w-[200px] overflow-hidden">
+          <div id="${rid}" class="prose text-sm text-zinc-300 leading-relaxed break-words"></div>
         </div>
       </div>`;
       setTimeout(() => {
@@ -325,7 +328,7 @@ function esc(s) { const d = document.createElement('div'); d.textContent = s; re
 
 function userBubble(text) {
   return `<div class="flex justify-end">
-    <div class="bg-zinc-800 border border-zinc-700/50 rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] md:max-w-lg">
+    <div class="bg-zinc-800 border border-zinc-700/50 rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] md:max-w-lg break-words">
       <p class="text-sm text-zinc-100 leading-relaxed">${esc(text)}</p>
     </div>
   </div>`;
@@ -333,9 +336,9 @@ function userBubble(text) {
 
 function botBubbleStart(statusId, contentId) {
   return `<div class="flex justify-start">
-    <div class="bg-card border border-border rounded-2xl rounded-bl-md px-5 py-4 max-w-[95%] md:max-w-2xl w-fit min-w-[200px]">
-      <div id="${statusId}" class="text-[11px] text-zinc-600 mb-2 font-mono"></div>
-      <div id="${contentId}" class="prose text-sm text-zinc-300 leading-relaxed"></div>
+    <div class="bg-card border border-border rounded-2xl rounded-bl-md px-4 md:px-5 py-3 md:py-4 max-w-[95%] md:max-w-2xl w-fit min-w-[180px] md:min-w-[200px] overflow-hidden">
+      <div id="${statusId}" class="text-[11px] text-zinc-600 mb-2 font-mono truncate"></div>
+      <div id="${contentId}" class="prose text-sm text-zinc-300 leading-relaxed break-words"></div>
     </div>
   </div>`;
 }
