@@ -55,7 +55,7 @@
 <!-- Main chat area -->
 <div class="flex-1 flex flex-col min-w-0 pt-14 md:pt-0">
   <main id="chat" class="flex-1 overflow-y-auto">
-    <div class="max-w-3xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-4 md:space-y-6" id="messages">
+    <div class="max-w-2xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-5" id="messages">
     </div>
   </main>
 
@@ -181,10 +181,14 @@ function loadChat(id) {
   for (let i = 0; i < conversationHistory.length; i++) {
     const m = conversationHistory[i];
     if (m.role === 'user') {
-      messages.innerHTML += `<div class="flex justify-end"><div class="bg-accent/10 border border-accent/20 rounded-2xl rounded-tr-sm px-4 py-2.5 max-w-lg"><p class="text-sm text-zinc-200">${esc(m.content)}</p></div></div>`;
+      messages.innerHTML += userBubble(m.content);
     } else if (m.role === 'assistant') {
       const rid = 'restored-' + i;
-      messages.innerHTML += `<div class="flex justify-start"><div class="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3 max-w-2xl w-full"><div id="${rid}" class="prose text-sm text-zinc-300"></div></div></div>`;
+      messages.innerHTML += `<div class="flex justify-start">
+        <div class="bg-card border border-border rounded-2xl rounded-bl-md px-5 py-4 max-w-[95%] md:max-w-2xl w-fit min-w-[200px]">
+          <div id="${rid}" class="prose text-sm text-zinc-300 leading-relaxed"></div>
+        </div>
+      </div>`;
       setTimeout(() => {
         const el = document.getElementById(rid);
         if (el) renderFinalResponse(el, m.content, rid);
@@ -259,18 +263,7 @@ async function send() {
   saveChats(); // Save immediately so user message persists if page closes
 
   const id = 'r' + Date.now();
-  messages.innerHTML += `
-    <div class="flex justify-end">
-      <div class="bg-accent/10 border border-accent/20 rounded-2xl rounded-tr-sm px-4 py-2.5 max-w-lg">
-        <p class="text-sm text-zinc-200">${esc(q)}</p>
-      </div>
-    </div>
-    <div class="flex justify-start">
-      <div class="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3 max-w-2xl w-full">
-        <div id="${id}-status" class="text-xs text-muted mb-1"></div>
-        <div id="${id}" class="prose text-sm text-zinc-300"></div>
-      </div>
-    </div>`;
+  messages.innerHTML += userBubble(q) + botBubbleStart(id + '-status', id);
   chat.scrollTop = chat.scrollHeight;
 
   const statusEl = document.getElementById(id + '-status');
@@ -330,6 +323,31 @@ async function send() {
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
+function userBubble(text) {
+  return `<div class="flex justify-end">
+    <div class="bg-zinc-800 border border-zinc-700/50 rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] md:max-w-lg">
+      <p class="text-sm text-zinc-100 leading-relaxed">${esc(text)}</p>
+    </div>
+  </div>`;
+}
+
+function botBubbleStart(statusId, contentId) {
+  return `<div class="flex justify-start">
+    <div class="bg-card border border-border rounded-2xl rounded-bl-md px-5 py-4 max-w-[95%] md:max-w-2xl w-fit min-w-[200px]">
+      <div id="${statusId}" class="text-[11px] text-zinc-600 mb-2 font-mono"></div>
+      <div id="${contentId}" class="prose text-sm text-zinc-300 leading-relaxed"></div>
+    </div>
+  </div>`;
+}
+
+function botBubbleStatic(content) {
+  return `<div class="flex justify-start">
+    <div class="bg-card border border-border rounded-2xl rounded-bl-md px-5 py-4 max-w-[95%] md:max-w-2xl w-fit min-w-[200px]">
+      <div class="prose text-sm text-zinc-300 leading-relaxed">${content}</div>
+    </div>
+  </div>`;
+}
+
 function renderFinalResponse(contentEl, text, msgId) {
   // Split text around chart blocks — charts become separate artifacts after the text bubble
   const parts = text.split(/```chart\s*\n([\s\S]*?)```/g);
@@ -356,9 +374,9 @@ function renderFinalResponse(contentEl, text, msgId) {
       const config = JSON.parse(json);
       const cid = 'chart-' + msgId + '-' + i;
       const chartEl = document.createElement('div');
-      chartEl.className = 'max-w-3xl mx-auto';
+      chartEl.className = 'max-w-2xl mx-auto px-4 md:px-6';
       chartEl.innerHTML = `
-        <div class="bg-card border border-border rounded-2xl p-5 my-2">
+        <div class="bg-card border border-border rounded-2xl rounded-bl-md p-5">
           <canvas id="${cid}" style="width:100%;max-height:320px;"></canvas>
         </div>`;
       parentBubble.parentNode.insertBefore(chartEl, parentBubble.nextSibling);
