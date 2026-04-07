@@ -377,17 +377,17 @@ function renderFinalResponse(contentEl, text, msgId) {
     if (i % 2 === 0) textContent += parts[i]; else chartConfigs.push(parts[i].trim());
   }
   contentEl.innerHTML = renderMd(textContent.trim());
-  const parent = contentEl.closest('.flex.justify-start');
+  const parent = contentEl.parentElement;
   chartConfigs.forEach((json, i) => {
     try {
       const config = JSON.parse(json);
       const cid = 'chart-' + msgId + '-' + i;
       const el = document.createElement('div');
-      el.className = 'max-w-2xl mx-auto px-4 md:px-6';
+      el.className = 'max-w-2xl py-2';
       el.innerHTML = `<div class="bg-navy/50 border border-navy-border rounded-xl p-4"><canvas id="${cid}" style="width:100%;max-height:300px;"></canvas></div>`;
       parent.parentNode.insertBefore(el, parent.nextSibling);
       setTimeout(() => renderChart(cid, config), 300);
-    } catch(e) {}
+    } catch(e) { console.error('Chart render error:', e); }
   });
 }
 
