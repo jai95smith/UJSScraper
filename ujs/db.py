@@ -82,7 +82,20 @@ def upsert_case(conn, case):
     is_new = row[0] if row else False
 
     # Store participant from search results if present
-    participant = " ".join(case.get("participant", "").split())  # normalize whitespace
+    participant = " ".join(case.get("participant", "").split())
+    # For appellate cases without participant, extract from caption
+    if not participant and case.get("court_type") == "Appellate":
+        caption = case.get("caption", "")
+        if " v. " in caption:
+            parts = caption.split(" v. ", 1)
+            for part in parts:
+                name = part.strip().split(",")[0].strip() if "," in part else part.strip()
+                if name and len(name) > 2:
+                    cur.execute("""
+                        INSERT INTO participants (docket_number, name, role)
+                        VALUES (%s, %s, 'party')
+                        ON CONFLICT (docket_number, name, role) DO NOTHING
+                    """, (case["docket_number"], name))
     if participant:
         cur.execute("""
             INSERT INTO participants (docket_number, name, dob, role)
