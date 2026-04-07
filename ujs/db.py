@@ -782,14 +782,17 @@ def get_filing_stats(conn, county=None, period="daily", days=30):
         county_clause = "WHERE county ILIKE %s"
         params.append(county)
     # Group by filing_date (already MM/DD/YYYY strings)
+    where_parts = ["filing_date != ''", f"TO_DATE(filing_date, 'MM/DD/YYYY') >= CURRENT_DATE - INTERVAL '{days} days'"]
+    if county:
+        where_parts.append("county ILIKE %s")
     cur.execute(f"""
         SELECT filing_date, COUNT(*) as count,
                SUM(CASE WHEN docket_number LIKE '%%-CR-%%' THEN 1 ELSE 0 END) as criminal,
                SUM(CASE WHEN docket_number LIKE '%%-TR-%%' THEN 1 ELSE 0 END) as traffic,
                SUM(CASE WHEN docket_number LIKE '%%-CV-%%' THEN 1 ELSE 0 END) as civil
-        FROM cases {county_clause}
+        FROM cases WHERE {' AND '.join(where_parts)}
         GROUP BY filing_date
-        ORDER BY filing_date DESC
+        ORDER BY TO_DATE(filing_date, 'MM/DD/YYYY') DESC
         LIMIT %s
     """, params + [days])
     return cur.fetchall()

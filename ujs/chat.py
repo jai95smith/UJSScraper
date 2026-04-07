@@ -593,9 +593,12 @@ def _execute_tool(name, inputs):
                     SELECT filing_date, COUNT(*) as total,
                         SUM(CASE WHEN docket_number LIKE '%%-CR-%%' THEN 1 ELSE 0 END) as criminal,
                         SUM(CASE WHEN docket_number LIKE '%%-TR-%%' THEN 1 ELSE 0 END) as traffic
-                    FROM cases c WHERE filing_date != '' {county_clause.replace('AND c.', 'AND ')}
-                    GROUP BY filing_date ORDER BY filing_date DESC LIMIT %s
-                """, county_params + [days])
+                    FROM cases c WHERE filing_date != ''
+                    AND TO_DATE(filing_date, 'MM/DD/YYYY') >= CURRENT_DATE - INTERVAL '%s days'
+                    {county_clause.replace('AND c.', 'AND ')}
+                    GROUP BY filing_date
+                    ORDER BY TO_DATE(filing_date, 'MM/DD/YYYY') DESC
+                """, [days] + county_params)
                 return json.dumps([dict(r) for r in cur2.fetchall()], default=str)
 
             elif stat == "hearing_counts":
