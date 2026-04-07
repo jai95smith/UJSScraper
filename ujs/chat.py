@@ -179,6 +179,20 @@ TOOLS = [
         },
     },
     {
+        "name": "get_stats_query",
+        "description": "Get computed statistics from the database. Use this for any question involving counts, averages, percentages, trends, or comparisons. Available stat types: case_counts, bail_stats, charge_breakdown, filing_trend, hearing_counts, repeat_offenders",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "stat_type": {"type": "string", "enum": ["case_counts", "bail_stats", "charge_breakdown", "filing_trend", "hearing_counts", "repeat_offenders"]},
+                "county": {"type": "string"},
+                "case_type": {"type": "string", "description": "Criminal, Traffic, Civil"},
+                "days": {"type": "integer", "default": 30},
+            },
+            "required": ["stat_type"],
+        },
+    },
+    {
         "name": "get_case_changes",
         "description": "Get recent changes/updates to a specific case or all cases",
         "input_schema": {
@@ -442,6 +456,106 @@ def _execute_tool(name, inputs):
                               for r in results[:15]],
             }
             return json.dumps(output, default=str)
+
+        elif name == "get_stats_query":
+            import psycopg2.extras as extras
+            cur2 = conn.cursor(cursor_factory=extras.RealDictCursor)
+            stat = inputs["stat_type"]
+            county = inputs.get("county")
+            county_clause = "AND c.county ILIKE %s" if county else ""
+            county_params = [county] if county else []
+
+            if stat == "case_counts":
+                cur2.execute(f"""
+                    SELECT county,
+                        COUNT(*) as total,
+                        SUM(CASE WHEN docket_number LIKE '%%-CR-%%' THEN 1 ELSE 0 END) as criminal,
+                        SUM(CASE WHEN docket_number LIKE '%%-TR-%%' THEN 1 ELSE 0 END) as traffic,
+                        SUM(CASE WHEN docket_number LIKE '%%-CV-%%' THEN 1 ELSE 0 END) as civil,
+                        SUM(CASE WHEN docket_number LIKE '%%-NT-%%' THEN 1 ELSE 0 END) as non_traffic,
+                        SUM(CASE WHEN docket_number LIKE '%%-LT-%%' THEN 1 ELSE 0 END) as landlord_tenant,
+                        SUM(CASE WHEN status ILIKE '%%active%%' THEN 1 ELSE 0 END) as active,
+                        SUM(CASE WHEN status ILIKE '%%closed%%' THEN 1 ELSE 0 END) as closed,
+                        ROUND(SUM(CASE WHEN docket_number LIKE '%%-CR-%%' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0) * 100, 1) as criminal_pct,
+                        ROUND(SUM(CASE WHEN docket_number LIKE '%%-TR-%%' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0) * 100, 1) as traffic_pct
+                    FROM cases c WHERE county != '' {county_clause.replace('AND c.', 'AND ')}
+                    GROUP BY county ORDER BY total DESC
+                """, county_params)
+                return json.dumps([dict(r) for r in cur2.fetchall()], default=str)
+
+            elif stat == "bail_stats":
+                amt = "REPLACE(REPLACE(b.amount, '$', ''), ',', '')::numeric"
+                cur2.execute(f"""
+                    SELECT b.bail_type, COUNT(*) as count,
+                        MIN({amt}) as min_amount,
+                        MAX({amt}) as max_amount,
+                        ROUND(AVG({amt}), 2) as avg_amount
+                    FROM bail b JOIN cases c ON b.docket_number = c.docket_number
+                    WHERE b.amount IS NOT NULL AND b.amount != '' {"AND c.county ILIKE %s" if county else ""}
+                    GROUP BY b.bail_type ORDER BY count DESC
+                """, county_params)
+                by_type = [dict(r) for r in cur2.fetchall()]
+                cur2.execute(f"""
+                    SELECT COUNT(*) as total_with_bail,
+                        ROUND(AVG({amt}), 2) as overall_avg,
+                        MIN({amt}) as overall_min,
+                        MAX({amt}) as overall_max
+                    FROM bail b JOIN cases c ON b.docket_number = c.docket_number
+                    WHERE b.amount IS NOT NULL AND b.amount != '' AND {amt} > 0
+                    {"AND c.county ILIKE %s" if county else ""}
+                """, county_params)
+                overall = dict(cur2.fetchone())
+                return json.dumps({"by_type": by_type, "overall": overall}, default=str)
+
+            elif stat == "charge_breakdown":
+                cur2.execute(f"""
+                    SELECT ch.description, ch.grade, COUNT(*) as count,
+                        SUM(CASE WHEN ch.disposition ILIKE '%%guilty%%' THEN 1 ELSE 0 END) as guilty,
+                        SUM(CASE WHEN ch.disposition ILIKE '%%dismissed%%' OR ch.disposition ILIKE '%%quashed%%' THEN 1 ELSE 0 END) as dismissed,
+                        SUM(CASE WHEN ch.disposition IS NULL OR ch.disposition = '' THEN 1 ELSE 0 END) as pending,
+                        ROUND(SUM(CASE WHEN ch.disposition ILIKE '%%guilty%%' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0) * 100, 1) as guilty_rate
+                    FROM charges ch JOIN cases c ON ch.docket_number = c.docket_number
+                    WHERE ch.description != '' {county_clause}
+                    GROUP BY ch.description, ch.grade ORDER BY count DESC LIMIT 20
+                """, county_params)
+                return json.dumps([dict(r) for r in cur2.fetchall()], default=str)
+
+            elif stat == "filing_trend":
+                days = inputs.get("days", 30)
+                cur2.execute(f"""
+                    SELECT filing_date, COUNT(*) as total,
+                        SUM(CASE WHEN docket_number LIKE '%%-CR-%%' THEN 1 ELSE 0 END) as criminal,
+                        SUM(CASE WHEN docket_number LIKE '%%-TR-%%' THEN 1 ELSE 0 END) as traffic
+                    FROM cases c WHERE filing_date != '' {county_clause.replace('AND c.', 'AND ')}
+                    GROUP BY filing_date ORDER BY filing_date DESC LIMIT %s
+                """, county_params + [days])
+                return json.dumps([dict(r) for r in cur2.fetchall()], default=str)
+
+            elif stat == "hearing_counts":
+                cur2.execute(f"""
+                    SELECT e.event_type, COUNT(*) as count,
+                        SUM(CASE WHEN e.event_status = 'Scheduled' THEN 1 ELSE 0 END) as scheduled,
+                        SUM(CASE WHEN e.event_status = 'Continued' THEN 1 ELSE 0 END) as continued,
+                        SUM(CASE WHEN e.event_status = 'Cancelled' THEN 1 ELSE 0 END) as cancelled
+                    FROM events e JOIN cases c ON e.docket_number = c.docket_number
+                    WHERE TRUE {county_clause}
+                    GROUP BY e.event_type ORDER BY count DESC LIMIT 15
+                """, county_params)
+                return json.dumps([dict(r) for r in cur2.fetchall()], default=str)
+
+            elif stat == "repeat_offenders":
+                cur2.execute(f"""
+                    SELECT p.name, COUNT(DISTINCT p.docket_number) as case_count,
+                        STRING_AGG(DISTINCT c.county, ', ') as counties,
+                        SUM(CASE WHEN c.status ILIKE '%%active%%' THEN 1 ELSE 0 END) as active_cases
+                    FROM participants p JOIN cases c ON p.docket_number = c.docket_number
+                    WHERE TRUE {county_clause}
+                    GROUP BY p.name HAVING COUNT(DISTINCT p.docket_number) >= 5
+                    ORDER BY case_count DESC LIMIT 15
+                """, county_params)
+                return json.dumps([dict(r) for r in cur2.fetchall()], default=str)
+
+            return "Unknown stat type"
 
         elif name == "get_case_changes":
             changes = db.get_changes(conn, docket_number=inputs.get("docket_number"), limit=20)
