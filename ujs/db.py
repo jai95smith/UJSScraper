@@ -675,7 +675,9 @@ def fuzzy_name_search(conn, name, limit=10):
 
 def search_by_judge(conn, judge_name, county=None, limit=100):
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    params = [f"%{judge_name}%"]
+    parts = judge_name.strip().split()
+    pattern = "%" + "%".join(parts) + "%" if len(parts) >= 2 else f"%{judge_name}%"
+    params = [pattern]
     county_clause = ""
     if county:
         county_clause = "AND c.county ILIKE %s"
@@ -693,7 +695,13 @@ def search_by_judge(conn, judge_name, county=None, limit=100):
 
 def search_by_attorney(conn, attorney_name, role=None, county=None, limit=100):
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    params = [f"%{attorney_name}%"]
+    # Split name parts for flexible matching ("Michael Murphy" → "%Michael%Murphy%")
+    parts = attorney_name.strip().split()
+    if len(parts) >= 2:
+        pattern = "%" + "%".join(parts) + "%"
+    else:
+        pattern = f"%{attorney_name}%"
+    params = [pattern]
     clauses = ["a.name ILIKE %s"]
     if role:
         clauses.append("a.role ILIKE %s")
