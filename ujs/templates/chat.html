@@ -132,7 +132,23 @@ async function send() {
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
 function renderMd(text) {
-  return text
+  // Extract chart blocks before MD rendering
+  let html = text;
+  const chartRegex = /```chart\n([\s\S]*?)```/g;
+  let chartIndex = 0;
+  html = html.replace(chartRegex, (match, json) => {
+    try {
+      const config = JSON.parse(json);
+      const id = 'chart-' + Date.now() + '-' + (chartIndex++);
+      setTimeout(() => renderChart(id, config), 100);
+      return `<div class="my-4 p-3 bg-zinc-900 rounded-xl border border-border"><canvas id="${id}" height="200"></canvas></div>`;
+    } catch(e) {
+      return '<div class="text-red-400 text-xs">Chart error: ' + e.message + '</div>';
+    }
+  });
+
+  // Standard markdown
+  html = html
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
@@ -142,6 +158,40 @@ function renderMd(text) {
     .replace(/^\d+\. (.+)$/gm, '<div class="pl-3 border-l-2 border-accent/30 my-0.5">$1</div>')
     .replace(/\n\n/g, '<br><br>')
     .replace(/\n/g, '<br>');
+
+  // Re-insert chart divs (they got escaped)
+  html = html.replace(/&lt;div class="my-4/g, '<div class="my-4');
+  html = html.replace(/&lt;canvas/g, '<canvas');
+  html = html.replace(/&lt;\/canvas&gt;&lt;\/div&gt;/g, '</canvas></div>');
+  return html;
+}
+
+function renderChart(id, config) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const colors = ['#3b82f6','#8b5cf6','#ec4899','#f59e0b','#10b981','#06b6d4','#f43f5e','#84cc16'];
+  if (config.datasets) {
+    config.datasets.forEach((ds, i) => {
+      ds.backgroundColor = ds.backgroundColor || colors.map(c => c + '80');
+      ds.borderColor = ds.borderColor || colors;
+      ds.borderWidth = ds.borderWidth || 1;
+    });
+  }
+  new Chart(el, {
+    type: config.type || 'bar',
+    data: { labels: config.labels, datasets: config.datasets },
+    options: {
+      responsive: true,
+      plugins: {
+        title: { display: !!config.title, text: config.title, color: '#e4e4e7' },
+        legend: { labels: { color: '#a1a1aa' } }
+      },
+      scales: config.type === 'pie' || config.type === 'doughnut' ? {} : {
+        x: { ticks: { color: '#71717a' }, grid: { color: '#1e1e24' } },
+        y: { ticks: { color: '#71717a' }, grid: { color: '#1e1e24' } }
+      }
+    }
+  });
 }
 </script>
 {% endblock %}

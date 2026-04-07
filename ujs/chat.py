@@ -35,6 +35,11 @@ Date awareness:
 - When the user asks about time periods, use the appropriate date column, not DB presence.
 - Always include offense dates and filing dates in answers so users have context.
 
+Charts:
+- Use render_chart when showing comparisons, trends, or distributions.
+- Always include a text summary alongside the chart.
+- After calling render_chart, include the exact ```chart block it returns in your response text.
+
 Custom SQL tips:
 - Dates are TEXT in MM/DD/YYYY format. To compare: TO_DATE(field, 'MM/DD/YYYY')
 - Bail amounts are TEXT like '$10,000.00'. To do math: REPLACE(REPLACE(amount, '$', ''), ',', '')::numeric
@@ -229,6 +234,30 @@ Key patterns:
                 "sql": {"type": "string", "description": "SELECT query only — no INSERT/UPDATE/DELETE/DROP/ALTER"},
             },
             "required": ["sql"],
+        },
+    },
+    {
+        "name": "render_chart",
+        "description": "Render a chart in the user's chat interface. Use this when data is better shown visually — filing trends, case type breakdowns, bail comparisons, charge distributions, etc. Returns a chart block that the frontend renders. Always include a text summary alongside the chart.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "type": {"type": "string", "enum": ["bar", "line", "pie", "doughnut"], "description": "Chart type"},
+                "title": {"type": "string", "description": "Chart title"},
+                "labels": {"type": "array", "items": {"type": "string"}, "description": "X-axis labels or pie slice labels"},
+                "datasets": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "label": {"type": "string"},
+                            "data": {"type": "array", "items": {"type": "number"}},
+                        },
+                    },
+                    "description": "One or more data series",
+                },
+            },
+            "required": ["type", "title", "labels", "datasets"],
         },
     },
     {
@@ -644,6 +673,15 @@ def _execute_tool(name, inputs):
                 return json.dumps([dict(r) for r in rows], default=str)
             except Exception as e:
                 return f"Query error: {str(e)[:300]}. Fix the SQL and try again."
+
+        elif name == "render_chart":
+            chart_json = json.dumps({
+                "type": inputs["type"],
+                "title": inputs["title"],
+                "labels": inputs["labels"],
+                "datasets": inputs["datasets"],
+            })
+            return f"CHART_RENDERED. Include this exact block in your response:\n```chart\n{chart_json}\n```"
 
         elif name == "get_case_changes":
             changes = db.get_changes(conn, docket_number=inputs.get("docket_number"), limit=20)
