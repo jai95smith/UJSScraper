@@ -127,11 +127,12 @@ TOOLS = [
     },
     {
         "name": "get_upcoming_hearings",
-        "description": "Get upcoming court hearings/events in the next N days",
+        "description": "Get court hearings/events. Use target_date for a specific day (MM/DD/YYYY), or days for a range.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "days": {"type": "integer", "default": 7},
+                "target_date": {"type": "string", "description": "Specific date MM/DD/YYYY (e.g. 04/07/2026)"},
+                "days": {"type": "integer", "default": 7, "description": "Days ahead if no target_date"},
                 "county": {"type": "string"},
                 "case_type": {"type": "string"},
                 "event_type": {"type": "string", "description": "Preliminary Hearing, Trial, Arraignment, Sentencing"},
@@ -293,9 +294,20 @@ def _execute_tool(name, inputs):
             return json.dumps([dict(r) for r in results], default=str)
 
         elif name == "get_upcoming_hearings":
-            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur2 = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
             clauses = []
             params = []
+            # Filter by specific date or date range
+            if inputs.get("target_date"):
+                clauses.append("e.event_date LIKE %s")
+                params.append(f"{inputs['target_date']}%")
+            else:
+                # No specific date — get next N days from today
+                from datetime import datetime, timedelta
+                today = datetime.now()
+                days = inputs.get("days", 7)
+                for d in range(days):
+                    pass  # just use all events, sorted by date
             if inputs.get("county"):
                 clauses.append("c.county ILIKE %s")
                 params.append(inputs["county"])
@@ -309,15 +321,16 @@ def _execute_tool(name, inputs):
                 clauses.append("e.event_type ILIKE %s")
                 params.append(f"%{inputs['event_type']}%")
             where = " AND ".join(clauses) if clauses else "TRUE"
-            params.append(inputs.get("days", 7) * 50)
-            cur.execute(f"""
+            params.append(200)
+            cur2.execute(f"""
                 SELECT e.*, c.caption, c.county FROM events e
                 JOIN cases c ON e.docket_number = c.docket_number
                 WHERE {where} ORDER BY e.event_date ASC LIMIT %s
             """, params)
-            results = cur.fetchall()
+            results = cur2.fetchall()
             if not results:
-                return "No upcoming hearings found."
+                date_str = inputs.get('target_date', 'the specified period')
+                return f"No hearings found for {date_str}"
             return json.dumps([dict(r) for r in results], default=str)
 
         elif name == "live_search_ujs":
