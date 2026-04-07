@@ -21,9 +21,16 @@ def execute_tool(name, inputs):
 # ---------------------------------------------------------------------------
 
 def _lookup_docket(conn, inputs):
-    case = db.get_case(conn, inputs["docket_number"])
+    from ujs.chat.docket_parser import normalize_docket
+    raw = inputs["docket_number"]
+    normalized, confidence = normalize_docket(raw)
+
+    # Try normalized first
+    case = db.get_case(conn, normalized)
+    if not case and normalized != raw:
+        case = db.get_case(conn, raw)  # fallback to raw
     if not case:
-        return f"No case found for: {inputs['docket_number']}"
+        return f"No case found for: {raw}" + (f" (tried: {normalized})" if normalized != raw else "")
     return json.dumps(dict(case), default=str)
 
 
