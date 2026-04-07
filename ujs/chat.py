@@ -36,11 +36,10 @@ Date awareness:
 - Always include offense dates and filing dates in answers so users have context.
 
 Data completeness:
-- The DB has 65,000+ cases but only ~1,100 have been fully analyzed with charge details.
-- Charge, bail, judge, and attorney searches only cover analyzed cases.
-- When answering about charges or specific case details, always caveat that results
-  are based on analyzed cases only, not all cases in the database.
-- If a charge search returns 0, say "no results found in analyzed cases" not "there were 0."
+- Not all cases have been fully analyzed. Call get_analysis_coverage when answering about
+  charges, bail, judges, or attorneys to get exact coverage numbers.
+- Include the coverage percentage in your answer so the user knows how complete the data is.
+- If a charge search returns 0, report coverage and say "not found in analyzed cases."
 
 Charts:
 - Use render_chart when showing comparisons, trends, or distributions.
@@ -241,6 +240,17 @@ Key patterns:
                 "sql": {"type": "string", "description": "SELECT query only — no INSERT/UPDATE/DELETE/DROP/ALTER"},
             },
             "required": ["sql"],
+        },
+    },
+    {
+        "name": "get_analysis_coverage",
+        "description": "Get how many cases have been fully analyzed vs total. Call this when answering charge, bail, attorney, or judge questions to report data completeness.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "county": {"type": "string"},
+                "case_type": {"type": "string", "description": "Criminal, Traffic, Civil"},
+            },
         },
     },
     {
@@ -683,6 +693,41 @@ def _execute_tool(name, inputs):
                 return json.dumps([dict(r) for r in rows], default=str)
             except Exception as e:
                 return f"Query error: {str(e)[:300]}. Fix the SQL and try again."
+
+        elif name == "get_analysis_coverage":
+            import psycopg2.extras as extras
+            cur2 = conn.cursor(cursor_factory=extras.RealDictCursor)
+            clauses_total = ["TRUE"]
+            clauses_analyzed = ["TRUE"]
+            params = []
+            if inputs.get("county"):
+                clauses_total.append("c.county ILIKE %s")
+                clauses_analyzed.append("c.county ILIKE %s")
+                params.append(inputs["county"])
+            if inputs.get("case_type"):
+                dtype_map = {"criminal": "-CR-", "civil": "-CV-", "traffic": "-TR-"}
+                code = dtype_map.get(inputs["case_type"].lower(), "")
+                if code:
+                    clauses_total.append("c.docket_number LIKE %s")
+                    clauses_analyzed.append("c.docket_number LIKE %s")
+                    params.append(f"%{code}%")
+            cur2.execute(f"""
+                SELECT COUNT(*) as total FROM cases c WHERE {' AND '.join(clauses_total)}
+            """, params)
+            total = cur2.fetchone()["total"]
+            cur2.execute(f"""
+                SELECT COUNT(*) as analyzed FROM cases c
+                JOIN analyses a ON c.docket_number = a.docket_number
+                WHERE {' AND '.join(clauses_analyzed)}
+            """, params)
+            analyzed = cur2.fetchone()["analyzed"]
+            pct = round(analyzed / total * 100, 1) if total > 0 else 0
+            return json.dumps({
+                "total_cases": total,
+                "analyzed_cases": analyzed,
+                "coverage_pct": pct,
+                "note": f"{analyzed} of {total} cases ({pct}%) have full charge/bail/attorney data. Results reflect analyzed cases only."
+            })
 
         elif name == "render_chart":
             chart_json = json.dumps({
