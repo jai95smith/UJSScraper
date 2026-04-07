@@ -647,7 +647,16 @@ async def ask_stream(q: str = Query(..., description="Your question")):
     from starlette.responses import StreamingResponse
     from ujs.chat import ask_stream as _ask_stream
 
-    return StreamingResponse(_ask_stream(q), media_type="text/plain")
+    def _sse_wrap(gen):
+        for chunk in gen:
+            yield f"data: {chunk}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        _sse_wrap(_ask_stream(q)),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # -------------------------------------------------------------------
