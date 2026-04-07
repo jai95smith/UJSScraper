@@ -397,8 +397,9 @@ def _execute_tool(name, inputs):
                         break
             if not results:
                 return f"No cases found on UJS for {inputs.get('first_name', '')} {inputs['last_name']}"
-            # Store discovered cases in DB
-            db.upsert_cases(conn, results)
+            # Store discovered cases in DB — commit immediately so analyses can reference them
+            with db.connect() as conn_store:
+                db.upsert_cases(conn_store, results)
             # Sort by filing date — parse MM/DD/YYYY to sortable format
             def _parse_date(d):
                 try:
@@ -416,19 +417,22 @@ def _execute_tool(name, inputs):
                     try:
                         with tempfile.TemporaryDirectory() as d:
                             analysis = analyze_docket(r["docket_number"], out_dir=d)
-                        db.detect_and_store_changes(conn, r["docket_number"], analysis)
+                        # Use separate connection for storing to avoid nesting issues
+                        with db.connect() as conn2:
+                            db.detect_and_store_changes(conn2, r["docket_number"], analysis)
                         analyzed.append({"docket_number": r["docket_number"], "analysis": analysis})
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        print(f"[live_search] Analyze error {r['docket_number']}: {e}")
             # If no active cases analyzed, try the most recent one
             if not analyzed:
                 try:
                     with tempfile.TemporaryDirectory() as d:
                         analysis = analyze_docket(results[0]["docket_number"], out_dir=d)
-                    db.detect_and_store_changes(conn, results[0]["docket_number"], analysis)
+                    with db.connect() as conn2:
+                        db.detect_and_store_changes(conn2, results[0]["docket_number"], analysis)
                     analyzed.append({"docket_number": results[0]["docket_number"], "analysis": analysis})
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[live_search] Fallback analyze error: {e}")
             output = {
                 "analyzed_cases": analyzed,
                 "all_cases": [{"docket_number": r["docket_number"],
