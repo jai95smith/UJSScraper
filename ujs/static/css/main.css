@@ -11,5 +11,6 @@
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #2a4166; border-radius: 3px; }
-html { overflow: hidden; scrollbar-gutter: stable; }
+html, body { overflow: hidden; }
 * { scrollbar-width: thin; scrollbar-color: #2a4166 transparent; }
+main { overflow-y: overlay; }
