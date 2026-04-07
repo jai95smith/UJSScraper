@@ -3,43 +3,73 @@
 {% block extra_css %}
 .prose { line-height: 1.7; }
 .prose strong { color: #e4e4e7; font-weight: 600; }
+.chart-container { position: relative; width: 100%; max-height: 250px; }
 {% endblock %}
 
-{% block content %}
-<main id="chat" class="flex-1 overflow-y-auto">
-  <div class="max-w-3xl mx-auto px-6 py-8 space-y-6" id="messages">
-    <div id="welcome" class="text-center py-12">
-      <div class="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center mx-auto mb-4">
-        <svg class="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/>
+{% block layout %}
+<!-- Sidebar -->
+<aside id="sidebar" class="w-64 bg-sidebar border-r border-border flex flex-col shrink-0">
+  <div class="p-4 border-b border-border flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <div class="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center">
+        <svg class="w-3.5 h-3.5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
         </svg>
       </div>
-      <h2 class="text-lg font-semibold text-zinc-100 mb-2">Ask about PA court records</h2>
-      <p class="text-sm text-muted max-w-md mx-auto mb-6">Search cases, check hearings, look up charges, find attorneys — ask in plain English.</p>
-      <div class="flex flex-wrap gap-2 justify-center">
-        {% for suggestion in suggestions %}
-        <button onclick="prefill('{{ suggestion }}')" class="text-xs bg-card border border-border rounded-full px-3 py-1.5 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition">{{ suggestion }}</button>
-        {% endfor %}
-      </div>
+      <span class="text-sm font-semibold text-zinc-100">PA Court Search</span>
     </div>
+    <button onclick="newChat()" class="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted hover:text-zinc-200 hover:border-zinc-600 transition" title="New chat">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+      </svg>
+    </button>
   </div>
-</main>
 
-<div class="border-t border-border px-6 py-4 shrink-0">
-  <div class="max-w-3xl mx-auto">
-    <div class="flex gap-2 items-center bg-card border border-border rounded-xl px-4 py-2 focus-within:border-zinc-600 transition">
-      <input id="q" type="text" placeholder="Ask a question..."
-        class="flex-1 bg-transparent text-sm text-zinc-100 placeholder-zinc-600 outline-none py-1.5" autofocus />
-      <button id="btn" onclick="send()"
-        class="bg-accent hover:bg-blue-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition">
-        <span id="btn-text">Send</span>
-        <svg id="btn-spin" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-        </svg>
-      </button>
+  <div id="chat-list" class="flex-1 overflow-y-auto p-2 space-y-1">
+  </div>
+
+  <div class="p-3 border-t border-border">
+    <div id="stats" class="text-[10px] text-muted"></div>
+  </div>
+</aside>
+
+<!-- Main chat area -->
+<div class="flex-1 flex flex-col min-w-0">
+  <main id="chat" class="flex-1 overflow-y-auto">
+    <div class="max-w-3xl mx-auto px-6 py-8 space-y-6" id="messages">
+      <div id="welcome" class="text-center py-16">
+        <div class="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center mx-auto mb-4">
+          <svg class="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/>
+          </svg>
+        </div>
+        <h2 class="text-lg font-semibold text-zinc-100 mb-2">Ask about PA court records</h2>
+        <p class="text-sm text-muted max-w-md mx-auto mb-6">Search cases, check hearings, look up charges, find attorneys — ask in plain English.</p>
+        <div class="flex flex-wrap gap-2 justify-center max-w-lg mx-auto">
+          {% for suggestion in suggestions %}
+          <button onclick="prefill('{{ suggestion }}')" class="text-xs bg-card border border-border rounded-full px-3 py-1.5 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition">{{ suggestion }}</button>
+          {% endfor %}
+        </div>
+      </div>
     </div>
-    <p class="text-[10px] text-zinc-700 text-center mt-2">Powered by Claude AI + PA UJS Portal data</p>
+  </main>
+
+  <div class="border-t border-border px-6 py-4 shrink-0">
+    <div class="max-w-3xl mx-auto">
+      <div class="flex gap-2 items-center bg-card border border-border rounded-xl px-4 py-2 focus-within:border-zinc-600 transition">
+        <input id="q" type="text" placeholder="Ask a question..."
+          class="flex-1 bg-transparent text-sm text-zinc-100 placeholder-zinc-600 outline-none py-1.5" autofocus />
+        <button id="btn" onclick="send()"
+          class="bg-accent hover:bg-blue-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition">
+          <span id="btn-text">Send</span>
+          <svg id="btn-spin" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+          </svg>
+        </button>
+      </div>
+      <p class="text-[10px] text-zinc-700 text-center mt-2">Lehigh & Northampton Counties</p>
+    </div>
   </div>
 </div>
 {% endblock %}
@@ -50,8 +80,66 @@ const chat = document.getElementById('chat');
 const messages = document.getElementById('messages');
 const input = document.getElementById('q');
 const btn = document.getElementById('btn');
-let conversationHistory = [];
 
+let conversationHistory = [];
+let allChats = JSON.parse(localStorage.getItem('ujs_chats') || '[]');
+let currentChatId = null;
+let chartInstances = {};
+
+// Load stats
+fetch(API + '/stats').then(r => r.json()).then(d => {
+  document.getElementById('stats').textContent = d.cases.toLocaleString() + ' cases indexed';
+}).catch(() => {});
+
+// Sidebar
+function renderChatList() {
+  const list = document.getElementById('chat-list');
+  list.innerHTML = allChats.map(c => `
+    <button onclick="loadChat('${c.id}')" class="w-full text-left px-3 py-2 rounded-lg text-xs truncate
+      ${c.id === currentChatId ? 'bg-card text-zinc-200 border border-border' : 'text-zinc-500 hover:text-zinc-300 hover:bg-card/50'}
+      transition">
+      ${esc(c.title || 'New chat')}
+    </button>
+  `).join('');
+}
+
+function newChat() {
+  currentChatId = 'c' + Date.now();
+  conversationHistory = [];
+  allChats.unshift({ id: currentChatId, title: '', messages: [] });
+  saveChats();
+  messages.innerHTML = document.getElementById('welcome') ? '' : '';
+  location.reload();
+}
+
+function loadChat(id) {
+  const c = allChats.find(x => x.id === id);
+  if (!c) return;
+  currentChatId = id;
+  conversationHistory = c.messages || [];
+  // Rebuild UI
+  const welcome = document.getElementById('welcome');
+  if (welcome) welcome.remove();
+  messages.innerHTML = '';
+  conversationHistory.forEach(m => {
+    if (m.role === 'user') {
+      messages.innerHTML += `<div class="flex justify-end"><div class="bg-accent/10 border border-accent/20 rounded-2xl rounded-tr-sm px-4 py-2.5 max-w-lg"><p class="text-sm text-zinc-200">${esc(m.content)}</p></div></div>`;
+    } else {
+      messages.innerHTML += `<div class="flex justify-start"><div class="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3 max-w-2xl w-full"><div class="prose text-sm text-zinc-300">${renderMd(m.content)}</div></div></div>`;
+    }
+  });
+  renderChatList();
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function saveChats() {
+  const current = allChats.find(c => c.id === currentChatId);
+  if (current) current.messages = conversationHistory;
+  localStorage.setItem('ujs_chats', JSON.stringify(allChats.slice(0, 50)));
+  renderChatList();
+}
+
+renderChatList();
 input.addEventListener('keydown', e => { if (e.key === 'Enter' && !btn.disabled) send(); });
 function prefill(q) { input.value = q; input.focus(); }
 
@@ -63,8 +151,19 @@ async function send() {
   document.getElementById('btn-text').classList.add('hidden');
   document.getElementById('btn-spin').classList.remove('hidden');
 
+  // Init chat if needed
+  if (!currentChatId) {
+    currentChatId = 'c' + Date.now();
+    allChats.unshift({ id: currentChatId, title: q.slice(0, 40), messages: [] });
+  }
+  // Set title from first message
+  const current = allChats.find(c => c.id === currentChatId);
+  if (current && !current.title) current.title = q.slice(0, 40);
+
   const welcome = document.getElementById('welcome');
   if (welcome) welcome.remove();
+
+  conversationHistory.push({role: 'user', content: q});
 
   const id = 'r' + Date.now();
   messages.innerHTML += `
@@ -76,15 +175,13 @@ async function send() {
     <div class="flex justify-start">
       <div class="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3 max-w-2xl w-full">
         <div id="${id}-status" class="text-xs text-muted mb-1"></div>
-        <div id="${id}" class="prose text-sm text-zinc-300 whitespace-pre-wrap"></div>
+        <div id="${id}" class="prose text-sm text-zinc-300"></div>
       </div>
     </div>`;
   chat.scrollTop = chat.scrollHeight;
 
   const statusEl = document.getElementById(id + '-status');
   const contentEl = document.getElementById(id);
-
-  conversationHistory.push({role: 'user', content: q});
 
   let fullText = '';
   try {
@@ -118,6 +215,7 @@ async function send() {
     }
     if (!fullText.trim()) contentEl.textContent = 'No answer received.';
     conversationHistory.push({role: 'assistant', content: fullText});
+    saveChats();
     statusEl.classList.add('opacity-50');
   } catch (e) {
     contentEl.textContent = 'Error: ' + e.message;
@@ -132,22 +230,17 @@ async function send() {
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
 function renderMd(text) {
-  // Extract chart blocks before MD rendering
   let html = text;
-  const chartRegex = /```chart\n([\s\S]*?)```/g;
-  let chartIndex = 0;
-  html = html.replace(chartRegex, (match, json) => {
-    try {
-      const config = JSON.parse(json);
-      const id = 'chart-' + Date.now() + '-' + (chartIndex++);
-      setTimeout(() => renderChart(id, config), 100);
-      return `<div class="my-4 p-3 bg-zinc-900 rounded-xl border border-border"><canvas id="${id}" height="200"></canvas></div>`;
-    } catch(e) {
-      return '<div class="text-red-400 text-xs">Chart error: ' + e.message + '</div>';
-    }
+
+  // Extract and preserve chart blocks
+  const charts = [];
+  html = html.replace(/```chart\n([\s\S]*?)```/g, (match, json) => {
+    const placeholder = `__CHART_${charts.length}__`;
+    charts.push(json);
+    return placeholder;
   });
 
-  // Standard markdown
+  // Markdown rendering
   html = html
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
@@ -159,36 +252,55 @@ function renderMd(text) {
     .replace(/\n\n/g, '<br><br>')
     .replace(/\n/g, '<br>');
 
-  // Re-insert chart divs (they got escaped)
-  html = html.replace(/&lt;div class="my-4/g, '<div class="my-4');
-  html = html.replace(/&lt;canvas/g, '<canvas');
-  html = html.replace(/&lt;\/canvas&gt;&lt;\/div&gt;/g, '</canvas></div>');
+  // Re-insert chart blocks
+  charts.forEach((json, i) => {
+    try {
+      const config = JSON.parse(json);
+      const cid = 'chart-' + Date.now() + '-' + i;
+      html = html.replace(`__CHART_${i}__`,
+        `<div class="my-4 p-4 bg-zinc-900/50 rounded-xl border border-border">
+          <div class="chart-container"><canvas id="${cid}"></canvas></div>
+        </div>`);
+      setTimeout(() => renderChart(cid, config), 150);
+    } catch(e) {
+      html = html.replace(`__CHART_${i}__`, '<div class="text-red-400 text-xs">Chart error</div>');
+    }
+  });
+
   return html;
 }
 
 function renderChart(id, config) {
   const el = document.getElementById(id);
   if (!el) return;
+  // Destroy existing chart on same canvas
+  if (chartInstances[id]) { chartInstances[id].destroy(); }
   const colors = ['#3b82f6','#8b5cf6','#ec4899','#f59e0b','#10b981','#06b6d4','#f43f5e','#84cc16'];
   if (config.datasets) {
     config.datasets.forEach((ds, i) => {
-      ds.backgroundColor = ds.backgroundColor || colors.map(c => c + '80');
-      ds.borderColor = ds.borderColor || colors;
+      if (config.type === 'pie' || config.type === 'doughnut') {
+        ds.backgroundColor = colors.slice(0, config.labels.length).map(c => c + 'cc');
+        ds.borderColor = colors.slice(0, config.labels.length);
+      } else {
+        ds.backgroundColor = ds.backgroundColor || colors[i % colors.length] + '80';
+        ds.borderColor = ds.borderColor || colors[i % colors.length];
+      }
       ds.borderWidth = ds.borderWidth || 1;
     });
   }
-  new Chart(el, {
+  chartInstances[id] = new Chart(el, {
     type: config.type || 'bar',
     data: { labels: config.labels, datasets: config.datasets },
     options: {
       responsive: true,
+      maintainAspectRatio: true,
       plugins: {
-        title: { display: !!config.title, text: config.title, color: '#e4e4e7' },
-        legend: { labels: { color: '#a1a1aa' } }
+        title: { display: !!config.title, text: config.title, color: '#e4e4e7', font: { size: 13 } },
+        legend: { labels: { color: '#a1a1aa', font: { size: 11 } } }
       },
       scales: config.type === 'pie' || config.type === 'doughnut' ? {} : {
-        x: { ticks: { color: '#71717a' }, grid: { color: '#1e1e24' } },
-        y: { ticks: { color: '#71717a' }, grid: { color: '#1e1e24' } }
+        x: { ticks: { color: '#71717a', font: { size: 10 } }, grid: { color: '#1e1e2408' } },
+        y: { ticks: { color: '#71717a', font: { size: 10 } }, grid: { color: '#1e1e2440' } }
       }
     }
   });
