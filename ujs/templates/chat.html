@@ -6,10 +6,14 @@
 
 {% block extra_css %}
 body { background: #132240; height: 100dvh; overflow: hidden; }
-.prose { line-height: 1.55; overflow-wrap: break-word; word-break: break-word; }
+.prose { line-height: 1.6; overflow-wrap: break-word; word-break: break-word; color: #e8edf5; }
 .prose p { margin: 0; }
-.prose p + p { margin-top: 6px; }
-.prose strong { color: #e8edf5; }
+.prose p + p { margin-top: 8px; }
+.prose strong { color: #fff; font-weight: 600; }
+.prose em { color: #c8a03a; font-style: normal; }
+.prose h3, .prose h4 { color: #fff; }
+.prose .list-item { border-color: #2a4166; }
+.prose .num-item { border-color: rgba(200,160,58,0.3); }
 .prose strong { color: #e8edf5; font-weight: 600; }
 .chart-wrap canvas { width: 100% !important; height: auto !important; max-height: 300px; }
 {% endblock %}
@@ -205,7 +209,7 @@ function userBubble(text) {
 function botBubbleStart(statusId, contentId) {
   return `<div class="max-w-2xl py-1">
     <div id="${statusId}" class="text-[11px] text-court-dim mb-1.5 font-mono truncate"></div>
-    <div id="${contentId}" class="prose text-[15px] text-court-mid break-words"></div>
+    <div id="${contentId}" class="prose text-[15px] text-court-bright break-words"></div>
   </div>`;
 }
 function retryBubble(question) {
@@ -218,7 +222,7 @@ function retryBubble(question) {
 }
 function botBubbleStatic(contentId) {
   return `<div class="max-w-2xl py-1">
-    <div id="${contentId}" class="prose text-[15px] text-court-mid break-words"></div>
+    <div id="${contentId}" class="prose text-[15px] text-court-bright break-words"></div>
   </div>`;
 }
 
@@ -397,20 +401,21 @@ function renderMd(text) {
   html = html.replace(/&(?!amp;)/g, '&amp;');
   // Trim excessive newlines (3+ → 2)
   html = html.replace(/\n{3,}/g, '\n\n');
+  // Horizontal rules
+  html = html.replace(/^---$/gm, '<hr class="border-navy-border my-3">');
   // Headers
-  html = html.replace(/^### (.+)$/gm, '<h4 class="text-court-bright font-semibold text-[13px] mt-3 mb-0.5">$1</h4>');
-  html = html.replace(/^## (.+)$/gm, '<h3 class="text-court-bright font-semibold text-sm mt-4 mb-1">$1</h3>');
+  html = html.replace(/^### (.+)$/gm, '<h4 class="text-white font-semibold text-[14px] mt-4 mb-1">$1</h4>');
+  html = html.replace(/^## (.+)$/gm, '<h3 class="text-white font-semibold text-[15px] mt-5 mb-1.5 pb-1 border-b border-navy-border">$1</h3>');
   // Bold/italic
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  // Lists — tight spacing
-  html = html.replace(/^- (.+)$/gm, '<div class="pl-3 border-l-2 border-navy-border py-[1px]">$1</div>');
-  html = html.replace(/^\d+\. (.+)$/gm, '<div class="pl-3 border-l-2 border-gold/30 py-[1px]">$1</div>');
-  // Paragraphs — single break between, not double
+  // Lists
+  html = html.replace(/^- (.+)$/gm, '<div class="list-item pl-3 ml-1 border-l-2 py-[2px] text-[14px]">$1</div>');
+  html = html.replace(/^\d+\. (.+)$/gm, '<div class="num-item pl-3 ml-1 border-l-2 py-[2px] text-[14px]">$1</div>');
+  // Paragraphs
   html = html.replace(/\n\n/g, '</p><p class="mt-2">');
   html = html.replace(/\n/g, '<br>');
   html = '<p>' + html + '</p>';
-  // Clean empty paragraphs
   html = html.replace(/<p class="mt-2"><\/p>/g, '');
   html = html.replace(/<p><\/p>/g, '');
   return html;
