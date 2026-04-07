@@ -6,3 +6,7 @@
 @font-face { font-family: 'Inter'; src: url('/static/fonts/inter-400.ttf'); font-weight: 400; }
 @font-face { font-family: 'Inter'; src: url('/static/fonts/inter-500.ttf'); font-weight: 500; }
 @font-face { font-family: 'Inter'; src: url('/static/fonts/inter-600.ttf'); font-weight: 600; }
+
+/* Prevent white flash on overscroll */
+html { background: #0f1e38; }
+body { background: #0f1e38; overscroll-behavior: none; }
