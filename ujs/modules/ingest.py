@@ -50,7 +50,7 @@ def ingest_filings(county=None, docket_type=None, lookback_days=1):
         print(f"[filings] {total} found, {new} new")
 
         if chunks > 1:
-            time.sleep(5)  # gentle delay between chunks
+            time.sleep(10)  # gentle delay between chunks to avoid 429
 
     return total_found, total_new
 
