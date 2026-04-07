@@ -34,6 +34,19 @@ def _dict_cur(conn):
     return conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
 
+def log_event(component, event, docket_number=None, detail=None, duration_ms=None, success=True):
+    """Log a system event for tracking/debugging."""
+    try:
+        with connect() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO system_log (component, event, docket_number, detail, duration_ms, success)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (component, event, docket_number, str(detail)[:500] if detail else None, duration_ms, success))
+    except Exception:
+        pass  # logging should never crash the app
+
+
 def _case_type_code(docket_type):
     """Convert case type name to docket number pattern."""
     return {"criminal": "-CR-", "civil": "-CV-", "traffic": "-TR-",

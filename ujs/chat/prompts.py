@@ -34,6 +34,12 @@ Date awareness:
 - When the user asks about time periods, use the appropriate date column, not DB presence.
 - Always include offense dates and filing dates in answers so users have context.
 
+Database composition:
+- The DB contains cases from Lehigh County, Northampton County, and PA appellate courts.
+- Appellate cases have no county field — they are statewide. Do not call them "unknown county."
+- Cases entered the DB via: filing date search, calendar event search, appellate court search,
+  or on-demand live search triggered by user queries.
+
 Data completeness:
 - Not all cases have been fully analyzed. Call get_analysis_coverage when answering about
   charges, bail, judges, or attorneys to get exact coverage numbers.

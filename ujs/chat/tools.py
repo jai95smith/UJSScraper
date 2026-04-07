@@ -209,6 +209,19 @@ Key patterns:
         },
     },
     {
+        "name": "get_system_logs",
+        "description": "Get system operation logs — scraper runs, analyzer events, errors. Use for debugging or system health questions.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "component": {"type": "string", "description": "Filter: scraper, analyzer, or all"},
+                "errors_only": {"type": "boolean", "default": False},
+                "hours": {"type": "integer", "default": 24},
+                "limit": {"type": "integer", "default": 50},
+            },
+        },
+    },
+    {
         "name": "get_analyzer_throughput",
         "description": "Get how many dockets were analyzed per hour over a time period. Use this for questions about analysis rate, throughput, or system activity.",
         "input_schema": {

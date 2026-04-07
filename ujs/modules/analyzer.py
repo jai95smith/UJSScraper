@@ -60,12 +60,17 @@ def run(delay=DEFAULT_DELAY):
                         db.store_analysis(conn, dn, {"error": "analysis_failed"}, "docket")
                     continue
                 print(f"[analyzer] Analyze: {dn}")
+                _start = time.time()
                 try:
                     deep_analyze_docket(dn)
-                    print(f"[analyzer] Done: {dn}")
+                    _dur = int((time.time() - _start) * 1000)
+                    print(f"[analyzer] Done: {dn} ({_dur}ms)")
+                    db.log_event("analyzer", "analyzed", docket_number=dn, duration_ms=_dur)
                 except Exception as e:
                     err = str(e)
+                    _dur = int((time.time() - _start) * 1000)
                     print(f"[analyzer] Error: {dn}: {err}")
+                    db.log_event("analyzer", "error", docket_number=dn, detail=err, duration_ms=_dur, success=False)
                     _failed_dockets.add(dn)
                     if "429" in err:
                         print("[analyzer] Rate limited, pausing 5 min...")
@@ -81,11 +86,16 @@ def run(delay=DEFAULT_DELAY):
             if stale:
                 dn = stale[0]["docket_number"]
                 print(f"[analyzer] Refresh: {dn}")
+                _start = time.time()
                 try:
                     deep_analyze_docket(dn)
+                    _dur = int((time.time() - _start) * 1000)
+                    db.log_event("analyzer", "refreshed", docket_number=dn, duration_ms=_dur)
                 except Exception as e:
                     err = str(e)
+                    _dur = int((time.time() - _start) * 1000)
                     print(f"[analyzer] Refresh error {dn}: {err}")
+                    db.log_event("analyzer", "refresh_error", docket_number=dn, detail=err, duration_ms=_dur, success=False)
                     if "429" in err:
                         print("[analyzer] Rate limited, pausing 5 min...")
                         time.sleep(300)

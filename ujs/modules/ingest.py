@@ -28,10 +28,13 @@ def ingest_filings(county=None, docket_type=None, lookback_days=1):
         end = chunk_end.strftime("%Y-%m-%d")
 
         print(f"[filings] Scraping {start} to {end} | county={county} type={docket_type}")
+        _start_t = time.time()
         try:
             results = search_by_date(start, end, county=county, docket_type=docket_type)
         except Exception as e:
+            _dur = int((time.time() - _start_t) * 1000)
             print(f"[filings] Error on chunk {start}-{end}: {e}")
+            db.log_event("scraper", "filings_error", detail=f"{county} {start}-{end}: {e}", duration_ms=_dur, success=False)
             if "429" in str(e):
                 break
             continue
@@ -45,9 +48,11 @@ def ingest_filings(county=None, docket_type=None, lookback_days=1):
                 VALUES ('filings', %s, %s, %s, %s, %s, NOW())
             """, (county, docket_type, f"{start}/{end}", total, new))
 
+        _dur = int((time.time() - _start_t) * 1000)
         total_found += total
         total_new += new
         print(f"[filings] {total} found, {new} new")
+        db.log_event("scraper", "filings", detail=f"{county}: {total} found, {new} new ({start}/{end})", duration_ms=_dur)
 
         if chunks > 1:
             time.sleep(10)  # gentle delay between chunks to avoid 429
@@ -62,7 +67,13 @@ def ingest_events(county=None, docket_type=None, lookahead_days=14):
     end = (today + timedelta(days=lookahead_days)).strftime("%Y-%m-%d")
 
     print(f"[events] Scraping {start} to {end} | county={county} type={docket_type}")
-    results = search_by_calendar(start, end, county=county, docket_type=docket_type)
+    _start_t = time.time()
+    try:
+        results = search_by_calendar(start, end, county=county, docket_type=docket_type)
+    except Exception as e:
+        _dur = int((time.time() - _start_t) * 1000)
+        db.log_event("scraper", "events_error", detail=f"{county}: {e}", duration_ms=_dur, success=False)
+        raise
 
     with db.connect() as conn:
         total, new = db.upsert_events(conn, results)
@@ -73,7 +84,9 @@ def ingest_events(county=None, docket_type=None, lookahead_days=14):
             VALUES ('events', %s, %s, %s, %s, %s, NOW())
         """, (county, docket_type, f"{start}/{end}", total, new))
 
+    _dur = int((time.time() - _start_t) * 1000)
     print(f"[events] {total} found, {new} new")
+    db.log_event("scraper", "events", detail=f"{county}: {total} found, {new} new", duration_ms=_dur)
     return total, new
 
 

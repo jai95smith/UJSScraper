@@ -375,6 +375,33 @@ def _render_chart(conn, inputs):
     return f"CHART_RENDERED. Include this exact block in your response:\n```chart\n{chart_json}\n```"
 
 
+def _get_system_logs(conn, inputs):
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    clauses = [f"created_at >= NOW() - INTERVAL '{inputs.get('hours', 24)} hours'"]
+    params = []
+    if inputs.get("component") and inputs["component"] != "all":
+        clauses.append("component = %s")
+        params.append(inputs["component"])
+    if inputs.get("errors_only"):
+        clauses.append("success = FALSE")
+    params.append(inputs.get("limit", 50))
+    cur.execute(f"""
+        SELECT component, event, docket_number, detail, duration_ms, success, created_at
+        FROM system_log WHERE {' AND '.join(clauses)}
+        ORDER BY created_at DESC LIMIT %s
+    """, params)
+    rows = [dict(r) for r in cur.fetchall()]
+
+    # Also get summary
+    cur.execute(f"""
+        SELECT component, success, COUNT(*) FROM system_log
+        WHERE created_at >= NOW() - INTERVAL '{inputs.get('hours', 24)} hours'
+        GROUP BY component, success ORDER BY component
+    """)
+    summary = [dict(r) for r in cur.fetchall()]
+    return json.dumps({"logs": rows, "summary": summary}, default=str)
+
+
 def _get_analyzer_throughput(conn, inputs):
     hours = inputs.get("hours", 24)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -472,6 +499,7 @@ HANDLERS = {
     "get_analysis_coverage": _get_analysis_coverage,
     "render_chart": _render_chart,
     "get_analyzer_throughput": _get_analyzer_throughput,
+    "get_system_logs": _get_system_logs,
     "get_data_source": _get_data_source,
     "get_case_changes": _get_case_changes,
     "get_filing_stats": _get_filing_stats,
