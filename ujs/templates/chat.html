@@ -12,8 +12,6 @@ body { background: #132240; height: 100dvh; overflow: hidden; }
 .prose strong { color: #fff; font-weight: 600; }
 .prose em { color: #c8a03a; font-style: normal; }
 .prose h3, .prose h4 { color: #fff; }
-.prose .list-item { border-color: #2a4166; }
-.prose .num-item { border-color: rgba(200,160,58,0.3); }
 .prose strong { color: #e8edf5; font-weight: 600; }
 .chart-wrap canvas { width: 100% !important; height: auto !important; max-height: 300px; }
 {% endblock %}
@@ -410,8 +408,8 @@ function renderMd(text) {
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
   // Lists
-  html = html.replace(/^- (.+)$/gm, '<div class="list-item pl-3 ml-1 border-l-2 py-[2px] text-[14px]">$1</div>');
-  html = html.replace(/^\d+\. (.+)$/gm, '<div class="num-item pl-3 ml-1 border-l-2 py-[2px] text-[14px]">$1</div>');
+  html = html.replace(/^- (.+)$/gm, '<div class="pl-4 py-[1px] text-[14px] before:content-[\'·\'] before:text-gold before:mr-2">$1</div>');
+  html = html.replace(/^\d+\. (.+)$/gm, '<div class="pl-4 py-[1px] text-[14px]">$1</div>');
   // Paragraphs
   html = html.replace(/\n\n/g, '</p><p class="mt-2">');
   html = html.replace(/\n/g, '<br>');
