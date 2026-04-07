@@ -616,6 +616,101 @@ def create_key(name: str, email: Optional[str] = None):
 
 
 # -------------------------------------------------------------------
+# Rap sheet — full person history
+# -------------------------------------------------------------------
+
+@app.get("/rapsheet/{name}", tags=["Rap Sheet"])
+def rapsheet(
+    name: str,
+    county: Optional[str] = None,
+):
+    """Get a person's full court history: all cases, charges, bail, sentences, events."""
+    import psycopg2.extras
+    with db.connect() as conn:
+        cases = db.search_cases(conn, name=name, county=county, limit=50)
+        if not cases:
+            # Try fuzzy
+            fuzzy = db.fuzzy_name_search(conn, name, limit=5)
+            if fuzzy:
+                cases = db.search_cases(conn, name=fuzzy[0]["name"], county=county, limit=50)
+
+        if not cases:
+            return {"name": name, "cases": [], "message": "No cases found"}
+
+        # Get the canonical name from first result
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        docket_numbers = [c["docket_number"] for c in cases]
+
+        # Build full profile
+        person = {"name": name, "aliases": set(), "dob": None, "addresses": set()}
+        case_details = []
+
+        for case in cases:
+            dn = case["docket_number"]
+            entry = {
+                "docket_number": dn,
+                "caption": case["caption"],
+                "status": case["status"],
+                "county": case["county"],
+                "filing_date": case["filing_date"],
+                "court_type": case["court_type"],
+            }
+
+            # Participant info
+            cur.execute("SELECT name, dob FROM participants WHERE docket_number = %s", (dn,))
+            for p in cur.fetchall():
+                person["aliases"].add(p["name"])
+                if p["dob"]:
+                    person["dob"] = p["dob"]
+
+            # Analysis data
+            analysis = db.get_analysis(conn, dn, "docket")
+            if analysis:
+                entry["charges"] = analysis.get("charges", [])
+                entry["sentences"] = analysis.get("sentences", [])
+                entry["bail"] = analysis.get("bail", {})
+                entry["judge"] = analysis.get("judge")
+                entry["attorneys"] = analysis.get("attorneys", [])
+                entry["analyzed"] = True
+                defendant = analysis.get("defendant", {})
+                if defendant.get("address"):
+                    person["addresses"].add(defendant["address"])
+            else:
+                entry["analyzed"] = False
+
+            # Events
+            cur.execute("SELECT event_type, event_date, event_status FROM events WHERE docket_number = %s ORDER BY event_date", (dn,))
+            events = cur.fetchall()
+            if events:
+                entry["upcoming_events"] = [dict(e) for e in events]
+
+            case_details.append(entry)
+
+        # Summary stats
+        total = len(case_details)
+        active = sum(1 for c in case_details if "active" in c["status"].lower())
+        criminal = sum(1 for c in case_details if "-CR-" in c["docket_number"])
+        analyzed_count = sum(1 for c in case_details if c.get("analyzed"))
+
+        return {
+            "person": {
+                "name": person["aliases"].pop() if person["aliases"] else name,
+                "aliases": list(person["aliases"]),
+                "dob": person["dob"],
+                "addresses": list(person["addresses"]),
+            },
+            "summary": {
+                "total_cases": total,
+                "active_cases": active,
+                "closed_cases": total - active,
+                "criminal_cases": criminal,
+                "analyzed": analyzed_count,
+            },
+            "cases": case_details,
+        }
+
+
+# -------------------------------------------------------------------
 # Natural language chat
 # -------------------------------------------------------------------
 
