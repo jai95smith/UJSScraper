@@ -29,6 +29,17 @@ def _hash(data):
     return hashlib.md5(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
 
+def _dict_cur(conn):
+    """Shorthand for a RealDictCursor."""
+    return conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+
+def _case_type_code(docket_type):
+    """Convert case type name to docket number pattern."""
+    return {"criminal": "-CR-", "civil": "-CV-", "traffic": "-TR-",
+            "non-traffic": "-NT-", "landlord/tenant": "-LT-"}.get((docket_type or "").lower(), "")
+
+
 # ---------------------------------------------------------------------------
 # Cases
 # ---------------------------------------------------------------------------
@@ -93,7 +104,7 @@ def upsert_cases(conn, cases):
 
 def get_case(conn, docket_number):
     """Get a case by docket number."""
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = _dict_cur(conn)
     cur.execute("SELECT * FROM cases WHERE docket_number = %s", (docket_number,))
     return cur.fetchone()
 
@@ -101,7 +112,7 @@ def get_case(conn, docket_number):
 def search_cases(conn, county=None, status=None, docket_type=None,
                  filed_after=None, filed_before=None, name=None, limit=100):
     """Search cases in the database."""
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = _dict_cur(conn)
     clauses = []
     params = []
 
@@ -112,9 +123,7 @@ def search_cases(conn, county=None, status=None, docket_type=None,
         clauses.append("c.status ILIKE %s")
         params.append(f"%{status}%")
     if docket_type:
-        dtype_map = {"criminal": "-CR-", "civil": "-CV-", "traffic": "-TR-",
-                     "non-traffic": "-NT-"}
-        code = dtype_map.get(docket_type.lower(), "")
+        code = _case_type_code(docket_type)
         if code:
             clauses.append("c.docket_number LIKE %s")
             params.append(f"%{code}%")
@@ -186,7 +195,7 @@ def store_analysis(conn, docket_number, analysis, doc_type="docket"):
 
 def get_analysis(conn, docket_number, doc_type="docket"):
     """Get cached Gemini analysis."""
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = _dict_cur(conn)
     cur.execute("""
         SELECT analysis, data_hash, parsed_at FROM analyses
         WHERE docket_number = %s AND doc_type = %s
@@ -499,7 +508,7 @@ def _diff_analysis(old, new):
 
 def get_changes(conn, docket_number=None, since=None, limit=100):
     """Get change log entries."""
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = _dict_cur(conn)
     clauses = []
     params = []
     if docket_number:
@@ -533,7 +542,7 @@ def cleanup_old_data(conn, queue_days=7, changelog_days=90):
 
 def get_stale_dockets(conn, active_hours=24, closed_days=7, limit=50):
     """Get dockets that need re-scraping based on case status."""
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = _dict_cur(conn)
     cur.execute("""
         SELECT docket_number, status, last_scraped FROM cases
         WHERE
@@ -573,7 +582,7 @@ def remove_from_watchlist(conn, api_key, docket_number):
 
 
 def get_watchlist(conn, api_key):
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = _dict_cur(conn)
     cur.execute("""
         SELECT w.docket_number, w.label, w.created_at,
                c.caption, c.status, c.county, c.filing_date, c.last_scraped
@@ -587,7 +596,7 @@ def get_watchlist(conn, api_key):
 
 def get_watchlist_changes(conn, api_key, since=None):
     """Get changes for all watched dockets."""
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = _dict_cur(conn)
     params = [api_key]
     since_clause = ""
     if since:
@@ -618,7 +627,7 @@ def create_webhook(conn, api_key, url, events=None, county=None, docket_type=Non
 
 
 def get_webhooks(conn, api_key):
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = _dict_cur(conn)
     cur.execute("SELECT * FROM webhooks WHERE api_key = %s ORDER BY created_at DESC", (api_key,))
     return cur.fetchall()
 
@@ -630,7 +639,7 @@ def delete_webhook(conn, api_key, webhook_id):
 
 
 def get_active_webhooks(conn, event_type=None, county=None):
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = _dict_cur(conn)
     clauses = ["active = TRUE"]
     params = []
     if event_type:
@@ -660,7 +669,7 @@ def create_api_key(conn, name, email=None):
 
 
 def validate_api_key(conn, key):
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = _dict_cur(conn)
     cur.execute("SELECT * FROM api_keys WHERE key = %s", (key,))
     row = cur.fetchone()
     if not row:
@@ -681,7 +690,7 @@ def validate_api_key(conn, key):
 
 def fuzzy_name_search(conn, name, limit=10):
     """Fuzzy search for participant names using trigram similarity."""
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = _dict_cur(conn)
     cur.execute("""
         SELECT p.name, p.docket_number, p.dob,
                c.caption, c.status, c.county, c.filing_date,
@@ -696,7 +705,7 @@ def fuzzy_name_search(conn, name, limit=10):
 
 
 def search_by_judge(conn, judge_name, county=None, limit=100):
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = _dict_cur(conn)
     parts = judge_name.strip().split()
     pattern = "%" + "%".join(parts) + "%" if len(parts) >= 2 else f"%{judge_name}%"
     params = [pattern]
@@ -716,7 +725,7 @@ def search_by_judge(conn, judge_name, county=None, limit=100):
 
 
 def search_by_attorney(conn, attorney_name, role=None, county=None, limit=100):
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = _dict_cur(conn)
     # Split name parts for flexible matching ("Michael Murphy" → "%Michael%Murphy%")
     parts = attorney_name.strip().split()
     if len(parts) >= 2:
@@ -743,7 +752,7 @@ def search_by_attorney(conn, attorney_name, role=None, county=None, limit=100):
 
 def search_by_charge(conn, statute=None, description=None, county=None,
                      disposition=None, limit=100):
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = _dict_cur(conn)
     clauses = []
     params = []
     if statute:
@@ -775,7 +784,7 @@ def search_by_charge(conn, statute=None, description=None, county=None,
 # ---------------------------------------------------------------------------
 
 def get_filing_stats(conn, county=None, period="daily", days=30):
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = _dict_cur(conn)
     county_clause = ""
     params = []
     if county:
@@ -799,7 +808,7 @@ def get_filing_stats(conn, county=None, period="daily", days=30):
 
 
 def get_county_stats(conn):
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = _dict_cur(conn)
     cur.execute("""
         SELECT county, COUNT(*) as total_cases,
                SUM(CASE WHEN status ILIKE '%%active%%' THEN 1 ELSE 0 END) as active,
@@ -813,7 +822,7 @@ def get_county_stats(conn):
 
 
 def get_charge_stats(conn, county=None, limit=25):
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = _dict_cur(conn)
     clauses = []
     params = []
     if county:
@@ -834,7 +843,7 @@ def get_charge_stats(conn, county=None, limit=25):
 
 
 def get_judge_stats(conn, county=None, limit=25):
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = _dict_cur(conn)
     params = []
     county_clause = ""
     if county:
@@ -860,7 +869,7 @@ def get_judge_stats(conn, county=None, limit=25):
 
 def get_stats(conn):
     """Get database statistics."""
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = _dict_cur(conn)
     stats = {}
     for table in ["cases", "participants", "charges", "events", "analyses", "ingest_queue"]:
         cur.execute(f"SELECT COUNT(*) as count FROM {table}")
