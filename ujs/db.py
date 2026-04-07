@@ -71,7 +71,7 @@ def upsert_case(conn, case):
     is_new = row[0] if row else False
 
     # Store participant from search results if present
-    participant = case.get("participant", "").strip()
+    participant = " ".join(case.get("participant", "").split())  # normalize whitespace
     if participant:
         cur.execute("""
             INSERT INTO participants (docket_number, name, dob, role)
