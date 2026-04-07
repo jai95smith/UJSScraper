@@ -375,6 +375,40 @@ def _render_chart(conn, inputs):
     return f"CHART_RENDERED. Include this exact block in your response:\n```chart\n{chart_json}\n```"
 
 
+def _get_data_source(conn, inputs):
+    dn = inputs["docket_number"]
+    case = db.get_case(conn, dn)
+    if not case:
+        return json.dumps({"docket_number": dn, "source": "not_indexed",
+                           "note": "Case not in database. Data would need to come from a live UJS search."})
+
+    analysis = db.get_analysis(conn, dn, "docket")
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT COUNT(*) as cnt FROM events WHERE docket_number = %s", (dn,))
+    event_count = cur.fetchone()["cnt"]
+
+    if analysis and "error" not in analysis:
+        source = "fully_analyzed"
+        available = ["case info", "charges", "bail", "sentences", "attorneys", "judge", "docket entries"]
+        note = "Full Gemini-parsed data from docket sheet PDF. All fields available."
+    else:
+        source = "metadata_only"
+        available = ["case info", "status", "county", "filing date", "participant name"]
+        note = "Basic info from UJS search results. No charges, bail, attorney, or judge data — case not yet analyzed by Gemini."
+
+    if event_count > 0:
+        available.append(f"{event_count} upcoming events")
+
+    return json.dumps({
+        "docket_number": dn,
+        "source": source,
+        "available_data": available,
+        "has_events": event_count > 0,
+        "last_scraped": case["last_scraped"].isoformat() if case.get("last_scraped") else None,
+        "note": note,
+    }, default=str)
+
+
 def _get_case_changes(conn, inputs):
     changes = db.get_changes(conn, docket_number=inputs.get("docket_number"), limit=20)
     return json.dumps([dict(c) for c in changes], default=str) if changes else "No changes recorded."
@@ -411,6 +445,7 @@ HANDLERS = {
     "run_custom_query": _run_custom_query,
     "get_analysis_coverage": _get_analysis_coverage,
     "render_chart": _render_chart,
+    "get_data_source": _get_data_source,
     "get_case_changes": _get_case_changes,
     "get_filing_stats": _get_filing_stats,
     "get_charge_stats": _get_charge_stats,

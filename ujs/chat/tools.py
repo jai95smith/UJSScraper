@@ -209,6 +209,15 @@ Key patterns:
         },
     },
     {
+        "name": "get_data_source",
+        "description": "Check where data comes from for a docket — metadata only, fully analyzed, or not indexed. Call this before answering about a specific case so you can tell the user the data source and completeness.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"docket_number": {"type": "string"}},
+            "required": ["docket_number"],
+        },
+    },
+    {
         "name": "get_case_changes",
         "description": "Get recent changes/updates to a specific case or all cases",
         "input_schema": {
