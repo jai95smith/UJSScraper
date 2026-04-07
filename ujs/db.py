@@ -429,17 +429,27 @@ def _diff_analysis(old, new):
         if ov != nv:
             changes.append({"field": field, "old": ov, "new": nv})
 
-    # Compare charge dispositions
+    # Compare charges
     old_charges = {c.get("seq"): c for c in old.get("charges", [])}
-    for nc in new.get("charges", []):
-        seq = nc.get("seq")
-        oc = old_charges.get(seq, {})
+    new_charges = {c.get("seq"): c for c in new.get("charges", [])}
+    # New/removed charges
+    old_seqs = set(old_charges.keys())
+    new_seqs = set(new_charges.keys())
+    for seq in new_seqs - old_seqs:
+        changes.append({"field": f"charge_{seq}_added", "old": None,
+                        "new": new_charges[seq].get("description")})
+    for seq in old_seqs - new_seqs:
+        changes.append({"field": f"charge_{seq}_removed",
+                        "old": old_charges[seq].get("description"), "new": None})
+    # Changed disposition or grade on existing charges
+    for seq in old_seqs & new_seqs:
+        oc, nc = old_charges[seq], new_charges[seq]
         if nc.get("disposition") != oc.get("disposition"):
-            changes.append({
-                "field": f"charge_{seq}_disposition",
-                "old": oc.get("disposition"),
-                "new": nc.get("disposition"),
-            })
+            changes.append({"field": f"charge_{seq}_disposition",
+                            "old": oc.get("disposition"), "new": nc.get("disposition")})
+        if nc.get("grade") != oc.get("grade"):
+            changes.append({"field": f"charge_{seq}_grade",
+                            "old": oc.get("grade"), "new": nc.get("grade")})
 
     # Compare bail
     ob = old.get("bail", {})
@@ -448,15 +458,15 @@ def _diff_analysis(old, new):
         if ob.get(bf) != nb.get(bf):
             changes.append({"field": f"bail_{bf}", "old": ob.get(bf), "new": nb.get(bf)})
 
-    # New sentences added
-    old_sent_count = len(old.get("sentences", []))
-    new_sent_count = len(new.get("sentences", []))
-    if new_sent_count > old_sent_count:
-        changes.append({
-            "field": "sentences_added",
-            "old": str(old_sent_count),
-            "new": str(new_sent_count),
-        })
+    # Sentence changes
+    old_sents = old.get("sentences", [])
+    new_sents = new.get("sentences", [])
+    if len(new_sents) != len(old_sents):
+        changes.append({"field": "sentences_changed",
+                        "old": str(len(old_sents)), "new": str(len(new_sents))})
+    elif old_sents != new_sents:
+        changes.append({"field": "sentences_modified",
+                        "old": json.dumps(old_sents)[:200], "new": json.dumps(new_sents)[:200]})
 
     # New docket entries added
     old_entry_count = len(old.get("docket_entries", []))
