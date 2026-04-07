@@ -199,28 +199,22 @@ function userBubble(text) {
   </div>`;
 }
 function botBubbleStart(statusId, contentId) {
-  return `<div class="flex justify-start">
-    <div class="bg-navy border border-navy-border rounded-2xl rounded-bl-md px-4 md:px-5 py-3 md:py-4 max-w-[95%] md:max-w-2xl w-fit min-w-[180px] overflow-hidden">
-      <div id="${statusId}" class="text-[11px] text-court-dim mb-2 font-mono truncate"></div>
-      <div id="${contentId}" class="prose text-sm text-court-mid leading-relaxed break-words"></div>
-    </div>
+  return `<div class="max-w-2xl py-1">
+    <div id="${statusId}" class="text-[11px] text-court-dim mb-1.5 font-mono truncate"></div>
+    <div id="${contentId}" class="prose text-[13px] text-court-mid break-words"></div>
   </div>`;
 }
 function retryBubble(question) {
-  return `<div class="flex justify-start">
-    <div class="bg-navy border border-navy-border rounded-2xl rounded-bl-md px-4 py-3 max-w-[95%] md:max-w-2xl">
+  return `<div class="max-w-2xl py-1">
       <p class="text-sm text-court-dim mb-2">Response was interrupted.</p>
       <button onclick="retryQuestion('${esc(question).replace(/'/g, "\\'")}')" class="text-[12px] font-medium text-navy bg-gold hover:bg-gold-dim rounded px-3 py-1.5 transition">
         Retry →
       </button>
-    </div>
   </div>`;
 }
 function botBubbleStatic(contentId) {
-  return `<div class="flex justify-start">
-    <div class="bg-navy border border-navy-border rounded-2xl rounded-bl-md px-4 md:px-5 py-3 md:py-4 max-w-[95%] md:max-w-2xl w-fit min-w-[180px] overflow-hidden">
-      <div id="${contentId}" class="prose text-sm text-court-mid leading-relaxed break-words"></div>
-    </div>
+  return `<div class="max-w-2xl py-1">
+    <div id="${contentId}" class="prose text-[13px] text-court-mid break-words"></div>
   </div>`;
 }
 
@@ -397,7 +391,7 @@ function renderFinalResponse(contentEl, text, msgId) {
       const cid = 'chart-' + msgId + '-' + i;
       const el = document.createElement('div');
       el.className = 'max-w-2xl mx-auto px-4 md:px-6';
-      el.innerHTML = `<div class="bg-navy border border-navy-border rounded-2xl rounded-bl-md p-5"><canvas id="${cid}" style="width:100%;max-height:320px;"></canvas></div>`;
+      el.innerHTML = `<div class="bg-navy/50 border border-navy-border rounded-xl p-4"><canvas id="${cid}" style="width:100%;max-height:300px;"></canvas></div>`;
       parent.parentNode.insertBefore(el, parent.nextSibling);
       setTimeout(() => renderChart(cid, config), 300);
     } catch(e) {}
