@@ -665,7 +665,13 @@ def rapsheet(
         with db.connect() as conn:
             cases = db.search_cases(conn, name=name, limit=50)
         if cases:
-            for c in sorted(cases, key=lambda c: c.get("filing_date", ""), reverse=True)[:5]:
+            def _parse_date(d):
+                try:
+                    parts = d.split("/")
+                    return f"{parts[2]}{parts[0]}{parts[1]}"
+                except Exception:
+                    return "0"
+            for c in sorted(cases, key=lambda c: _parse_date(c.get("filing_date", "")), reverse=True)[:5]:
                 if "active" in c["status"].lower():
                     try:
                         with tempfile.TemporaryDirectory() as d:
