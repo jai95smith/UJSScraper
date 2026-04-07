@@ -27,7 +27,8 @@ Name search strategy:
   Example: "Kelli Murphy has 3 cases: [list]. Here are the details on the most recent..."
 - If search_cases AND fuzzy_name_search both return nothing, use live_search_ujs as a last
   resort — it searches the PA court portal directly and adds results to the database.
-- For hyphenated last names like "Janko-Hudson", search the last part as the last name.
+- For hyphenated last names like "Janko-Hudson", pass the FULL hyphenated name as last_name.
+  Do NOT split on hyphens. "Janko-Hudson" is one last name, not two.
 """
 
 
@@ -167,11 +168,11 @@ TOOLS = [
     },
     {
         "name": "live_search_ujs",
-        "description": "Search the UJS portal directly (live scrape) when a person is NOT found in the local database. Use this as a LAST RESORT after search_cases and fuzzy_name_search both fail. Slower (~5s) but searches all PA courts.",
+        "description": "Search the UJS portal directly (live scrape) when a person is NOT found in the local database. Use this as a LAST RESORT after search_cases and fuzzy_name_search both fail. Slower (~15s) but searches all PA courts and analyzes the most recent case.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "last_name": {"type": "string", "description": "Last name (required)"},
+                "last_name": {"type": "string", "description": "Last name — keep hyphenated names whole (e.g. Janko-Hudson)"},
                 "first_name": {"type": "string", "description": "First name (optional)"},
                 "county": {"type": "string", "description": "County (optional)"},
             },
@@ -384,11 +385,16 @@ def _execute_tool(name, inputs):
             from ujs.core import search_by_name
             from ujs.modules.docket_pdf import analyze_docket
             import tempfile
-            results = search_by_name(
-                inputs["last_name"],
-                first=inputs.get("first_name"),
-                county=inputs.get("county"),
-            )
+            last = inputs["last_name"]
+            first = inputs.get("first_name")
+            # Try full hyphenated name first, then parts
+            results = search_by_name(last, first=first, county=inputs.get("county"))
+            if not results and "-" in last:
+                # Try each part of hyphenated name
+                for part in last.split("-"):
+                    results = search_by_name(part.strip(), first=first, county=inputs.get("county"))
+                    if results:
+                        break
             if not results:
                 return f"No cases found on UJS for {inputs.get('first_name', '')} {inputs['last_name']}"
             # Store discovered cases in DB
@@ -506,12 +512,7 @@ def ask(question: str, api_key: Optional[str] = None) -> str:
 
     client = anthropic.Anthropic(api_key=key)
 
-    # Try Haiku first — fast and cheap
-    answer, tool_calls = _run_chat(client, "claude-haiku-4-5-20251001", question, max_rounds=6)
-
-    # If Haiku gave up or returned empty, escalate to Sonnet
-    if not answer or tool_calls == 0:
-        answer, _ = _run_chat(client, "claude-sonnet-4-20250514", question, max_rounds=8)
+    answer, _ = _run_chat(client, "claude-sonnet-4-20250514", question, max_rounds=8)
 
     return answer or "I couldn't find enough data to answer that question. Try being more specific or providing a docket number."
 
@@ -531,7 +532,7 @@ def ask_stream(question: str, api_key: Optional[str] = None):
 
     for round_num in range(6):
         response = client.messages.create(
-            model="claude-haiku-4-5-20251001", max_tokens=1024,
+            model="claude-sonnet-4-20250514", max_tokens=1024,
             system=_get_system_prompt(), tools=TOOLS, messages=messages,
         )
 
@@ -552,7 +553,7 @@ def ask_stream(question: str, api_key: Optional[str] = None):
         else:
             yield "\n\n"
             with client.messages.stream(
-                model="claude-haiku-4-5-20251001", max_tokens=1024,
+                model="claude-sonnet-4-20250514", max_tokens=1024,
                 system=_get_system_prompt(), tools=TOOLS, messages=messages,
             ) as stream:
                 for text in stream.text_stream:
