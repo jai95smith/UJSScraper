@@ -3,9 +3,10 @@
 import json
 
 
-def _gemini_json(prompt, schema, retries=2):
+def _gemini_json(prompt, schema, retries=2, timeout=10):
     """Call Gemini Flash with forced JSON schema. Validates response matches schema.
-    Returns parsed dict or None on failure. Retries on parse/validation errors."""
+    Returns parsed dict or None on failure. Retries on parse/validation errors.
+    Timeout in seconds per attempt."""
     from google import genai
     from google.genai import types
 
@@ -22,6 +23,7 @@ def _gemini_json(prompt, schema, retries=2):
                     response_mime_type="application/json",
                     response_json_schema=schema,
                     thinking_config=types.ThinkingConfig(thinking_budget=0),
+                    http_options=types.HttpOptions(timeout=timeout * 1000),  # ms
                 ),
             )
             result = json.loads(response.text)

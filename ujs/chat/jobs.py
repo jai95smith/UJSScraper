@@ -345,9 +345,9 @@ def _run_job(job_id, question, history, conversation_id=None):
         # ---------------------------------------------------------------
         news_section = ""
         if is_person_query(question, court_answer) and time.time() < timeout_at - 15:
-            # Check cache first
+            # Check cache — key on question words sorted (order-independent)
+            cache_key = " ".join(sorted(question.lower().split()))
             context = _extract_person_context(question, court_answer)
-            cache_key = context.split("\n")[0].lower().strip()  # "Person: jason michael krasley"
             cached = _news_cache.get(cache_key)
             if cached and (time.time() - cached[1]) < _NEWS_CACHE_TTL:
                 news_section = "\n\n---\n\n**News Coverage**\n\n" + cached[0]
