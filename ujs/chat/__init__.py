@@ -8,7 +8,7 @@ import anthropic
 from ujs.chat.prompts import get_court_prompt, get_news_prompt
 from ujs.chat.tools import TOOLS, get_news_tools
 from ujs.chat.executors import execute_tool
-from ujs.chat.cleanup import structure_news
+from ujs.chat.cleanup import structure_news, is_person_query
 
 
 def _log_query(question, tools_used, response_length, duration_ms, error=None):
@@ -86,7 +86,7 @@ def ask(question: str, api_key: Optional[str] = None) -> str:
 
     # Pass 2: News (only for person queries)
     full_answer = court_answer
-    if any(kw in court_answer.lower() for kw in ["docket", "charges", "hearing", "bail"]):
+    if is_person_query(question, court_answer):
         context = f"Question: {question}\n\nCourt records answer:\n{court_answer[:500]}"
         news_answer, news_tools = _run_tool_loop(
             client, "claude-sonnet-4-20250514", get_news_prompt(),

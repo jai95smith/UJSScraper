@@ -8,7 +8,7 @@ from ujs import db
 from ujs.chat.prompts import get_court_prompt, get_news_prompt
 from ujs.chat.tools import TOOLS, get_news_tools
 from ujs.chat.executors import execute_tool
-from ujs.chat.cleanup import structure_news
+from ujs.chat.cleanup import structure_news, is_person_query
 
 
 def create_job(question, history=None, conversation_id=None):
@@ -77,49 +77,6 @@ def _save_to_conversation(conversation_id, response_text):
     except Exception:
         pass
 
-
-_PERSON_CHECK_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "is_person_query": {"type": "boolean", "description": "True if asking about a specific named individual's court case(s). False for bulk queries, stats, general searches."},
-        "person_name": {"type": "string", "description": "The person's name if found, empty string otherwise"},
-    },
-    "required": ["is_person_query"],
-}
-
-
-def _is_person_query(question, court_answer):
-    """Use Gemini Flash to classify if this is a named-person query worth searching news for."""
-    # Quick reject: court answer found nothing
-    al = court_answer.lower()
-    if any(p in al for p in ["no case", "not found", "no result", "couldn't find"]):
-        return False
-
-    try:
-        from google import genai
-        from google.genai import types
-
-        client = genai.Client()
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=f"Does this question ask about a specific named person? "
-                     f"Answer true ONLY if the question itself contains a person's name "
-                     f"(first and last name, or last name comma first name). "
-                     f"Answer false for: docket number lookups, bulk queries, stats, "
-                     f"generic searches, system questions.\n\n"
-                     f"Question: {question}",
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_json_schema=_PERSON_CHECK_SCHEMA,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
-            ),
-        )
-        result = json.loads(response.text)
-        return bool(result.get("is_person_query"))
-    except Exception as e:
-        print(f"[is_person_query] Gemini error: {e}, falling back to regex")
-        import re
-        return bool(re.search(r'[A-Z][a-z]+[\s,]+[A-Z][a-z]+', question.strip()))
 
 
 def _extract_person_context(question, court_answer):
@@ -240,7 +197,7 @@ def _run_job(job_id, question, history, conversation_id=None):
         # Pass 2: News search (sequential, same thread)
         # ---------------------------------------------------------------
         news_section = ""
-        if _is_person_query(question, court_answer) and time.time() < timeout_at - 15:
+        if is_person_query(question, court_answer) and time.time() < timeout_at - 15:
             _update_job(job_id, append_response="\n\n---\n\n*Searching for news coverage...*")
 
             news_messages = [{

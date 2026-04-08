@@ -25,7 +25,7 @@ def test(name, condition, detail=""):
         print(f"  FAIL  {name} — {detail}")
 
 
-from ujs.chat.jobs import _is_person_query
+from ujs.chat.cleanup import is_person_query
 
 # Fake court answers
 PERSON_ANSWER = """Jason Michael Krasley has 3 active criminal cases in Lehigh County.
@@ -46,22 +46,22 @@ print("News Trigger — Should Search")
 print("=" * 60)
 
 test("First Last",
-     _is_person_query("tell me about Jason Krasley", PERSON_ANSWER))
+     is_person_query("tell me about Jason Krasley", PERSON_ANSWER))
 
 test("Last, First Middle",
-     _is_person_query("Krasley, Jason Michael hearing today", PERSON_ANSWER))
+     is_person_query("Krasley, Jason Michael hearing today", PERSON_ANSWER))
 
 test("lowercase name",
-     _is_person_query("tell me about jason krasley", PERSON_ANSWER))
+     is_person_query("tell me about jason krasley", PERSON_ANSWER))
 
 test("name with question",
-     _is_person_query("What cases does John Smith have?", PERSON_ANSWER))
+     is_person_query("What cases does John Smith have?", PERSON_ANSWER))
 
 test("rapsheet request",
-     _is_person_query("show rapsheet for Maria Garcia", PERSON_ANSWER))
+     is_person_query("show rapsheet for Maria Garcia", PERSON_ANSWER))
 
 test("name + county",
-     _is_person_query("jason krasley lehigh county", PERSON_ANSWER))
+     is_person_query("jason krasley lehigh county", PERSON_ANSWER))
 
 # ---------------------------------------------------------------
 print("\n" + "=" * 60)
@@ -69,34 +69,34 @@ print("News Trigger — Should NOT Search")
 print("=" * 60)
 
 test("today's hearings",
-     not _is_person_query("hearings today", BULK_ANSWER))
+     not is_person_query("hearings today", BULK_ANSWER))
 
 test("hearings that happened",
-     not _is_person_query("Hearings that already happened today", BULK_ANSWER))
+     not is_person_query("Hearings that already happened today", BULK_ANSWER))
 
 test("how many cases",
-     not _is_person_query("how many criminal cases in Lehigh?", STATS_ANSWER))
+     not is_person_query("how many criminal cases in Lehigh?", STATS_ANSWER))
 
 test("filing stats",
-     not _is_person_query("show filing stats for this month", STATS_ANSWER))
+     not is_person_query("show filing stats for this month", STATS_ANSWER))
 
 test("upcoming hearings",
-     not _is_person_query("what hearings are scheduled tomorrow?", BULK_ANSWER))
+     not is_person_query("what hearings are scheduled tomorrow?", BULK_ANSWER))
 
 test("docket number only",
-     not _is_person_query("look up CP-39-CR-0001517-2025", PERSON_ANSWER))
+     not is_person_query("look up CP-39-CR-0001517-2025", PERSON_ANSWER))
 
 test("generic charge search",
-     not _is_person_query("search for DUI cases in Northampton", BULK_ANSWER))
+     not is_person_query("search for DUI cases in Northampton", BULK_ANSWER))
 
 test("system question",
-     not _is_person_query("how many cases are indexed?", STATS_ANSWER))
+     not is_person_query("how many cases are indexed?", STATS_ANSWER))
 
 test("no results",
-     not _is_person_query("tell me about Xyz Qwerty", NO_RESULTS))
+     not is_person_query("tell me about Xyz Qwerty", NO_RESULTS))
 
 test("coverage question",
-     not _is_person_query("what is the analysis coverage?", STATS_ANSWER))
+     not is_person_query("what is the analysis coverage?", STATS_ANSWER))
 
 # ---------------------------------------------------------------
 print(f"\n{'=' * 60}")
