@@ -183,7 +183,12 @@ def _run_job(job_id, question, history, conversation_id=None):
             )
 
             if news_text and "NO_NEWS_FOUND" not in news_text:
-                _update_job(job_id, append_response="\n\n---\n\n**News Coverage**\n\n" + news_text.strip())
+                # Strip any duplicate header Claude may have added
+                clean_news = news_text.strip()
+                for prefix in ["## News Coverage\n", "**News Coverage**\n", "### News Coverage\n"]:
+                    if clean_news.startswith(prefix):
+                        clean_news = clean_news[len(prefix):].strip()
+                _update_job(job_id, append_response="\n\n---\n\n**News Coverage**\n\n" + clean_news)
 
         # ---------------------------------------------------------------
         # Done
@@ -191,13 +196,15 @@ def _run_job(job_id, question, history, conversation_id=None):
         duration = int((time.time() - start) * 1000)
         _update_job(job_id, status="completed", completed_at="NOW()")
 
-        # Save to conversation
+        # Save to conversation — use clean court_answer + news, not raw job response
+        save_text = court_answer or ""
         job = get_job(job_id)
-        response_text = job.get("response", "")
-        idx = response_text.find("\n\n")
-        if idx >= 0:
-            response_text = response_text[idx + 2:]
-        _save_to_conversation(conversation_id, response_text)
+        raw = job.get("response", "")
+        # Extract news section if present
+        news_idx = raw.find("\n\n---\n\n**News Coverage**")
+        if news_idx >= 0:
+            save_text += raw[news_idx:]
+        _save_to_conversation(conversation_id, save_text)
 
         # Log
         try:
