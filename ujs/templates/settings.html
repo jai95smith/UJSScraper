@@ -396,7 +396,7 @@ async function loadWatches() {
 async function removeWatch(dn, btnEl) {
   try {
     await apiFetch(API + '/watches/' + encodeURIComponent(dn), { method: 'DELETE' });
-    btnEl.closest('div.flex').remove();
+    btnEl.closest('.flex.items-center.gap-3').remove();
     const countEl = document.getElementById('watch-count');
     const remaining = document.querySelectorAll('#watches-list > div').length;
     countEl.textContent = remaining + '/25';

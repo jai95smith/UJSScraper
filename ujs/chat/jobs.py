@@ -72,8 +72,11 @@ def _update_job(job_id, **kwargs):
                 sets.append("tools_log = array_append(tools_log, %s)")
                 params.append(v)
             elif k in _ALLOWED_JOB_COLUMNS:
-                sets.append(f"{k} = %s")
-                params.append(v)
+                if v == "NOW()":
+                    sets.append(f"{k} = NOW()")
+                else:
+                    sets.append(f"{k} = %s")
+                    params.append(v)
             else:
                 raise ValueError(f"Disallowed column in _update_job: {k}")
         params.append(job_id)
