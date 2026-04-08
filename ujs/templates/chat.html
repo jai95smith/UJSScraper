@@ -344,6 +344,46 @@ async function pollJob(jobId, statusEl, contentEl, msgId) {
   let seen = 0;
   const statusTextEl = document.getElementById(statusEl.id + '-text');
   let contentStarted = false;
+  let lastContent = '';
+  let typewriterActive = false;
+
+  // Typewriter: reveals rendered HTML progressively
+  function typewrite(el, html, done) {
+    if (typewriterActive) return;
+    typewriterActive = true;
+    // Create hidden container, measure total text length
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    const fullText = temp.textContent || '';
+    const totalChars = fullText.length;
+    if (totalChars < 50) { el.innerHTML = html; typewriterActive = false; if (done) done(); return; }
+    // Reveal by adding chars worth of content at a time
+    let revealed = 0;
+    const charsPerTick = Math.max(3, Math.ceil(totalChars / 60)); // ~60 ticks = ~1.5s
+    el.innerHTML = '';
+    el.style.visibility = 'visible';
+    const iv = setInterval(() => {
+      revealed += charsPerTick;
+      if (revealed >= totalChars) {
+        el.innerHTML = html;
+        clearInterval(iv);
+        typewriterActive = false;
+        if (done) done();
+      } else {
+        // Reveal proportional slice of the HTML
+        const ratio = revealed / totalChars;
+        const cutoff = Math.floor(html.length * ratio);
+        // Find safe cut point (don't break tags)
+        let safe = cutoff;
+        const openTag = html.lastIndexOf('<', safe);
+        const closeTag = html.lastIndexOf('>', safe);
+        if (openTag > closeTag) safe = openTag; // inside a tag, back up
+        el.innerHTML = html.slice(0, safe);
+      }
+      chat.scrollTop = chat.scrollHeight;
+    }, 25);
+  }
+
   while (true) {
     try {
       const res = await fetch(API + '/ask/job/' + jobId + '?after=' + seen);
@@ -355,13 +395,23 @@ async function pollJob(jobId, statusEl, contentEl, msgId) {
         if (parts.length > 1) {
           if (statusTextEl) statusTextEl.textContent = parts[0];
           else statusEl.textContent = parts[0];
-          contentEl.innerHTML = renderMd(parts.slice(1).join('\n\n'));
-          if (!contentStarted) { stopThinking(statusEl.id); contentStarted = true; }
+          const newContent = parts.slice(1).join('\n\n');
+          if (newContent !== lastContent) {
+            const rendered = renderMd(newContent);
+            if (!contentStarted) {
+              stopThinking(statusEl.id);
+              contentStarted = true;
+              typewrite(contentEl, rendered);
+            } else {
+              contentEl.innerHTML = rendered;
+              chat.scrollTop = chat.scrollHeight;
+            }
+            lastContent = newContent;
+          }
         } else {
           if (statusTextEl) statusTextEl.textContent = full;
           else statusEl.textContent = full;
         }
-        chat.scrollTop = chat.scrollHeight;
       }
       if (data.status === 'completed' || data.status === 'error') {
         stopThinking(statusEl.id);
@@ -369,7 +419,14 @@ async function pollJob(jobId, statusEl, contentEl, msgId) {
         const fullJob = await fetch(API + '/ask/job/' + jobId).then(r => r.json());
         const idx = fullJob.response.indexOf('\n\n');
         const text = idx >= 0 ? fullJob.response.slice(idx + 2) : fullJob.response;
-        if (text) renderFinalResponse(contentEl, text, msgId);
+        if (text) {
+          // Wait for any active typewriter to finish, then do final render
+          const waitForTypewriter = () => new Promise(r => {
+            const check = setInterval(() => { if (!typewriterActive) { clearInterval(check); r(); } }, 50);
+          });
+          await waitForTypewriter();
+          renderFinalResponse(contentEl, text, msgId);
+        }
         break;
       }
     } catch(e) { stopThinking(statusEl.id); break; }
