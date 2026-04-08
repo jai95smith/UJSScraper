@@ -287,7 +287,7 @@ async function send() {
     }
 
     // Poll for response
-    await pollJob(job_id, statusEl, contentEl, id);
+    await pollJob(job_id, statusEl, contentEl, id, conversation_id);
     loadConversations(); // Refresh sidebar
 
   } catch (e) { stopThinking(id + '-status'); contentEl.textContent = 'Error: ' + e.message; }
@@ -317,7 +317,7 @@ async function checkRunningJob(convId) {
       btn.disabled = true;
       document.getElementById('btn-text').classList.add('hidden');
       document.getElementById('btn-spin').classList.remove('hidden');
-      await pollJob(data.job_id, statusEl, contentEl, id);
+      await pollJob(data.job_id, statusEl, contentEl, id, currentChatId);
       loadConversations();
       btn.disabled = false;
       document.getElementById('btn-text').classList.remove('hidden');
@@ -341,13 +341,13 @@ async function checkRunningJob(convId) {
 }
 
 /* --- Poll job --- */
-async function pollJob(jobId, statusEl, contentEl, msgId) {
+async function pollJob(jobId, statusEl, contentEl, msgId, convId) {
   let seen = 0;
   const statusTextEl = document.getElementById(statusEl.id + '-text');
   let contentStarted = false;
   while (true) {
     try {
-      const res = await fetch(API + '/ask/job/' + jobId + '?after=' + seen);
+      const res = await fetch(API + '/ask/job/' + jobId + '?after=' + seen + (convId ? '&cid=' + convId : ''));
       const data = await res.json();
       if (data.total_length > seen) {
         seen = data.total_length;
@@ -367,7 +367,7 @@ async function pollJob(jobId, statusEl, contentEl, msgId) {
       if (data.status === 'completed' || data.status === 'error') {
         stopThinking(statusEl.id);
         if (data.error) contentEl.textContent = 'Error: ' + data.error;
-        const fullJob = await fetch(API + '/ask/job/' + jobId).then(r => r.json());
+        const fullJob = await fetch(API + '/ask/job/' + jobId + (convId ? '?cid=' + convId : '')).then(r => r.json());
         const idx = fullJob.response.indexOf('\n\n');
         const text = idx >= 0 ? fullJob.response.slice(idx + 2) : fullJob.response;
         if (text) renderFinalResponse(contentEl, text, msgId);
