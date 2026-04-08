@@ -93,8 +93,9 @@ def _extract_person_context(question, court_answer):
     return f"Question: {question}\n\nCourt records answer:\n{court_answer[:500]}"
 
 
-def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, status_prefix=""):
-    """Run a tool-use loop until end_turn or timeout. Returns final text."""
+def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=False):
+    """Run a tool-use loop until end_turn or timeout. Returns final text.
+    If silent=True, don't write status/tool names to the job response."""
     for round_num in range(20):
         if time.time() > timeout_at:
             return None
@@ -109,10 +110,12 @@ def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, status_p
             tool_results = []
             for block in response.content:
                 if block.type == "server_tool_use":
-                    _update_job(job_id, append_response="..web search", append_tool="web_search")
+                    if not silent:
+                        _update_job(job_id, append_tool="web_search")
                 elif block.type == "tool_use":
-                    tool_name = block.name.replace("_", " ")
-                    _update_job(job_id, append_response=f"..{status_prefix}{tool_name}", append_tool=block.name)
+                    if not silent:
+                        tool_name = block.name.replace("_", " ")
+                        _update_job(job_id, append_response=f"..{tool_name}", append_tool=block.name)
                     result = execute_tool(block.name, block.input)
                     tool_results.append({
                         "type": "tool_result",
@@ -122,11 +125,6 @@ def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, status_p
             if tool_results:
                 messages.append({"role": "user", "content": tool_results})
         else:
-            # Log server-side tools that ran in the final turn
-            for block in response.content:
-                if block.type == "server_tool_use":
-                    _update_job(job_id, append_response="..web search", append_tool="web_search")
-
             text_parts = [b.text for b in response.content if hasattr(b, "text")]
             return "".join(text_parts) if text_parts else ""
 
@@ -183,7 +181,7 @@ def _run_job(job_id, question, history, conversation_id=None):
 
             news_text = _run_tool_loop(
                 client, get_news_prompt(), get_news_tools(), news_messages,
-                job_id, timeout_at,
+                job_id, timeout_at, silent=True,
             )
 
             news_loading = "\n\n---\n\n*Searching for news coverage...*"
