@@ -78,19 +78,48 @@ def _save_to_conversation(conversation_id, response_text):
         pass
 
 
+_PERSON_CHECK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "is_person_query": {"type": "boolean", "description": "True if asking about a specific named individual's court case(s). False for bulk queries, stats, general searches."},
+        "person_name": {"type": "string", "description": "The person's name if found, empty string otherwise"},
+    },
+    "required": ["is_person_query"],
+}
+
+
 def _is_person_query(question, court_answer):
-    """Check if this query is about a specific named person (worth searching news).
-    Must find a capitalized proper name in the question — not just keywords in the answer."""
-    import re
-    q = question.strip()
-    # Look for a proper name pattern: two+ capitalized words (First Last)
-    # Matches "Jason Krasley", "Krasley, Jason Michael", etc.
-    has_name = bool(re.search(r'[A-Z][a-z]+[\s,]+[A-Z][a-z]+', q))
-    if not has_name:
+    """Use Gemini Flash to classify if this is a named-person query worth searching news for."""
+    # Quick reject: court answer found nothing
+    al = court_answer.lower()
+    if any(p in al for p in ["no case", "not found", "no result", "couldn't find"]):
         return False
-    # Confirm court answer actually found person data (not "no results")
-    answer_lower = court_answer.lower()
-    return any(kw in answer_lower for kw in ["docket", "charges", "case", "bail", "cp-"])
+
+    try:
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client()
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=f"Does this question ask about a specific named person? "
+                     f"Answer true ONLY if the question itself contains a person's name "
+                     f"(first and last name, or last name comma first name). "
+                     f"Answer false for: docket number lookups, bulk queries, stats, "
+                     f"generic searches, system questions.\n\n"
+                     f"Question: {question}",
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_json_schema=_PERSON_CHECK_SCHEMA,
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
+            ),
+        )
+        result = json.loads(response.text)
+        return bool(result.get("is_person_query"))
+    except Exception as e:
+        print(f"[is_person_query] Gemini error: {e}, falling back to regex")
+        import re
+        return bool(re.search(r'[A-Z][a-z]+[\s,]+[A-Z][a-z]+', question.strip()))
 
 
 def _extract_person_context(question, court_answer):
