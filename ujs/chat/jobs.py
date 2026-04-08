@@ -94,9 +94,10 @@ def _extract_person_context(question, court_answer):
     return f"Question: {question}\n\nCourt records answer:\n{court_answer[:500]}"
 
 
-def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=False):
+def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=False, stream_final=False):
     """Run a tool-use loop until end_turn or timeout. Returns final text.
-    If silent=True, don't write status/tool names to the job response."""
+    If silent=True, don't write status/tool names to the job response.
+    If stream_final=True, stream the final text response to the DB in chunks."""
     for round_num in range(20):
         if time.time() > timeout_at:
             return None
@@ -126,10 +127,41 @@ def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=F
             if tool_results:
                 messages.append({"role": "user", "content": tool_results})
         else:
+            # Final text response — stream or return all at once
+            if stream_final and not silent:
+                return _stream_final_response(client, system, tools, messages, job_id)
             text_parts = [b.text for b in response.content if hasattr(b, "text")]
             return "".join(text_parts) if text_parts else ""
 
     return None
+
+
+def _stream_final_response(client, system, tools, messages, job_id):
+    """Re-run the final turn with streaming, writing chunks to the DB."""
+    full_text = ""
+    _update_job(job_id, append_response="\n\n")
+    buffer = ""
+    try:
+        with client.messages.stream(
+            model="claude-sonnet-4-20250514", max_tokens=2048,
+            system=system, tools=tools, messages=messages,
+        ) as stream:
+            for text in stream.text_stream:
+                full_text += text
+                buffer += text
+                # Flush to DB every ~80 chars for smooth streaming
+                if len(buffer) >= 80:
+                    _update_job(job_id, append_response=buffer)
+                    buffer = ""
+        # Flush remaining
+        if buffer:
+            _update_job(job_id, append_response=buffer)
+    except Exception as e:
+        if buffer:
+            _update_job(job_id, append_response=buffer)
+        if not full_text:
+            return f"Streaming error: {str(e)[:200]}"
+    return full_text
 
 
 def _run_job(job_id, question, history, conversation_id=None):
@@ -162,15 +194,13 @@ def _run_job(job_id, question, history, conversation_id=None):
         # ---------------------------------------------------------------
         court_answer = _run_tool_loop(
             client, get_court_prompt(), TOOLS, list(messages),
-            job_id, timeout_at,
+            job_id, timeout_at, stream_final=True,
         )
 
         if court_answer is None:
             _update_job(job_id, append_response="\n\nRequest timed out.", status="completed", completed_at="NOW()")
             return
-
-        # Court data visible immediately via polling (job still "running")
-        _update_job(job_id, append_response="\n\n" + court_answer)
+        # Court answer already streamed to DB by _stream_final_response
 
         # ---------------------------------------------------------------
         # Pass 2: News search (sequential, same thread)
