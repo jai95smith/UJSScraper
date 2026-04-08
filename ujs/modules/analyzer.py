@@ -12,13 +12,25 @@ DEFAULT_DELAY = 3  # seconds between each analysis (~20/min)
 _failed_dockets = set()  # skip dockets that keep failing
 
 
+def _get_lock_conn():
+    """Get or reconnect the persistent lock connection."""
+    conn = psycopg2.connect(db.get_db_url())
+    conn.autocommit = True
+    return conn
+
+
 def run(delay=DEFAULT_DELAY):
     """Run forever: process queue items first, then stale dockets."""
     worker_id = os.getpid()
     print(f"[analyzer:{worker_id}] Starting (delay={delay}s)")
+    lock_conn = _get_lock_conn()
 
     while True:
         try:
+            # Reconnect lock conn if dead
+            if lock_conn.closed:
+                lock_conn = _get_lock_conn()
+
             # 1. Process on-demand queue (priority)
             with db.connect() as conn:
                 job = db.claim_ingest_job(conn)
@@ -37,18 +49,17 @@ def run(delay=DEFAULT_DELAY):
                     with db.connect() as conn:
                         db.complete_ingest_job(conn, job_id, error=err)
                     if "429" in err:
-                        print("[analyzer:{worker_id}] Rate limited, pausing 5 min...")
+                        print(f"[analyzer:{worker_id}] Rate limited, pausing 5 min...")
                         time.sleep(300)
                         continue
                 time.sleep(delay)
                 continue
 
-            # 2. Analyze unanalyzed cases — claim with advisory lock held through analysis
-            lock_conn = psycopg2.connect(db.get_db_url())
+            # 2. Analyze unanalyzed cases — claim with advisory lock
             dn = None
+            lcur = lock_conn.cursor()
             try:
-                cur = lock_conn.cursor()
-                cur.execute("""
+                lcur.execute("""
                     SELECT c.docket_number FROM cases c
                     LEFT JOIN analyses a ON c.docket_number = a.docket_number AND a.doc_type = 'docket'
                     WHERE a.id IS NULL
@@ -58,39 +69,46 @@ def run(delay=DEFAULT_DELAY):
                         c.created_at DESC
                     LIMIT 20
                 """)
-                for (candidate,) in cur.fetchall():
+                for (candidate,) in lcur.fetchall():
                     if candidate in _failed_dockets:
                         continue
-                    cur.execute("SELECT pg_try_advisory_lock(hashtext(%s))", (candidate,))
-                    if cur.fetchone()[0]:
+                    lcur.execute("SELECT pg_try_advisory_lock(hashtext(%s))", (candidate,))
+                    if lcur.fetchone()[0]:
                         dn = candidate
                         break
-
-                if dn:
-                    if dn in _failed_dockets:
-                        with db.connect() as conn:
-                            db.store_analysis(conn, dn, {"error": "analysis_failed"}, "docket")
-                    else:
-                        print(f"[analyzer:{worker_id}] Analyze: {dn}")
-                        _start = time.time()
-                        try:
-                            deep_analyze_docket(dn)
-                            _dur = int((time.time() - _start) * 1000)
-                            print(f"[analyzer:{worker_id}] Done: {dn} ({_dur}ms)")
-                            db.log_event("analyzer", "analyzed", docket_number=dn, duration_ms=_dur)
-                        except Exception as e:
-                            err = str(e)
-                            _dur = int((time.time() - _start) * 1000)
-                            print(f"[analyzer:{worker_id}] Error: {dn}: {err}")
-                            db.log_event("analyzer", "error", docket_number=dn, detail=err, duration_ms=_dur, success=False)
-                            _failed_dockets.add(dn)
-                            if "429" in err:
-                                print(f"[analyzer:{worker_id}] Rate limited, pausing 5 min...")
-                                time.sleep(300)
-            finally:
-                lock_conn.close()
+            except Exception:
+                # Lock conn broken, reconnect next loop
+                try: lock_conn.close()
+                except Exception: pass
+                lock_conn = _get_lock_conn()
+                continue
 
             if dn:
+                if dn in _failed_dockets:
+                    with db.connect() as conn:
+                        db.store_analysis(conn, dn, {"error": "analysis_failed"}, "docket")
+                else:
+                    print(f"[analyzer:{worker_id}] Analyze: {dn}")
+                    _start = time.time()
+                    try:
+                        deep_analyze_docket(dn)
+                        _dur = int((time.time() - _start) * 1000)
+                        print(f"[analyzer:{worker_id}] Done: {dn} ({_dur}ms)")
+                        db.log_event("analyzer", "analyzed", docket_number=dn, duration_ms=_dur)
+                    except Exception as e:
+                        err = str(e)
+                        _dur = int((time.time() - _start) * 1000)
+                        print(f"[analyzer:{worker_id}] Error: {dn}: {err}")
+                        db.log_event("analyzer", "error", docket_number=dn, detail=err, duration_ms=_dur, success=False)
+                        _failed_dockets.add(dn)
+                        if "429" in err:
+                            print(f"[analyzer:{worker_id}] Rate limited, pausing 5 min...")
+                            time.sleep(300)
+                # Release lock AFTER analysis + write is done
+                try:
+                    lcur.execute("SELECT pg_advisory_unlock(hashtext(%s))", (dn,))
+                except Exception:
+                    pass
                 time.sleep(delay)
                 continue
 
