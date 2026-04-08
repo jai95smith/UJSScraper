@@ -39,7 +39,7 @@ def test_web_search_tool_definition():
     """Both provider tools are defined correctly."""
     from ujs.chat.tools import _CLAUDE_WEB_SEARCH, _GEMINI_NEWS_SEARCH
     test("Claude tool has correct type", _CLAUDE_WEB_SEARCH.get("type") == "web_search_20250305")
-    test("Claude tool has max_uses <= 3", _CLAUDE_WEB_SEARCH.get("max_uses", 99) <= 3)
+    test("Claude tool has no max_uses cap", "max_uses" not in _CLAUDE_WEB_SEARCH)
     test("Gemini tool has name", _GEMINI_NEWS_SEARCH.get("name") == "news_search")
     test("Gemini tool has input_schema", "input_schema" in _GEMINI_NEWS_SEARCH)
 
