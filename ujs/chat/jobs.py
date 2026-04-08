@@ -120,14 +120,12 @@ def _run_job(job_id, question, history, conversation_id=None):
                         })
                 messages.append({"role": "user", "content": tool_results})
             else:
-                # Stream final response
-                _update_job(job_id, append_response="\n\n")
-                with client.messages.stream(
-                    model="claude-sonnet-4-20250514", max_tokens=1024,
-                    system=get_system_prompt(), tools=TOOLS, messages=messages,
-                ) as stream:
-                    for text in stream.text_stream:
-                        _update_job(job_id, append_response=text)
+                # Extract text from the response we already have
+                text_parts = [b.text for b in response.content if hasattr(b, "text")]
+                if text_parts:
+                    _update_job(job_id, append_response="\n\n" + "".join(text_parts))
+                else:
+                    _update_job(job_id, append_response="\n\nNo response generated.")
 
                 duration = int((time.time() - start) * 1000)
                 _update_job(job_id, status="completed", completed_at="NOW()")
