@@ -191,9 +191,17 @@ def _run_job(job_id, question, history, conversation_id=None):
             news_loading = "\n\n---\n\n*Searching for news coverage...*"
             if news_text and "NO_NEWS_FOUND" not in news_text:
                 clean_news = news_text.strip()
+                # Strip duplicate headers
                 for prefix in ["## News Coverage\n", "**News Coverage**\n", "### News Coverage\n"]:
                     if clean_news.startswith(prefix):
                         clean_news = clean_news[len(prefix):].strip()
+                # Strip Claude narration preamble (anything before first real paragraph)
+                lines = clean_news.split("\n")
+                while lines and any(lines[0].lower().startswith(p) for p in [
+                    "i'll ", "i will ", "let me ", "now ", "here ", "searching"
+                ]):
+                    lines.pop(0)
+                clean_news = "\n".join(lines).strip()
                 news_section = "\n\n---\n\n**News Coverage**\n\n" + clean_news
                 _update_job(job_id, replace_in_response=(news_loading, news_section))
             else:
