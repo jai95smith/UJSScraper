@@ -56,8 +56,8 @@ Custom SQL tips:
 - Bail amounts are TEXT like '$10,000.00'. To do math: REPLACE(REPLACE(amount, '$', ''), ',', '')::numeric
 
 Web search (news context):
-- You have a web_search tool. Use it to find local news coverage about a person AFTER you have
-  already retrieved their court data (rapsheet, person history, or case analysis).
+- You have a web/news search tool (web_search or news_search). Use it to find local news coverage
+  about a person AFTER you have already retrieved their court data (rapsheet, person history, or case analysis).
 - WHEN TO SEARCH — ALWAYS use web_search when the query is about a specific named person.
   If you called get_person_history, get_case_analysis, search_cases with a name, or
   live_search_ujs, then follow up with a web_search for that person. No exceptions.

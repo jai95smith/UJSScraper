@@ -1,7 +1,32 @@
 """Tool definitions for the court records assistant."""
 
+import os
+
+# --- News search provider: "claude" (built-in web_search) or "gemini" (grounded search) ---
+NEWS_SEARCH_PROVIDER = os.environ.get("NEWS_SEARCH_PROVIDER", "claude")
+
 # Anthropic server-side web search — executed by the API, not by us.
-WEB_SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search", "max_uses": 3}
+_CLAUDE_WEB_SEARCH = {"type": "web_search_20250305", "name": "web_search", "max_uses": 3}
+
+# Gemini-grounded search — client-side tool, executed by us.
+_GEMINI_NEWS_SEARCH = {
+    "name": "news_search",
+    "description": "Search the web for news coverage about a person using Google Search. Use this AFTER retrieving court data when the query is about a specific named person. Returns relevant news articles with sources.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Search query, e.g. 'Jason Krasley Lehigh County PA official oppression'"},
+        },
+        "required": ["query"],
+    },
+}
+
+
+def get_news_tool():
+    """Return the appropriate news search tool based on provider config."""
+    if NEWS_SEARCH_PROVIDER == "gemini":
+        return _GEMINI_NEWS_SEARCH
+    return _CLAUDE_WEB_SEARCH
 
 TOOLS = [
     {

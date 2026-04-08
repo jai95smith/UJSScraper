@@ -36,23 +36,38 @@ def test(name, condition, detail=""):
 # -------------------------------------------------------------------------
 
 def test_web_search_tool_definition():
-    """WEB_SEARCH_TOOL is defined correctly."""
-    from ujs.chat.tools import WEB_SEARCH_TOOL
-    test("WEB_SEARCH_TOOL exists", WEB_SEARCH_TOOL is not None)
-    test("WEB_SEARCH_TOOL has type", WEB_SEARCH_TOOL.get("type") == "web_search_20250305")
-    test("WEB_SEARCH_TOOL has max_uses", "max_uses" in WEB_SEARCH_TOOL)
-    test("WEB_SEARCH_TOOL max_uses <= 3", WEB_SEARCH_TOOL.get("max_uses", 99) <= 3)
+    """Both provider tools are defined correctly."""
+    from ujs.chat.tools import _CLAUDE_WEB_SEARCH, _GEMINI_NEWS_SEARCH
+    test("Claude tool has correct type", _CLAUDE_WEB_SEARCH.get("type") == "web_search_20250305")
+    test("Claude tool has max_uses <= 3", _CLAUDE_WEB_SEARCH.get("max_uses", 99) <= 3)
+    test("Gemini tool has name", _GEMINI_NEWS_SEARCH.get("name") == "news_search")
+    test("Gemini tool has input_schema", "input_schema" in _GEMINI_NEWS_SEARCH)
 
 
-def test_tools_list_includes_web_search():
-    """TOOLS + WEB_SEARCH_TOOL produces a valid tools array for the API."""
-    from ujs.chat.tools import TOOLS, WEB_SEARCH_TOOL
-    combined = TOOLS + [WEB_SEARCH_TOOL]
-    types = [t.get("type") for t in combined if "type" in t]
-    test("combined tools includes web_search type", "web_search_20250305" in types)
-    # All custom tools should still be present
-    names = [t.get("name") for t in combined if "name" in t and t.get("type") != "web_search_20250305"]
+def test_provider_flag():
+    """get_news_tool returns the right tool based on NEWS_SEARCH_PROVIDER."""
+    from ujs.chat.tools import get_news_tool, _CLAUDE_WEB_SEARCH, _GEMINI_NEWS_SEARCH
+    import ujs.chat.tools as tools_mod
+
+    original = tools_mod.NEWS_SEARCH_PROVIDER
+    try:
+        tools_mod.NEWS_SEARCH_PROVIDER = "claude"
+        test("claude provider returns web_search", get_news_tool() is _CLAUDE_WEB_SEARCH)
+        tools_mod.NEWS_SEARCH_PROVIDER = "gemini"
+        test("gemini provider returns news_search", get_news_tool() is _GEMINI_NEWS_SEARCH)
+    finally:
+        tools_mod.NEWS_SEARCH_PROVIDER = original
+
+
+def test_tools_list_includes_news_tool():
+    """TOOLS + get_news_tool() produces a valid tools array."""
+    from ujs.chat.tools import TOOLS, get_news_tool
+    combined = TOOLS + [get_news_tool()]
+    names = [t.get("name") for t in combined if "name" in t]
     test("custom tools still present", "lookup_docket" in names and "get_person_history" in names)
+    has_news = "web_search" in names or "news_search" in names or \
+               any(t.get("type") == "web_search_20250305" for t in combined)
+    test("news tool is included", has_news)
 
 
 def test_system_prompt_has_web_search_rules():
@@ -86,11 +101,11 @@ def test_system_prompt_has_web_search_rules():
          "speculate" in prompt and "discrepan" in prompt)
 
 
-def test_executor_skips_web_search():
-    """web_search should not be in HANDLERS (it's server-handled)."""
+def test_executor_handlers():
+    """web_search (server-side) not in HANDLERS, but news_search (gemini) is."""
     from ujs.chat.executors import HANDLERS
-    test("web_search not in HANDLERS", "web_search" not in HANDLERS)
-    test("server_tool_use not in HANDLERS", "server_tool_use" not in HANDLERS)
+    test("web_search not in HANDLERS (server-handled)", "web_search" not in HANDLERS)
+    test("news_search in HANDLERS (gemini provider)", "news_search" in HANDLERS)
 
 
 # -------------------------------------------------------------------------
@@ -224,9 +239,10 @@ def run_structural():
     print("Web Search — Structural Tests")
     print("=" * 60)
     test_web_search_tool_definition()
-    test_tools_list_includes_web_search()
+    test_provider_flag()
+    test_tools_list_includes_news_tool()
     test_system_prompt_has_web_search_rules()
-    test_executor_skips_web_search()
+    test_executor_handlers()
 
 
 def run_live():

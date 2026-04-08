@@ -484,6 +484,52 @@ def _get_charge_stats(conn, inputs):
 
 
 # ---------------------------------------------------------------------------
+# News search (Gemini grounded)
+# ---------------------------------------------------------------------------
+
+def _news_search(conn, inputs):
+    """Search for news using Gemini with Google Search grounding."""
+    from google import genai
+    from google.genai.types import Tool, GoogleSearch
+
+    query = inputs.get("query", "")
+    if not query:
+        return "No search query provided."
+
+    try:
+        client = genai.Client()
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=f"Find recent local news articles about: {query}. "
+                     f"Return ONLY factual summaries of what news outlets reported. "
+                     f"Include the source name and date for each article. "
+                     f"If no relevant news is found, say 'No relevant news coverage found.'",
+            config={"tools": [Tool(google_search=GoogleSearch())]},
+        )
+        text = response.text if response.text else "No results returned."
+
+        # Extract grounding sources if available
+        sources = []
+        if hasattr(response, "candidates") and response.candidates:
+            candidate = response.candidates[0]
+            grounding = getattr(candidate, "grounding_metadata", None)
+            if grounding:
+                chunks = getattr(grounding, "grounding_chunks", []) or []
+                for chunk in chunks:
+                    web = getattr(chunk, "web", None)
+                    if web:
+                        sources.append({"title": getattr(web, "title", ""), "uri": getattr(web, "uri", "")})
+
+        result = {"summary": text}
+        if sources:
+            result["sources"] = sources[:5]
+        return json.dumps(result)
+
+    except Exception as e:
+        return f"News search error: {str(e)[:200]}"
+
+
+# ---------------------------------------------------------------------------
 # Handler registry
 # ---------------------------------------------------------------------------
 
@@ -510,4 +556,5 @@ HANDLERS = {
     "get_case_changes": _get_case_changes,
     "get_filing_stats": _get_filing_stats,
     "get_charge_stats": _get_charge_stats,
+    "news_search": _news_search,
 }
