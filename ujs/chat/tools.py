@@ -38,10 +38,11 @@ _GENERATE_QUERIES = {
 
 
 def get_news_tools():
-    """Return news search tools: query generator + search provider."""
+    """Return news search tools based on provider config."""
     if NEWS_SEARCH_PROVIDER == "gemini":
         return [_GENERATE_QUERIES, _GEMINI_NEWS_SEARCH]
-    return [_GENERATE_QUERIES, _CLAUDE_WEB_SEARCH]
+    # Claude mode: Claude generates queries itself and runs web_search in parallel
+    return [_CLAUDE_WEB_SEARCH]
 
 TOOLS = [
     {

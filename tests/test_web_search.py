@@ -53,7 +53,7 @@ def test_provider_flag():
     try:
         tools_mod.NEWS_SEARCH_PROVIDER = "claude"
         tools = get_news_tools()
-        test("claude provider includes query generator", _GENERATE_QUERIES in tools)
+        test("claude provider skips query generator (Claude does it)", _GENERATE_QUERIES not in tools)
         test("claude provider includes web_search", _CLAUDE_WEB_SEARCH in tools)
         tools_mod.NEWS_SEARCH_PROVIDER = "gemini"
         tools = get_news_tools()
@@ -69,7 +69,13 @@ def test_tools_list_includes_news_tools():
     combined = TOOLS + get_news_tools()
     names = [t.get("name") for t in combined if "name" in t]
     test("custom tools still present", "lookup_docket" in names and "get_person_history" in names)
-    test("generate_news_queries included", "generate_news_queries" in names)
+    # generate_news_queries only in gemini mode
+    has_gen = "generate_news_queries" in names
+    from ujs.chat.tools import NEWS_SEARCH_PROVIDER
+    if NEWS_SEARCH_PROVIDER == "gemini":
+        test("generate_news_queries included (gemini mode)", has_gen)
+    else:
+        test("generate_news_queries excluded (claude mode)", not has_gen)
     has_search = "web_search" in names or "news_search" in names or \
                  any(t.get("type") == "web_search_20250305" for t in combined)
     test("search tool is included", has_search)

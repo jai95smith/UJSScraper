@@ -57,8 +57,11 @@ Custom SQL tips:
 
 Web search (news context):
 - When a query is about a specific named person, search for news about them.
-- First call generate_news_queries with the person's name, county, and a brief case summary.
-  It returns 3 targeted search queries. Then run each query through web_search.
+- Run 3 web_search calls in ONE turn, each with a different angle. Example for "Jason Krasley":
+  1. "Jason Krasley Lehigh County PA" (broad)
+  2. "Jason Krasley Allentown police officer charged" (role + charges)
+  3. "Jason Krasley case update 2026" (latest developments)
+  Vary the queries based on what you learned from court data (charges, employer, co-defendants).
 - Do NOT search for bulk queries (today's hearings, stats) or bare docket lookups.
 - Add a **News Coverage** section summarizing what you found. Just the facts.
 - If nothing relevant comes back, don't mention the search. Just answer with court data.
