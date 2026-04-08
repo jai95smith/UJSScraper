@@ -6,7 +6,7 @@ import os
 NEWS_SEARCH_PROVIDER = os.environ.get("NEWS_SEARCH_PROVIDER", "claude")
 
 # Anthropic server-side web search — executed by the API, not by us.
-_CLAUDE_WEB_SEARCH = {"type": "web_search_20250305", "name": "web_search", "max_uses": 5}
+_CLAUDE_WEB_SEARCH = {"type": "web_search_20250305", "name": "web_search", "max_uses": 3}
 
 # Gemini-grounded search — client-side tool, executed by us.
 _GEMINI_NEWS_SEARCH = {
@@ -22,11 +22,26 @@ _GEMINI_NEWS_SEARCH = {
 }
 
 
-def get_news_tool():
-    """Return the appropriate news search tool based on provider config."""
+_GENERATE_QUERIES = {
+    "name": "generate_news_queries",
+    "description": "Generate targeted web search queries for a person based on their case data. Call this BEFORE using web_search so you get better, more specific queries. Pass the person's name, county, and a brief summary of their charges/case info.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "Full name of the person"},
+            "county": {"type": "string", "description": "County (e.g. Lehigh)"},
+            "case_summary": {"type": "string", "description": "Brief summary: charges, dates, co-defendants, any notable details from court records"},
+        },
+        "required": ["name", "case_summary"],
+    },
+}
+
+
+def get_news_tools():
+    """Return news search tools: query generator + search provider."""
     if NEWS_SEARCH_PROVIDER == "gemini":
-        return _GEMINI_NEWS_SEARCH
-    return _CLAUDE_WEB_SEARCH
+        return [_GENERATE_QUERIES, _GEMINI_NEWS_SEARCH]
+    return [_GENERATE_QUERIES, _CLAUDE_WEB_SEARCH]
 
 TOOLS = [
     {

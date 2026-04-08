@@ -6,7 +6,7 @@ from typing import Optional
 import anthropic
 
 from ujs.chat.prompts import get_system_prompt
-from ujs.chat.tools import TOOLS, get_news_tool
+from ujs.chat.tools import TOOLS, get_news_tools
 from ujs.chat.executors import execute_tool
 
 
@@ -37,7 +37,7 @@ def _run_chat(client, model, question, max_rounds=10):
         try:
             response = client.messages.create(
                 model=model, max_tokens=2048,
-                system=get_system_prompt(), tools=TOOLS + [get_news_tool()], messages=messages,
+                system=get_system_prompt(), tools=TOOLS + get_news_tools(), messages=messages,
             )
         except Exception as e:
             return f"API error: {str(e)[:200]}", tool_calls
@@ -110,7 +110,7 @@ def ask_stream(question: str, api_key: Optional[str] = None, history: Optional[l
         try:
             response = client.messages.create(
                 model="claude-sonnet-4-20250514", max_tokens=2048,
-                system=get_system_prompt(), tools=TOOLS + [get_news_tool()], messages=messages,
+                system=get_system_prompt(), tools=TOOLS + get_news_tools(), messages=messages,
             )
         except Exception as e:
             yield f"\n\nAPI error: {str(e)[:200]}"
@@ -147,7 +147,7 @@ def ask_stream(question: str, api_key: Optional[str] = None, history: Optional[l
             try:
                 with client.messages.stream(
                     model="claude-sonnet-4-20250514", max_tokens=2048,
-                    system=get_system_prompt(), tools=TOOLS + [get_news_tool()], messages=messages,
+                    system=get_system_prompt(), tools=TOOLS + get_news_tools(), messages=messages,
                 ) as stream:
                     for text in stream.text_stream:
                         full_text += text

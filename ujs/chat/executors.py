@@ -484,6 +484,55 @@ def _get_charge_stats(conn, inputs):
 
 
 # ---------------------------------------------------------------------------
+# Query generation (Gemini Flash)
+# ---------------------------------------------------------------------------
+
+def _generate_news_queries(conn, inputs):
+    """Use Gemini Flash to generate targeted search queries from case data."""
+    from google import genai
+    from google.genai import types
+
+    name = inputs.get("name", "")
+    county = inputs.get("county", "")
+    case_summary = inputs.get("case_summary", "")
+
+    if not name:
+        return json.dumps({"queries": [f"{name} {county} PA"]})
+
+    try:
+        client = genai.Client()
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=f"""Generate exactly 3 Google search queries to find news articles about this person's court case.
+
+Person: {name}
+Location: {county} County, Pennsylvania
+Case info: {case_summary}
+
+Rules:
+- Each query should target a DIFFERENT angle (e.g. arrest, charges, latest update, related people, employer/role)
+- Include the person's full name in every query
+- Include location (city or county + PA)
+- Keep queries short and search-engine friendly
+- Return ONLY a JSON array of 3 strings, nothing else
+
+Example output: ["John Smith Allentown PA arrested rape charges", "John Smith Lehigh County police officer charged", "John Smith Pennsylvania case update 2026"]""",
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
+            ),
+        )
+        queries = json.loads(response.text)
+        if isinstance(queries, list) and len(queries) > 0:
+            return json.dumps({"queries": queries[:3]})
+    except Exception as e:
+        print(f"[generate_news_queries] Error: {e}")
+
+    # Fallback: simple query
+    return json.dumps({"queries": [f"{name} {county} PA"]})
+
+
+# ---------------------------------------------------------------------------
 # News search (Gemini grounded)
 # ---------------------------------------------------------------------------
 
@@ -559,4 +608,5 @@ HANDLERS = {
     "get_filing_stats": _get_filing_stats,
     "get_charge_stats": _get_charge_stats,
     "news_search": _news_search,
+    "generate_news_queries": _generate_news_queries,
 }

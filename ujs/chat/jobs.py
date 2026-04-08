@@ -6,7 +6,7 @@ import anthropic
 
 from ujs import db
 from ujs.chat.prompts import get_system_prompt
-from ujs.chat.tools import TOOLS, get_news_tool
+from ujs.chat.tools import TOOLS, get_news_tools
 from ujs.chat.executors import execute_tool
 
 
@@ -102,7 +102,7 @@ def _run_job(job_id, question, history, conversation_id=None):
 
             response = client.messages.create(
                 model="claude-sonnet-4-20250514", max_tokens=2048,
-                system=get_system_prompt(), tools=TOOLS + [get_news_tool()], messages=messages,
+                system=get_system_prompt(), tools=TOOLS + get_news_tools(), messages=messages,
             )
 
             if response.stop_reason == "tool_use":
