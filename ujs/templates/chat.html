@@ -410,6 +410,26 @@ function renderMd(text) {
   html = html.replace(/\n{3,}/g, '\n\n');
   // Horizontal rules
   html = html.replace(/^---$/gm, '<hr class="border-navy-border my-3">');
+  // Tables — must run before headers/bold to avoid conflicts
+  html = html.replace(/((?:^\|.+\|$\n?)+)/gm, function(table) {
+    const rows = table.trim().split('\n').filter(r => r.trim());
+    if (rows.length < 2) return table;
+    // Check if row 2 is a separator (|---|---|)
+    const isSep = /^\|[\s:?-]+\|/.test(rows[1]);
+    const dataRows = isSep ? [rows[0], ...rows.slice(2)] : rows;
+    const parseRow = r => r.split('|').slice(1, -1).map(c => c.trim());
+    let out = '<div class="overflow-x-auto my-3"><table class="w-full text-[12px] border-collapse">';
+    dataRows.forEach((r, i) => {
+      const cells = parseRow(r);
+      const tag = (i === 0 && isSep) ? 'th' : 'td';
+      const cls = tag === 'th'
+        ? 'text-left text-court-dim font-medium px-2 py-1.5 border-b border-navy-border bg-navy/50'
+        : 'text-left text-court-text px-2 py-1 border-b border-navy-border/50';
+      out += '<tr>' + cells.map(c => `<${tag} class="${cls}">${c}</${tag}>`).join('') + '</tr>';
+    });
+    out += '</table></div>';
+    return out;
+  });
   // Headers
   html = html.replace(/^### (.+)$/gm, '<h4 class="text-white font-semibold text-[14px] mt-4 mb-1">$1</h4>');
   html = html.replace(/^## (.+)$/gm, '<h3 class="text-white font-semibold text-[15px] mt-5 mb-1.5 pb-1 border-b border-navy-border">$1</h3>');
