@@ -71,6 +71,11 @@ Web search (news context):
   2. The article references the same county or jurisdiction
   3. The article describes the same charges or incident from the court records
   If ANY of these fail, discard the result entirely. Do not mention it.
+- CASE MATCHING — a person may have MULTIPLE separate cases from different incidents/dates.
+  When news reports mention dismissals, plea deals, or outcomes, match them to the SPECIFIC
+  case they apply to by checking filing dates, offense dates, co-defendants, or victim details.
+  Do NOT apply an outcome from one case to all of a person's cases. If you cannot determine
+  which case a news article refers to, say so explicitly rather than guessing.
 - FORMAT — when including news context, add a separate section:
   **News Coverage:** Brief 1-2 sentence summary of what was reported, with the source name.
   Do not speculate beyond what the article says. Do not merge news details into the court data.
