@@ -445,8 +445,8 @@ function renderMd(text) {
   html = html.replace(/^### (.+)$/gm, '<h4 class="text-white font-semibold text-[14px] mt-4 mb-1">$1</h4>');
   html = html.replace(/^## (.+)$/gm, '<h3 class="text-white font-semibold text-[15px] mt-5 mb-1.5 pb-1 border-b border-navy-border">$1</h3>');
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  // Source lines in gold (handles *Source:*, **Source:**, Source:)
-  html = html.replace(/\*{1,2}Source:\*{0,2}\s*(.+?)$/gm, '<div class="text-gold text-[12px] mt-2">Source: $1</div>');
+  // Source lines in gold (handles *Source: X*, **Source:** X, Source: X)
+  html = html.replace(/\*{1,2}Source:\s*(.+?)\*{0,2}$/gm, '<div class="text-gold text-[12px] mt-2">Source: $1</div>');
   // News loading indicator with pulse animation
   html = html.replace(/\*Searching for news coverage\.\.\.\*/g,
     '<div class="text-court-dim text-[13px] mt-3 flex items-center gap-2 animate-pulse">' +

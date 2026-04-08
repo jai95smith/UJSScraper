@@ -76,6 +76,9 @@ function renderMd(text) {
   html = html.replace(/^### (.+)$/gm, '<h4 class="text-white font-semibold text-[14px] mt-4 mb-1">$1</h4>');
   html = html.replace(/^## (.+)$/gm, '<h3 class="text-white font-semibold text-[15px] mt-5 mb-1.5 pb-1 border-b border-navy-border">$1</h3>');
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*{1,2}Source:\s*(.+?)\*{0,2}$/gm, '<div class="text-gold text-[12px] mt-2">Source: $1</div>');
+  html = html.replace(/\*Searching for news coverage\.\.\.\*/g,
+    '<div class="animate-pulse">Searching for news coverage...</div>');
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
   html = html.replace(/^- (.+)$/gm, '<div class="pl-4 py-[1px] text-[14px] before:content-[\'·\'] before:text-gold before:mr-2">$1</div>');
   html = html.replace(/^\d+\. (.+)$/gm, '<div class="pl-4 py-[1px] text-[14px]">$1</div>');
@@ -182,6 +185,42 @@ console.log('\n--- Edge cases ---');
 test('empty string returns empty', renderMd('').length === 0);
 test('just text', renderMd('Hello world').includes('Hello world'));
 test('special chars in table', renderMd('```table\n{"headers":["§ 3012"],"rows":[["18 § 3012 §§ A"]]}\n```').includes('§ 3012'));
+
+// Bold inside list items
+const out7 = renderMd('- **Bail**: $100,000\n- **Judge**: Caffrey');
+test('bold inside list items', out7.includes('<strong>Bail</strong>') && out7.includes('$100,000'));
+
+// Source line styling
+const out8 = renderMd('*Source: Fully analyzed cases*');
+test('source line renders with class', out8.includes('Source:') && out8.includes('text-gold'));
+
+const out8b = renderMd('**Source:** Fully analyzed cases');
+test('bold source line also styled', out8b.includes('Source:'));
+
+// News loading indicator
+const out9 = renderMd('Some text\n\n---\n\n*Searching for news coverage...*');
+test('news loading has animation', out9.includes('animate-pulse') || out9.includes('Searching for news'));
+
+// Nested bold in headers
+const out10 = renderMd('## **Jason Krasley** - Cases');
+test('bold in header', out10.includes('Jason Krasley'));
+
+// Ampersand in content
+const out11 = renderMd('Smith & Jones LLC\n\nCharges & bail');
+test('ampersands escaped', out11.includes('&amp;'));
+
+// Table with empty cells
+const emptyTable = JSON.stringify({headers:["A","B","C"],rows:[["1","","3"],["","2",""]]});
+const out12 = renderMd('```table\n' + emptyTable + '\n```');
+test('table with empty cells renders', out12.includes('<table') && out12.includes('<td'));
+
+// Incomplete fenced block (should render as text, not break)
+const out13 = renderMd('```table\n{"headers":["A"]');
+test('incomplete fenced block doesnt break', out13.length > 0);
+
+// Multiple paragraphs with HR between
+const out14 = renderMd('Paragraph one.\n\n---\n\n**News Coverage**\n\nParagraph two.');
+test('HR separates sections', out14.includes('<hr') && out14.includes('News Coverage'));
 
 // ---------------------------------------------------------------
 console.log(`\n${'='.repeat(60)}`);
