@@ -431,7 +431,7 @@ function renderMd(text) {
   let html = text.replace(/```(\w+)\s*\n([\s\S]*?)```/g, function(_, type, content) {
     const idx = blocks.length;
     blocks.push({type, content: content.trim()});
-    return `\u2603BLOCK${idx}\x00`;
+    return `\u2603BLOCK${idx}\u2603`;
   });
 
   // Step 2: Inline markdown on the remaining text
@@ -455,7 +455,7 @@ function renderMd(text) {
   html = html.replace(/<p><\/p>/g, '');
 
   // Step 3: Replace placeholders with rendered blocks
-  html = html.replace(/\u2603BLOCK(\d+)\x00/g, function(_, idx) {
+  html = html.replace(/\u2603BLOCK(\d+)\u2603/g, function(_, idx) {
     const b = blocks[parseInt(idx)];
     if (b.type === 'table') return renderTableBlock(b.content);
     if (b.type === 'chart') return `<div data-chart='${esc2(b.content)}' class="my-3 py-2 text-[11px] text-court-dim">Loading chart...</div>`;
