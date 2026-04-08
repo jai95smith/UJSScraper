@@ -370,17 +370,6 @@ async function pollJob(jobId, statusEl, contentEl, msgId) {
         const idx = fullJob.response.indexOf('\n\n');
         const text = idx >= 0 ? fullJob.response.slice(idx + 2) : fullJob.response;
         if (text) renderFinalResponse(contentEl, text, msgId);
-
-        // Keep polling briefly for news to arrive (runs in background thread)
-        if (text && text.includes('Searching for news')) {
-          for (let poll = 0; poll < 10; poll++) {
-            await new Promise(r => setTimeout(r, 2000));
-            const updated = await fetch(API + '/ask/job/' + jobId).then(r => r.json());
-            const uidx = updated.response.indexOf('\n\n');
-            const utext = uidx >= 0 ? updated.response.slice(uidx + 2) : updated.response;
-            if (utext !== text) { renderFinalResponse(contentEl, utext, msgId); chat.scrollTop = chat.scrollHeight; break; }
-          }
-        }
         break;
       }
     } catch(e) { stopThinking(statusEl.id); break; }
