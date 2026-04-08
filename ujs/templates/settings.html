@@ -283,6 +283,7 @@ function toggleSidebar() {
 // Preferences: API-backed with localStorage fallback
 const _prefsApiFields = new Set(['email_alerts', 'weekly_digest', 'notify_frequency']);
 let _saveTimer;
+let _localTimer;
 let _pendingApiUpdates = {};
 let _saving = false;
 
@@ -296,10 +297,12 @@ function saveSetting(key, value) {
   if (_prefsApiFields.has(key)) {
     _pendingApiUpdates[key] = value;
     clearTimeout(_saveTimer);
-    if (_saving) return; // Don't show toast while already saving
+    if (_saving) return;
     _saveTimer = setTimeout(_flushApiSettings, 500);
   } else {
-    showToast('Settings saved');
+    // Debounce local-only toast too (no spam on rapid dropdown changes)
+    clearTimeout(_localTimer);
+    _localTimer = setTimeout(() => showToast('Settings saved'), 500);
   }
 }
 
