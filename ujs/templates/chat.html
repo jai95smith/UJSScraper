@@ -2,6 +2,7 @@
 
 {% block head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/animejs@4.0.2/lib/anime.iife.min.js"></script>
 {% endblock %}
 
 {% block extra_css %}
@@ -14,6 +15,8 @@ body { background: #132240; height: 100dvh; overflow: hidden; }
 .prose h3, .prose h4 { color: #fff; }
 .prose strong { color: #e8edf5; font-weight: 600; }
 .chart-wrap canvas { width: 100% !important; height: auto !important; max-height: 300px; }
+.thinking-dots { display: inline-flex; gap: 3px; align-items: center; margin-left: 6px; vertical-align: middle; }
+.thinking-dots .dot { width: 4px; height: 4px; border-radius: 50%; background: #c8a03a; opacity: 0.3; }
 {% endblock %}
 
 {% block body %}
@@ -206,9 +209,45 @@ function userBubble(text) {
 }
 function botBubbleStart(statusId, contentId) {
   return `<div class="max-w-2xl py-1">
-    <div id="${statusId}" class="text-[11px] text-court-dim mb-1.5 font-mono truncate"></div>
+    <div id="${statusId}" class="text-[11px] text-court-dim mb-1.5 font-mono truncate flex items-center">
+      <span id="${statusId}-text"></span>
+      <span id="${statusId}-dots" class="thinking-dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>
+    </div>
     <div id="${contentId}" class="prose text-[15px] text-court-bright break-words"></div>
   </div>`;
+}
+
+let thinkingAnimations = {};
+function startThinking(statusId) {
+  const dotsEl = document.getElementById(statusId + '-dots');
+  if (!dotsEl) return;
+  const dots = dotsEl.querySelectorAll('.dot');
+  thinkingAnimations[statusId] = anime({
+    targets: dots,
+    opacity: [0.3, 1],
+    scale: [1, 1.4],
+    delay: anime.stagger(120),
+    loop: true,
+    direction: 'alternate',
+    easing: 'easeInOutSine',
+    duration: 400,
+  });
+}
+function stopThinking(statusId) {
+  if (thinkingAnimations[statusId]) {
+    thinkingAnimations[statusId].pause();
+    delete thinkingAnimations[statusId];
+  }
+  const dotsEl = document.getElementById(statusId + '-dots');
+  if (dotsEl) {
+    anime({
+      targets: dotsEl,
+      opacity: 0,
+      duration: 300,
+      easing: 'easeOutQuad',
+      complete: () => dotsEl.remove(),
+    });
+  }
 }
 function retryBubble(question) {
   return `<div class="max-w-2xl py-1">
@@ -268,7 +307,9 @@ async function send() {
   chat.scrollTop = chat.scrollHeight;
 
   const statusEl = document.getElementById(id + '-status');
+  const statusTextEl = document.getElementById(id + '-status-text');
   const contentEl = document.getElementById(id);
+  startThinking(id + '-status');
 
   try {
     // Submit question — server creates/updates conversation
@@ -289,12 +330,12 @@ async function send() {
     await pollJob(job_id, statusEl, contentEl, id);
     loadConversations(); // Refresh sidebar
 
-  } catch (e) { contentEl.textContent = 'Error: ' + e.message; }
+  } catch (e) { stopThinking(id + '-status'); contentEl.textContent = 'Error: ' + e.message; }
 
   btn.disabled = false;
   document.getElementById('btn-text').classList.remove('hidden');
   document.getElementById('btn-spin').classList.add('hidden');
-  statusEl.classList.add('opacity-50');
+  anime({ targets: statusEl, opacity: 0.5, duration: 400, easing: 'easeOutQuad' });
   input.focus();
 }
 
@@ -309,7 +350,10 @@ async function checkRunningJob(convId) {
       messages.insertAdjacentHTML('beforeend', botBubbleStart(id + '-status', id));
       const statusEl = document.getElementById(id + '-status');
       const contentEl = document.getElementById(id);
-      statusEl.textContent = 'Resuming...';
+      const resumeTextEl = document.getElementById(id + '-status-text');
+      if (resumeTextEl) resumeTextEl.textContent = 'Resuming...';
+      else statusEl.textContent = 'Resuming...';
+      startThinking(id + '-status');
       btn.disabled = true;
       document.getElementById('btn-text').classList.add('hidden');
       document.getElementById('btn-spin').classList.remove('hidden');
@@ -339,6 +383,8 @@ async function checkRunningJob(convId) {
 /* --- Poll job --- */
 async function pollJob(jobId, statusEl, contentEl, msgId) {
   let seen = 0;
+  const statusTextEl = document.getElementById(statusEl.id + '-text');
+  let contentStarted = false;
   while (true) {
     try {
       const res = await fetch(API + '/ask/job/' + jobId + '?after=' + seen);
@@ -348,14 +394,18 @@ async function pollJob(jobId, statusEl, contentEl, msgId) {
         const full = data.response;
         const parts = full.split('\n\n');
         if (parts.length > 1) {
-          statusEl.textContent = parts[0];
+          if (statusTextEl) statusTextEl.textContent = parts[0];
+          else statusEl.textContent = parts[0];
           contentEl.innerHTML = renderMd(parts.slice(1).join('\n\n'));
+          if (!contentStarted) { stopThinking(statusEl.id); contentStarted = true; }
         } else {
-          statusEl.textContent = full;
+          if (statusTextEl) statusTextEl.textContent = full;
+          else statusEl.textContent = full;
         }
         chat.scrollTop = chat.scrollHeight;
       }
       if (data.status === 'completed' || data.status === 'error') {
+        stopThinking(statusEl.id);
         if (data.error) contentEl.textContent = 'Error: ' + data.error;
         const fullJob = await fetch(API + '/ask/job/' + jobId).then(r => r.json());
         const idx = fullJob.response.indexOf('\n\n');
@@ -363,7 +413,7 @@ async function pollJob(jobId, statusEl, contentEl, msgId) {
         if (text) renderFinalResponse(contentEl, text, msgId);
         break;
       }
-    } catch(e) { break; }
+    } catch(e) { stopThinking(statusEl.id); break; }
     await new Promise(r => setTimeout(r, 500));
   }
 }
