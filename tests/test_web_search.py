@@ -81,27 +81,31 @@ def test_tools_list_includes_news_tools():
     test("search tool is included", has_search)
 
 
+def test_two_prompt_separation():
+    """Court and news prompts are separate — court has no web search references."""
+    from ujs.chat.prompts import get_court_prompt, get_news_prompt
+    court = get_court_prompt().lower()
+    news = get_news_prompt().lower()
+    test("court prompt has no web_search", "web_search" not in court)
+    test("court prompt has no news", "news coverage" not in court)
+    test("news prompt mentions web_search", "web_search" in news)
+    test("news prompt has NO_NEWS_FOUND sentinel", "no_news_found" in news)
+    test("news prompt says never contradict", "never contradict" in news)
+
+
 def test_system_prompt_has_web_search_rules():
     """System prompt contains web search guidance covering the key behavioral rules."""
-    from ujs.chat.prompts import get_system_prompt
-    prompt = get_system_prompt().lower()
+    from ujs.chat.prompts import get_court_prompt, get_news_prompt
+    court = get_court_prompt().lower()
+    news = get_news_prompt().lower()
+    prompt = court + " " + news
 
     # Core: web search is mentioned at all
     test("prompt references web search", "web_search" in prompt or "web search" in prompt)
 
-    # Must have trigger criteria (when to search)
-    test("prompt defines when to search", "when to search" in prompt or "trigger" in prompt)
-
-    # Must have exclusion criteria (when not to search)
-    test("prompt defines when NOT to search", "when not to search" in prompt or "do not search" in prompt)
-
-    # Must say what to do when nothing is found
-    test("prompt handles no-results gracefully",
-         "nothing" in prompt or "don't mention" in prompt or "don't mention" in prompt)
-
-    # Must handle no-results gracefully (don't tell user you searched and found nothing)
-    test("prompt handles empty results silently",
-         ("do not mention" in prompt or "don't mention" in prompt) and "search" in prompt)
+    # News prompt handles no-results with sentinel
+    test("news prompt uses NO_NEWS_FOUND sentinel",
+         "no_news_found" in prompt)
 
     # Must not speculate
     test("prompt forbids speculation",
@@ -249,6 +253,7 @@ def run_structural():
     test_web_search_tool_definition()
     test_provider_flag()
     test_tools_list_includes_news_tools()
+    test_two_prompt_separation()
     test_system_prompt_has_web_search_rules()
     test_executor_handlers()
 

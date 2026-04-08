@@ -1,11 +1,11 @@
 """Background chat job runner — generates responses server-side."""
 
-import json, os, time, threading, uuid
+import json, os, re, time, threading, uuid
 
 import anthropic
 
 from ujs import db
-from ujs.chat.prompts import get_system_prompt
+from ujs.chat.prompts import get_court_prompt, get_news_prompt
 from ujs.chat.tools import TOOLS, get_news_tools
 from ujs.chat.executors import execute_tool
 
@@ -73,8 +73,64 @@ def _save_to_conversation(conversation_id, response_text):
         pass
 
 
+def _is_person_query(question, court_answer):
+    """Check if this query is about a specific named person (worth searching news)."""
+    # If the court answer mentions a specific person's cases, it's a person query
+    if any(kw in court_answer.lower() for kw in ["docket", "charges", "case", "hearing", "bail"]):
+        # Check it's not a bulk query
+        if not any(kw in question.lower() for kw in ["how many", "stats", "filing", "trend", "coverage"]):
+            return True
+    return False
+
+
+def _extract_person_context(question, court_answer):
+    """Extract person name and case summary for news search."""
+    # Take first 500 chars of court answer as context
+    return f"Question: {question}\n\nCourt records answer:\n{court_answer[:500]}"
+
+
+def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, status_prefix=""):
+    """Run a tool-use loop until end_turn or timeout. Returns final text."""
+    for round_num in range(20):
+        if time.time() > timeout_at:
+            return None
+
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514", max_tokens=2048,
+            system=system, tools=tools, messages=messages,
+        )
+
+        if response.stop_reason == "tool_use":
+            messages.append({"role": "assistant", "content": response.content})
+            tool_results = []
+            for block in response.content:
+                if block.type == "server_tool_use":
+                    _update_job(job_id, append_response="..web search", append_tool="web_search")
+                elif block.type == "tool_use":
+                    tool_name = block.name.replace("_", " ")
+                    _update_job(job_id, append_response=f"..{status_prefix}{tool_name}", append_tool=block.name)
+                    result = execute_tool(block.name, block.input)
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": result,
+                    })
+            if tool_results:
+                messages.append({"role": "user", "content": tool_results})
+        else:
+            # Log server-side tools that ran in the final turn
+            for block in response.content:
+                if block.type == "server_tool_use":
+                    _update_job(job_id, append_response="..web search", append_tool="web_search")
+
+            text_parts = [b.text for b in response.content if hasattr(b, "text")]
+            return "".join(text_parts) if text_parts else ""
+
+    return None
+
+
 def _run_job(job_id, question, history, conversation_id=None):
-    """Run the chat job — tool calls + streaming response."""
+    """Run the chat job — two passes: court data, then news."""
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:
         _update_job(job_id, status="error", error="ANTHROPIC_API_KEY not set")
@@ -82,6 +138,7 @@ def _run_job(job_id, question, history, conversation_id=None):
 
     client = anthropic.Anthropic(api_key=key)
     start = time.time()
+    timeout_at = start + 120
 
     # Build messages
     messages = []
@@ -95,71 +152,64 @@ def _run_job(job_id, question, history, conversation_id=None):
     _update_job(job_id, append_response="Searching court records")
 
     try:
-        for round_num in range(20):
-            if time.time() - start > 120:
-                _update_job(job_id, append_response="\n\nRequest timed out.", status="completed", completed_at="NOW()")
-                return
+        # ---------------------------------------------------------------
+        # Pass 1: Court data (no web search tools)
+        # ---------------------------------------------------------------
+        court_answer = _run_tool_loop(
+            client, get_court_prompt(), TOOLS, list(messages),
+            job_id, timeout_at,
+        )
 
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514", max_tokens=2048,
-                system=get_system_prompt(), tools=TOOLS + get_news_tools(), messages=messages,
+        if court_answer is None:
+            _update_job(job_id, append_response="\n\nRequest timed out.", status="completed", completed_at="NOW()")
+            return
+
+        _update_job(job_id, append_response="\n\n" + court_answer)
+
+        # ---------------------------------------------------------------
+        # Pass 2: News search (only for person queries, separate call)
+        # ---------------------------------------------------------------
+        if _is_person_query(question, court_answer) and time.time() < timeout_at - 15:
+            _update_job(job_id, append_response="..searching news")
+
+            news_messages = [{
+                "role": "user",
+                "content": _extract_person_context(question, court_answer),
+            }]
+
+            news_text = _run_tool_loop(
+                client, get_news_prompt(), get_news_tools(), news_messages,
+                job_id, timeout_at,
             )
 
-            if response.stop_reason == "tool_use":
-                messages.append({"role": "assistant", "content": response.content})
-                tool_results = []
-                for block in response.content:
-                    if block.type == "server_tool_use":
-                        _update_job(job_id, append_response="..web search", append_tool="web_search")
-                    elif block.type == "tool_use":
-                        tool_name = block.name.replace("_", " ")
-                        _update_job(job_id, append_response=f"..{tool_name}", append_tool=block.name)
-                        result = execute_tool(block.name, block.input)
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": result,
-                        })
-                if tool_results:
-                    messages.append({"role": "user", "content": tool_results})
-            else:
-                # Log server-side tools (web_search) that ran in this final turn
-                for block in response.content:
-                    if block.type == "server_tool_use":
-                        _update_job(job_id, append_response="..web search", append_tool="web_search")
+            if news_text and "NO_NEWS_FOUND" not in news_text:
+                _update_job(job_id, append_response="\n\n---\n\n**News Coverage**\n\n" + news_text.strip())
 
-                # Extract text from the response we already have
-                text_parts = [b.text for b in response.content if hasattr(b, "text")]
-                if text_parts:
-                    _update_job(job_id, append_response="\n\n" + "".join(text_parts))
-                else:
-                    _update_job(job_id, append_response="\n\nNo response generated.")
+        # ---------------------------------------------------------------
+        # Done
+        # ---------------------------------------------------------------
+        duration = int((time.time() - start) * 1000)
+        _update_job(job_id, status="completed", completed_at="NOW()")
 
-                duration = int((time.time() - start) * 1000)
-                _update_job(job_id, status="completed", completed_at="NOW()")
+        # Save to conversation
+        job = get_job(job_id)
+        response_text = job.get("response", "")
+        idx = response_text.find("\n\n")
+        if idx >= 0:
+            response_text = response_text[idx + 2:]
+        _save_to_conversation(conversation_id, response_text)
 
-                # Save response to conversation
+        # Log
+        try:
+            with db.connect() as conn:
+                cur = conn.cursor()
                 job = get_job(job_id)
-                response_text = job.get("response", "")
-                idx = response_text.find("\n\n")
-                if idx >= 0:
-                    response_text = response_text[idx + 2:]
-                _save_to_conversation(conversation_id, response_text)
-
-                # Log to query_log
-                try:
-                    with db.connect() as conn:
-                        cur = conn.cursor()
-                        job = get_job(job_id)
-                        cur.execute(
-                            "INSERT INTO query_log (question, tools_used, response_length, duration_ms) VALUES (%s, %s, %s, %s)",
-                            (question[:500], job.get("tools_log", []), len(job.get("response", "")), duration)
-                        )
-                except Exception:
-                    pass
-                return
-
-        _update_job(job_id, append_response="\n\nCould not resolve answer.", status="completed", completed_at="NOW()")
+                cur.execute(
+                    "INSERT INTO query_log (question, tools_used, response_length, duration_ms) VALUES (%s, %s, %s, %s)",
+                    (question[:500], job.get("tools_log", []), len(job.get("response", "")), duration)
+                )
+        except Exception:
+            pass
 
     except Exception as e:
         _update_job(job_id, status="error", error=str(e)[:500], completed_at="NOW()")
