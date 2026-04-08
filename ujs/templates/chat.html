@@ -2,9 +2,7 @@
 
 {% block head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-{% endblock %}
-
-{% block extra_css %}
+<style>
 body { background: #132240; height: 100dvh; overflow: hidden; }
 .prose { line-height: 1.6; overflow-wrap: break-word; word-break: break-word; color: #e8edf5; }
 .prose p { margin: 0; }
@@ -21,6 +19,7 @@ body { background: #132240; height: 100dvh; overflow: hidden; }
 .thinking-dots.fade-out { animation: fade-out 0.3s ease-out forwards; }
 @keyframes pulse-dot { 0%, 100% { opacity: 0.3; transform: scale(1); } 50% { opacity: 1; transform: scale(1.4); } }
 @keyframes fade-out { to { opacity: 0; } }
+</style>
 {% endblock %}
 
 {% block body %}
