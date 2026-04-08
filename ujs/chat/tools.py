@@ -1,5 +1,8 @@
 """Tool definitions for the court records assistant."""
 
+# Anthropic server-side web search — executed by the API, not by us.
+WEB_SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search", "max_uses": 3}
+
 TOOLS = [
     {
         "name": "lookup_docket",

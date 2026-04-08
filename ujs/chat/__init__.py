@@ -6,7 +6,7 @@ from typing import Optional
 import anthropic
 
 from ujs.chat.prompts import get_system_prompt
-from ujs.chat.tools import TOOLS
+from ujs.chat.tools import TOOLS, WEB_SEARCH_TOOL
 from ujs.chat.executors import execute_tool
 
 
@@ -37,7 +37,7 @@ def _run_chat(client, model, question, max_rounds=10):
         try:
             response = client.messages.create(
                 model=model, max_tokens=1024,
-                system=get_system_prompt(), tools=TOOLS, messages=messages,
+                system=get_system_prompt(), tools=TOOLS + [WEB_SEARCH_TOOL], messages=messages,
             )
         except Exception as e:
             return f"API error: {str(e)[:200]}", tool_calls
@@ -54,7 +54,8 @@ def _run_chat(client, model, question, max_rounds=10):
                         "tool_use_id": block.id,
                         "content": result,
                     })
-            messages.append({"role": "user", "content": tool_results})
+            if tool_results:
+                messages.append({"role": "user", "content": tool_results})
         else:
             for block in response.content:
                 if hasattr(block, "text"):
@@ -109,7 +110,7 @@ def ask_stream(question: str, api_key: Optional[str] = None, history: Optional[l
         try:
             response = client.messages.create(
                 model="claude-sonnet-4-20250514", max_tokens=1024,
-                system=get_system_prompt(), tools=TOOLS, messages=messages,
+                system=get_system_prompt(), tools=TOOLS + [WEB_SEARCH_TOOL], messages=messages,
             )
         except Exception as e:
             yield f"\n\nAPI error: {str(e)[:200]}"
@@ -120,7 +121,10 @@ def ask_stream(question: str, api_key: Optional[str] = None, history: Optional[l
             messages.append({"role": "assistant", "content": response.content})
             tool_results = []
             for block in response.content:
-                if block.type == "tool_use":
+                if block.type == "server_tool_use":
+                    tools_used.append("web_search")
+                    yield "..web search"
+                elif block.type == "tool_use":
                     tools_used.append(block.name)
                     yield f"..{block.name.replace('_', ' ')}"
                     result = execute_tool(block.name, block.input)
@@ -129,14 +133,15 @@ def ask_stream(question: str, api_key: Optional[str] = None, history: Optional[l
                         "tool_use_id": block.id,
                         "content": result,
                     })
-            messages.append({"role": "user", "content": tool_results})
+            if tool_results:
+                messages.append({"role": "user", "content": tool_results})
         else:
             yield "\n\n"
             full_text = ""
             try:
                 with client.messages.stream(
                     model="claude-sonnet-4-20250514", max_tokens=1024,
-                    system=get_system_prompt(), tools=TOOLS, messages=messages,
+                    system=get_system_prompt(), tools=TOOLS + [WEB_SEARCH_TOOL], messages=messages,
                 ) as stream:
                     for text in stream.text_stream:
                         full_text += text

@@ -6,7 +6,7 @@ import anthropic
 
 from ujs import db
 from ujs.chat.prompts import get_system_prompt
-from ujs.chat.tools import TOOLS
+from ujs.chat.tools import TOOLS, WEB_SEARCH_TOOL
 from ujs.chat.executors import execute_tool
 
 
@@ -102,14 +102,16 @@ def _run_job(job_id, question, history, conversation_id=None):
 
             response = client.messages.create(
                 model="claude-sonnet-4-20250514", max_tokens=1024,
-                system=get_system_prompt(), tools=TOOLS, messages=messages,
+                system=get_system_prompt(), tools=TOOLS + [WEB_SEARCH_TOOL], messages=messages,
             )
 
             if response.stop_reason == "tool_use":
                 messages.append({"role": "assistant", "content": response.content})
                 tool_results = []
                 for block in response.content:
-                    if block.type == "tool_use":
+                    if block.type == "server_tool_use":
+                        _update_job(job_id, append_response="..web search", append_tool="web_search")
+                    elif block.type == "tool_use":
                         tool_name = block.name.replace("_", " ")
                         _update_job(job_id, append_response=f"..{tool_name}", append_tool=block.name)
                         result = execute_tool(block.name, block.input)
@@ -118,7 +120,8 @@ def _run_job(job_id, question, history, conversation_id=None):
                             "tool_use_id": block.id,
                             "content": result,
                         })
-                messages.append({"role": "user", "content": tool_results})
+                if tool_results:
+                    messages.append({"role": "user", "content": tool_results})
             else:
                 # Extract text from the response we already have
                 text_parts = [b.text for b in response.content if hasattr(b, "text")]

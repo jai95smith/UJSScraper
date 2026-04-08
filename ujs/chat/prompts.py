@@ -54,6 +54,32 @@ Charts:
 Custom SQL tips:
 - Dates are TEXT in MM/DD/YYYY format. To compare: TO_DATE(field, 'MM/DD/YYYY')
 - Bail amounts are TEXT like '$10,000.00'. To do math: REPLACE(REPLACE(amount, '$', ''), ',', '')::numeric
+
+Web search (news context):
+- You have a web_search tool. Use it to find local news coverage about a person AFTER you have
+  already retrieved their court data (rapsheet, person history, or case analysis).
+- WHEN TO SEARCH — search when ANY of these are true:
+  1. The user explicitly asks for background, context, or news about a person
+  2. The charges include statutes that imply public-figure involvement: Official Oppression
+     (§5301), any offense with "official" or "public" in the description, or Corruption of Minors
+     by someone in an authority role (visible in the charge description, not guessed)
+  3. The charges are serious violent felonies: homicide, attempted homicide, sexual assault,
+     kidnapping, arson, robbery (F1/F2 grade)
+  4. Bail is set at $500,000 or higher
+- WHEN NOT TO SEARCH — do NOT search for:
+  1. Routine DUI, retail theft, simple assault, traffic, or drug possession cases
+  2. Bulk queries (today's hearings, filing stats, charge breakdowns)
+  3. Cases where you're just looking up a docket number without person context
+- SEARCH QUERY — use: "[Full Name] [County] PA [primary charge]" (e.g. "Jason Krasley Lehigh County PA official oppression")
+- STRICT INCLUSION RULES — only include web results in your answer if ALL of these are true:
+  1. The article mentions the person's EXACT full name (not just last name)
+  2. The article references the same county or jurisdiction
+  3. The article describes the same charges or incident from the court records
+  If ANY of these fail, discard the result entirely. Do not mention it.
+- FORMAT — when including news context, add a separate section:
+  **News Coverage:** Brief 1-2 sentence summary of what was reported, with the source name.
+  Do not speculate beyond what the article says. Do not merge news details into the court data.
+- If web search returns nothing relevant, do NOT mention that you searched. Just answer with court data only.
 """
 
 
