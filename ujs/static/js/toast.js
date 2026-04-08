@@ -29,7 +29,10 @@
       info: '<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
     };
     toast.style.cssText = 'pointer-events:auto;background:#0f1e38;border:1px solid;border-radius:8px;padding:10px 16px;font-size:13px;display:flex;align-items:center;gap:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);opacity:0;transform:translateY(8px);transition:opacity 0.2s,transform 0.2s;' + (colors[type] || colors.info);
-    toast.innerHTML = (icons[type] || icons.info) + '<span>' + message + '</span>';
+    toast.innerHTML = (icons[type] || icons.info);
+    const span = document.createElement('span');
+    span.textContent = message;
+    toast.appendChild(span);
     getContainer().appendChild(toast);
     requestAnimationFrame(() => { toast.style.opacity = '1'; toast.style.transform = 'translateY(0)'; });
     setTimeout(() => {

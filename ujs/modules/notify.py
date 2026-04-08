@@ -6,6 +6,7 @@ Usage:
   python -m ujs notify --dry-run    # Preview without sending
 """
 
+import html as html_mod
 import os, smtplib, logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -82,24 +83,26 @@ def _render_email(user_email, changes_by_docket, unsubscribe_token):
     text_body = "\n".join(text_lines)
 
     # HTML
+    _e = html_mod.escape  # shorthand
     docket_rows = ""
     for dn, changes in changes_by_docket.items():
-        caption = changes[0].get("caption") or dn
-        county = changes[0].get("county") or ""
+        caption = _e(changes[0].get("caption") or dn)
+        county = _e(changes[0].get("county") or "")
+        dn_safe = _e(dn)
         change_items = ""
         for c in changes:
-            ct = c.get("change_type", "change")
-            field = c.get("field_name", "")
-            new_val = c.get("new_value", "")
+            ct = _e(c.get("change_type", "change"))
+            field = _e(c.get("field_name", ""))
+            new_val = _e(c.get("new_value", ""))
             detail = f"{field}: {new_val}" if field else new_val
             change_items += f'<li style="color:#8fa8c8;font-size:13px;margin:4px 0">{ct} — {detail}</li>'
 
         docket_rows += f"""
         <div style="background:#132240;border:1px solid #1e3254;border-radius:8px;padding:16px;margin-bottom:12px">
           <div style="font-size:14px;font-weight:600;color:#e8edf5">{caption}</div>
-          <div style="font-size:11px;color:#5a7aa0;margin-top:2px">{dn}{(' — ' + county + ' County') if county else ''}</div>
+          <div style="font-size:11px;color:#5a7aa0;margin-top:2px">{dn_safe}{(' — ' + county + ' County') if county else ''}</div>
           <ul style="list-style:none;padding:0;margin:10px 0 0 0">{change_items}</ul>
-          <a href="{SITE_URL}/chat?q={dn}" style="display:inline-block;margin-top:10px;font-size:12px;color:#c8a03a;text-decoration:none">View in GavelSearch →</a>
+          <a href="{SITE_URL}/chat?q={dn_safe}" style="display:inline-block;margin-top:10px;font-size:12px;color:#c8a03a;text-decoration:none">View in GavelSearch →</a>
         </div>"""
 
     html_body = f"""<!DOCTYPE html>

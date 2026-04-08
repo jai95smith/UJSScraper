@@ -119,17 +119,18 @@ def auth_callback():
 
 @main_bp.route('/unsubscribe/<token>')
 def unsubscribe(token):
-    """Public one-click unsubscribe — no login required (CAN-SPAM compliance)."""
+    """Public one-click unsubscribe — no login required (CAN-SPAM compliance).
+    Always returns success to prevent token enumeration."""
     from ujs import db as _db
     try:
         with _db.connect() as conn:
             prefs = _db.get_preferences_by_token(conn, token)
             if prefs:
                 _db.update_preferences(conn, prefs["user_id"], email_alerts=False)
-                return render_template('unsubscribe.html', api_url=_api_url(), success=True)
     except Exception:
         pass
-    return render_template('unsubscribe.html', api_url=_api_url(), success=False)
+    # Always show success — prevents information leakage about valid tokens
+    return render_template('unsubscribe.html', api_url=_api_url(), success=True)
 
 
 @main_bp.route('/logout')

@@ -116,16 +116,22 @@
               <h2 class="text-[14px] font-medium text-court-bright">Role</h2>
             </div>
             <p class="text-[11px] text-court-dim">Helps tailor search results and suggestions to your needs.</p>
-            <select id="role-select" onchange="saveSetting('role', this.value)" class="w-full bg-navy-light border border-navy-border rounded px-3 py-2 text-[13px] text-court-bright outline-none focus:border-court-dim">
-              <option value="">Select your role...</option>
-              <option value="attorney">Attorney / Legal professional</option>
-              <option value="paralegal">Paralegal / Legal assistant</option>
-              <option value="law_enforcement">Law enforcement</option>
-              <option value="journalist">Journalist / Reporter</option>
-              <option value="researcher">Researcher / Academic</option>
-              <option value="government">Government / Public official</option>
-              <option value="general">General public</option>
-            </select>
+            <div class="custom-select" id="role-select" data-key="role">
+              <button type="button" class="select-trigger w-full flex items-center justify-between bg-navy-light border border-navy-border rounded-lg px-3.5 py-2.5 text-[13px] text-court-bright hover:border-court-dim transition cursor-pointer">
+                <span class="select-label text-court-dim">Select your role...</span>
+                <svg class="w-4 h-4 text-court-dim shrink-0 transition-transform select-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+              </button>
+              <div class="select-menu hidden absolute z-10 mt-1 w-full bg-navy border border-navy-border rounded-lg shadow-lg overflow-hidden">
+                <div class="select-option px-3.5 py-2.5 text-[13px] text-court-dim hover:bg-navy-hover hover:text-court-bright cursor-pointer transition" data-value="">Select your role...</div>
+                <div class="select-option px-3.5 py-2.5 text-[13px] text-court-mid hover:bg-navy-hover hover:text-court-bright cursor-pointer transition" data-value="attorney">Attorney / Legal professional</div>
+                <div class="select-option px-3.5 py-2.5 text-[13px] text-court-mid hover:bg-navy-hover hover:text-court-bright cursor-pointer transition" data-value="paralegal">Paralegal / Legal assistant</div>
+                <div class="select-option px-3.5 py-2.5 text-[13px] text-court-mid hover:bg-navy-hover hover:text-court-bright cursor-pointer transition" data-value="law_enforcement">Law enforcement</div>
+                <div class="select-option px-3.5 py-2.5 text-[13px] text-court-mid hover:bg-navy-hover hover:text-court-bright cursor-pointer transition" data-value="journalist">Journalist / Reporter</div>
+                <div class="select-option px-3.5 py-2.5 text-[13px] text-court-mid hover:bg-navy-hover hover:text-court-bright cursor-pointer transition" data-value="researcher">Researcher / Academic</div>
+                <div class="select-option px-3.5 py-2.5 text-[13px] text-court-mid hover:bg-navy-hover hover:text-court-bright cursor-pointer transition" data-value="government">Government / Public official</div>
+                <div class="select-option px-3.5 py-2.5 text-[13px] text-court-mid hover:bg-navy-hover hover:text-court-bright cursor-pointer transition" data-value="general">General public</div>
+              </div>
+            </div>
           </section>
 
           <!-- Default County -->
@@ -135,11 +141,17 @@
               <h2 class="text-[14px] font-medium text-court-bright">Default County</h2>
             </div>
             <p class="text-[11px] text-court-dim">Pre-filter search results to your primary county.</p>
-            <select id="county-select" onchange="saveSetting('default_county', this.value)" class="w-full bg-navy-light border border-navy-border rounded px-3 py-2 text-[13px] text-court-bright outline-none focus:border-court-dim">
-              <option value="">Both counties</option>
-              <option value="Lehigh">Lehigh County</option>
-              <option value="Northampton">Northampton County</option>
-            </select>
+            <div class="custom-select" id="county-select" data-key="default_county">
+              <button type="button" class="select-trigger w-full flex items-center justify-between bg-navy-light border border-navy-border rounded-lg px-3.5 py-2.5 text-[13px] text-court-bright hover:border-court-dim transition cursor-pointer">
+                <span class="select-label text-court-dim">Both counties</span>
+                <svg class="w-4 h-4 text-court-dim shrink-0 transition-transform select-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+              </button>
+              <div class="select-menu hidden absolute z-10 mt-1 w-full bg-navy border border-navy-border rounded-lg shadow-lg overflow-hidden">
+                <div class="select-option px-3.5 py-2.5 text-[13px] text-court-dim hover:bg-navy-hover hover:text-court-bright cursor-pointer transition" data-value="">Both counties</div>
+                <div class="select-option px-3.5 py-2.5 text-[13px] text-court-mid hover:bg-navy-hover hover:text-court-bright cursor-pointer transition" data-value="Lehigh">Lehigh County</div>
+                <div class="select-option px-3.5 py-2.5 text-[13px] text-court-mid hover:bg-navy-hover hover:text-court-bright cursor-pointer transition" data-value="Northampton">Northampton County</div>
+              </div>
+            </div>
           </section>
 
           <!-- Email Alerts -->
@@ -304,8 +316,8 @@ async function loadSettings() {
 
   // Load localStorage settings (non-API fields)
   const local = JSON.parse(localStorage.getItem('gavel_settings') || '{}');
-  if (local.role) document.getElementById('role-select').value = local.role;
-  if (local.default_county) document.getElementById('county-select').value = local.default_county;
+  if (local.role) setCustomSelect('role-select', local.role);
+  if (local.default_county) setCustomSelect('county-select', local.default_county);
   if (local.include_news === false) document.getElementById('include-news').checked = false;
   if (local.auto_expand) document.getElementById('auto-expand').checked = true;
 }
@@ -323,6 +335,8 @@ async function deleteAllChats() {
     if (e !== 'auth') showToast('Failed to delete chats', 'error');
   }
 }
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 async function loadWatches() {
   const el = document.getElementById('watches-list');
@@ -342,11 +356,11 @@ async function loadWatches() {
       return `<div class="flex items-center gap-3 bg-navy-light border border-navy-border/50 rounded-lg px-4 py-3">
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2">
-            <a href="/chat?q=${encodeURIComponent(w.docket_number)}" class="text-[13px] text-court-bright font-medium hover:text-gold transition truncate">${w.docket_number}</a>
+            <a href="/chat?q=${encodeURIComponent(w.docket_number)}" class="text-[13px] text-court-bright font-medium hover:text-gold transition truncate">${esc(w.docket_number)}</a>
             ${badge}
           </div>
-          <div class="text-[11px] text-court-dim truncate mt-0.5">${w.caption || 'Pending analysis...'}</div>
-          <div class="text-[10px] text-court-muted mt-0.5">${w.county ? w.county + ' County' : ''}${w.status ? ' — ' + w.status : ''}</div>
+          <div class="text-[11px] text-court-dim truncate mt-0.5">${esc(w.caption || 'Pending analysis...')}</div>
+          <div class="text-[10px] text-court-muted mt-0.5">${w.county ? esc(w.county) + ' County' : ''}${w.status ? ' — ' + esc(w.status) : ''}</div>
         </div>
         <button onclick="removeWatch('${w.docket_number}', this)" class="shrink-0 p-1.5 rounded hover:bg-navy-hover text-court-dim hover:text-red-400 transition" title="Stop watching">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -372,6 +386,64 @@ async function removeWatch(dn, btnEl) {
   } catch(e) { if (e !== 'auth') showToast('Failed to remove watch', 'error'); }
 }
 
+/* --- Custom select dropdowns --- */
+function initCustomSelects() {
+  document.querySelectorAll('.custom-select').forEach(sel => {
+    const trigger = sel.querySelector('.select-trigger');
+    const menu = sel.querySelector('.select-menu');
+    const label = sel.querySelector('.select-label');
+    const chevron = sel.querySelector('.select-chevron');
+    const key = sel.dataset.key;
+
+    // Make parent relative for absolute menu positioning
+    sel.style.position = 'relative';
+
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Close all other menus
+      document.querySelectorAll('.custom-select .select-menu').forEach(m => {
+        if (m !== menu) m.classList.add('hidden');
+      });
+      menu.classList.toggle('hidden');
+      chevron.style.transform = menu.classList.contains('hidden') ? '' : 'rotate(180deg)';
+    });
+
+    sel.querySelectorAll('.select-option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        const val = opt.dataset.value;
+        label.textContent = opt.textContent;
+        label.className = 'select-label ' + (val ? 'text-court-bright' : 'text-court-dim');
+        // Highlight active
+        sel.querySelectorAll('.select-option').forEach(o => o.classList.remove('bg-navy-hover', 'text-gold'));
+        opt.classList.add('bg-navy-hover', 'text-gold');
+        menu.classList.add('hidden');
+        chevron.style.transform = '';
+        saveSetting(key, val);
+      });
+    });
+  });
+
+  // Close on outside click
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.custom-select .select-menu').forEach(m => m.classList.add('hidden'));
+    document.querySelectorAll('.custom-select .select-chevron').forEach(c => c.style.transform = '');
+  });
+}
+
+function setCustomSelect(id, value) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  const opt = sel.querySelector(`.select-option[data-value="${value}"]`);
+  if (opt) {
+    const label = sel.querySelector('.select-label');
+    label.textContent = opt.textContent;
+    label.className = 'select-label ' + (value ? 'text-court-bright' : 'text-court-dim');
+    sel.querySelectorAll('.select-option').forEach(o => o.classList.remove('bg-navy-hover', 'text-gold'));
+    opt.classList.add('bg-navy-hover', 'text-gold');
+  }
+}
+
+initCustomSelects();
 loadSettings();
 loadWatches();
 </script>

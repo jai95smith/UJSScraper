@@ -1,5 +1,7 @@
 """Watch routes — user-authenticated docket monitoring and preferences."""
 
+import re, time
+from collections import defaultdict
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -10,12 +12,29 @@ from ujs.auth import get_user_from_request
 
 router = APIRouter(tags=["Watches"])
 
+# Rate limiting: user_id -> list of timestamps
+_watch_rates = defaultdict(list)
+_WATCH_RATE_LIMIT = 5  # watches per minute
+_WATCH_RATE_WINDOW = 60
+
+# Valid PA docket format
+_DOCKET_RE = re.compile(r'^[A-Z]{2}-\d{2}-[A-Z]{2}-\d{5,7}-\d{4}$')
+
 
 def _require_user(request: Request):
     user = get_user_from_request(request)
     if not user:
         return None
     return user
+
+
+def _check_watch_rate(user_id):
+    now = time.time()
+    _watch_rates[user_id] = [t for t in _watch_rates[user_id] if now - t < _WATCH_RATE_WINDOW]
+    if len(_watch_rates[user_id]) >= _WATCH_RATE_LIMIT:
+        return True
+    _watch_rates[user_id].append(now)
+    return False
 
 
 class WatchRequest(BaseModel):
@@ -37,6 +56,10 @@ def add_watch(body: WatchRequest, request: Request):
     user = _require_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"error": "Authentication required"})
+    if not _DOCKET_RE.match(body.docket_number):
+        return JSONResponse(status_code=400, content={"error": "Invalid docket number format"})
+    if _check_watch_rate(user["sub"]):
+        return JSONResponse(status_code=429, content={"error": "Too many watch requests. Try again in a minute."})
     with db.connect() as conn:
         wid = db.add_user_watch(conn, user["sub"], user["email"], body.docket_number,
                                 label=body.label, notify_frequency=body.notify_frequency or 'daily')
