@@ -450,6 +450,9 @@ function renderFinalResponse(contentEl, text, msgId) {
 
 /* --- Watch docket buttons --- */
 const DOCKET_RE = /\b([A-Z]{2}-\d{2,5}-[A-Z]{2}-\d{5,7}-\d{4})\b/g;
+const _SKIP_TAGS = new Set(['SVG', 'STYLE', 'SCRIPT', 'CANVAS', 'BUTTON']);
+const _EYE_OPEN = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
+const _EYE_WATCHING = '<svg class="w-3.5 h-3.5 text-gold" fill="currentColor" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>';
 
 async function loadWatchedDockets() {
   try {
@@ -459,58 +462,65 @@ async function loadWatchedDockets() {
   } catch(e) {}
 }
 
+function _makeWatchBtn(dn) {
+  const isW = watchedDockets.has(dn);
+  const btn = document.createElement('button');
+  btn.className = 'watch-btn inline-flex items-center ml-1 align-middle text-court-dim hover:text-gold transition';
+  btn.title = isW ? 'Stop watching' : 'Watch this docket';
+  btn.dataset.docket = dn;
+  btn.innerHTML = isW ? _EYE_WATCHING : _EYE_OPEN;
+  btn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); toggleWatch(dn, btn); };
+  return btn;
+}
+
 function injectWatchButtons(el) {
-  // Walk text nodes and find docket numbers, wrap with a watch toggle
-  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
-  const matches = [];
-  while (walker.nextNode()) {
-    const node = walker.currentNode;
-    if (DOCKET_RE.test(node.textContent)) {
-      matches.push(node);
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      // Skip nodes inside SVG, scripts, buttons, etc.
+      let p = node.parentElement;
+      while (p && p !== el) {
+        if (_SKIP_TAGS.has(p.tagName)) return NodeFilter.FILTER_REJECT;
+        p = p.parentElement;
+      }
+      return DOCKET_RE.test(node.textContent) ? (DOCKET_RE.lastIndex = 0, NodeFilter.FILTER_ACCEPT) : (DOCKET_RE.lastIndex = 0, NodeFilter.FILTER_REJECT);
     }
-    DOCKET_RE.lastIndex = 0;
-  }
-  matches.forEach(node => {
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+
+  nodes.forEach(node => {
     const frag = document.createDocumentFragment();
     let last = 0;
     const text = node.textContent;
     DOCKET_RE.lastIndex = 0;
     let m;
-    const seen = new Set();
     while ((m = DOCKET_RE.exec(text)) !== null) {
       const dn = m[1];
       if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
       const span = document.createElement('span');
       span.textContent = dn;
       frag.appendChild(span);
-      // Only add one button per unique docket per response
-      if (!seen.has(dn)) {
-        seen.add(dn);
-        const btn = document.createElement('button');
-        btn.className = 'inline-flex items-center ml-1 align-middle text-court-dim hover:text-gold transition';
-        btn.title = watchedDockets.has(dn) ? 'Stop watching' : 'Watch this docket';
-        btn.innerHTML = watchedDockets.has(dn)
-          ? '<svg class="w-3.5 h-3.5 text-gold" fill="currentColor" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>'
-          : '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
-        btn.onclick = (e) => { e.preventDefault(); toggleWatch(dn, btn); };
-        frag.appendChild(btn);
-      }
+      frag.appendChild(_makeWatchBtn(dn));
       last = m.index + m[0].length;
     }
     if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
-    node.parentNode.replaceChild(frag, node);
+    if (frag.childNodes.length) node.parentNode.replaceChild(frag, node);
   });
 }
 
 async function toggleWatch(dn, btnEl) {
-  const isWatching = watchedDockets.has(dn);
+  btnEl.style.opacity = '0.5';
+  btnEl.style.pointerEvents = 'none';
   try {
-    if (isWatching) {
+    if (watchedDockets.has(dn)) {
       await apiFetch(API + '/watches/' + encodeURIComponent(dn), { method: 'DELETE' });
       watchedDockets.delete(dn);
       showToast('Stopped watching ' + dn, 'info');
-      btnEl.title = 'Watch this docket';
-      btnEl.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
+      // Update ALL buttons for this docket
+      document.querySelectorAll(`.watch-btn[data-docket="${dn}"]`).forEach(b => {
+        b.title = 'Watch this docket';
+        b.innerHTML = _EYE_OPEN;
+      });
     } else {
       await apiFetch(API + '/watches', {
         method: 'POST',
@@ -519,10 +529,14 @@ async function toggleWatch(dn, btnEl) {
       });
       watchedDockets.add(dn);
       showToast('Watching ' + dn);
-      btnEl.title = 'Stop watching';
-      btnEl.innerHTML = '<svg class="w-3.5 h-3.5 text-gold" fill="currentColor" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>';
+      document.querySelectorAll(`.watch-btn[data-docket="${dn}"]`).forEach(b => {
+        b.title = 'Stop watching';
+        b.innerHTML = _EYE_WATCHING;
+      });
     }
-  } catch(e) { if (e !== 'auth') console.error('Watch toggle failed:', e); }
+  } catch(e) { if (e !== 'auth') showToast('Watch failed', 'error'); }
+  btnEl.style.opacity = '';
+  btnEl.style.pointerEvents = '';
 }
 
 function localizeLabels(labels) {
