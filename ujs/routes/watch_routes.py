@@ -19,7 +19,7 @@ _PREFS_RATE_LIMIT = 10  # preference updates per minute
 _WATCH_RATE_WINDOW = 60
 
 # Valid PA docket format
-_DOCKET_RE = re.compile(r'^[A-Z]{2}-\d{2}-[A-Z]{2}-\d{5,7}-\d{4}$')
+_DOCKET_RE = re.compile(r'^[A-Z]{2}-\d{2,5}-[A-Z]{2}-\d{5,7}-\d{4}$')
 
 
 def _require_user(request: Request):

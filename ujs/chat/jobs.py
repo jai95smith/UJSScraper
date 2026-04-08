@@ -164,8 +164,7 @@ def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=F
                             _update_job(job_id, append_tool="web_search")
                     elif block.type == "tool_use":
                         if not silent:
-                            tool_name = block.name.replace("_", " ")
-                            _update_job(job_id, append_response=f"..{tool_name}", append_tool=block.name)
+                            _update_job(job_id, append_tool=block.name)
                         result = execute_tool(block.name, block.input)
                         tool_results.append({
                             "type": "tool_result",
@@ -252,7 +251,7 @@ def _streamed_turn(client, system, tools, messages, job_id):
                     if btype == 'tool_use':
                         has_tool_use = True
                         name = block.name
-                        _update_job(job_id, append_response=f"..{name.replace('_', ' ')}", append_tool=name)
+                        _update_job(job_id, append_tool=name)
                         tool_blocks[block.id] = {"name": name, "json_str": ""}
                     elif btype == 'server_tool_use':
                         has_tool_use = True

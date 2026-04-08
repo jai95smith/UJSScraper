@@ -387,16 +387,24 @@ async function pollJob(jobId, statusEl, contentEl, msgId, convId) {
     try {
       const res = await apiFetch(API + '/ask/job/' + jobId + '?after=' + seen + (convId ? '&cid=' + convId : ''));
       const data = await res.json();
+      // Update status from tools array
+      if (data.tools && data.tools.length) {
+        const lastTool = data.tools[data.tools.length - 1].replace(/_/g, ' ');
+        if (statusTextEl) statusTextEl.textContent = lastTool;
+        else statusEl.textContent = lastTool;
+      }
       if (data.total_length > seen) {
         seen = data.total_length;
         const full = data.response;
         const parts = full.split('\n\n');
         if (parts.length > 1) {
-          if (statusTextEl) statusTextEl.textContent = parts[0];
-          else statusEl.textContent = parts[0];
+          if (!data.tools || !data.tools.length) {
+            if (statusTextEl) statusTextEl.textContent = parts[0];
+            else statusEl.textContent = parts[0];
+          }
           contentEl.innerHTML = renderMd(parts.slice(1).join('\n\n'));
           if (!contentStarted) { stopThinking(statusEl.id); contentStarted = true; }
-        } else {
+        } else if (!data.tools || !data.tools.length) {
           if (statusTextEl) statusTextEl.textContent = full;
           else statusEl.textContent = full;
         }
@@ -441,7 +449,7 @@ function renderFinalResponse(contentEl, text, msgId) {
 }
 
 /* --- Watch docket buttons --- */
-const DOCKET_RE = /\b([A-Z]{2}-\d{2}-[A-Z]{2}-\d{7}-\d{4})\b/g;
+const DOCKET_RE = /\b([A-Z]{2}-\d{2,5}-[A-Z]{2}-\d{5,7}-\d{4})\b/g;
 
 async function loadWatchedDockets() {
   try {
