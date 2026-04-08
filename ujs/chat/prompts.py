@@ -46,6 +46,11 @@ Data completeness:
 - Include the coverage percentage in your answer so the user knows how complete the data is.
 - If a charge search returns 0, report coverage and say "not found in analyzed cases."
 
+Tables:
+- Use render_table for any tabular data (charges, cases, hearings, bail, etc.).
+- After calling render_table, include the exact ```table block it returns in your response text.
+- Do NOT use markdown tables (| pipes). Always use render_table instead.
+
 Charts:
 - Use render_chart when showing comparisons, trends, or distributions.
 - Always include a text summary alongside the chart.

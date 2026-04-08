@@ -22,6 +22,21 @@ _GEMINI_NEWS_SEARCH = {
 }
 
 
+# --- Render table tool ---
+RENDER_TABLE_TOOL = {
+    "name": "render_table",
+    "description": "Render a table in the chat UI. Use this instead of markdown tables for charges, cases, hearings, or any tabular data. Include a text summary alongside.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string", "description": "Table title"},
+            "headers": {"type": "array", "items": {"type": "string"}, "description": "Column headers"},
+            "rows": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}, "description": "Array of rows, each row is array of cell values"},
+        },
+        "required": ["headers", "rows"],
+    },
+}
+
 _GENERATE_QUERIES = {
     "name": "generate_news_queries",
     "description": "Generate targeted web search queries for a person based on their case data. Call this BEFORE using web_search so you get better, more specific queries. Pass the person's name, county, and a brief summary of their charges/case info.",
@@ -229,6 +244,7 @@ Key patterns:
             "properties": {"county": {"type": "string"}, "case_type": {"type": "string"}},
         },
     },
+    RENDER_TABLE_TOOL,
     {
         "name": "render_chart",
         "description": "Render a chart in the chat UI. Use for comparisons, trends, or distributions. Include a text summary alongside.",

@@ -369,6 +369,11 @@ def _get_analysis_coverage(conn, inputs):
                        "note": f"{analyzed} of {total} cases ({pct}%) have full charge/bail/attorney data."})
 
 
+def _render_table(conn, inputs):
+    table_json = json.dumps({"title": inputs.get("title", ""), "headers": inputs["headers"], "rows": inputs["rows"]})
+    return f"TABLE_RENDERED. Include this exact block in your response:\n```table\n{table_json}\n```"
+
+
 def _render_chart(conn, inputs):
     chart_json = json.dumps({"type": inputs["type"], "title": inputs["title"],
                              "labels": inputs["labels"], "datasets": inputs["datasets"]})
@@ -600,6 +605,7 @@ HANDLERS = {
     "get_stats_query": _get_stats_query,
     "run_custom_query": _run_custom_query,
     "get_analysis_coverage": _get_analysis_coverage,
+    "render_table": _render_table,
     "render_chart": _render_chart,
     "get_analyzer_throughput": _get_analyzer_throughput,
     "get_system_logs": _get_system_logs,

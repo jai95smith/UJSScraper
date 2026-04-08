@@ -380,14 +380,37 @@ async function pollJob(jobId, statusEl, contentEl, msgId) {
 /* --- Rendering --- */
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
+function renderTableHtml(json) {
+  try {
+    const t = JSON.parse(json);
+    const th = t.headers.map(h => `<th class="text-left text-court-dim font-medium px-2 py-1.5 border-b border-navy-border bg-navy/50 text-[12px]">${esc(h)}</th>`).join('');
+    const rows = t.rows.map(r => '<tr>' + r.map(c =>
+      `<td class="text-left text-court-text px-2 py-1 border-b border-navy-border/50 text-[12px]">${esc(c)}</td>`
+    ).join('') + '</tr>').join('');
+    const title = t.title ? `<div class="text-white font-semibold text-[13px] mb-2">${esc(t.title)}</div>` : '';
+    return `<div class="my-3">${title}<div class="overflow-x-auto"><table class="w-full border-collapse"><tr>${th}</tr>${rows}</table></div></div>`;
+  } catch(e) { return '<div class="text-red-400 text-[12px]">Table render error</div>'; }
+}
+
 function renderFinalResponse(contentEl, text, msgId) {
-  const parts = text.split(/```chart\s*\n([\s\S]*?)```/g);
+  // Extract tables
+  const tableParts = text.split(/```table\s*\n([\s\S]*?)```/g);
+  let textWithCharts = '';
+  const tableConfigs = [];
+  for (let i = 0; i < tableParts.length; i++) {
+    if (i % 2 === 0) textWithCharts += tableParts[i]; else tableConfigs.push(tableParts[i].trim());
+  }
+  // Extract charts
+  const parts = textWithCharts.split(/```chart\s*\n([\s\S]*?)```/g);
   let textContent = '';
   const chartConfigs = [];
   for (let i = 0; i < parts.length; i++) {
     if (i % 2 === 0) textContent += parts[i]; else chartConfigs.push(parts[i].trim());
   }
-  contentEl.innerHTML = renderMd(textContent.trim());
+  // Render markdown + inline tables
+  let rendered = renderMd(textContent.trim());
+  tableConfigs.forEach(json => { rendered += renderTableHtml(json); });
+  contentEl.innerHTML = rendered;
   const parent = contentEl.parentElement;
   chartConfigs.forEach((json, i) => {
     try {
