@@ -1,6 +1,6 @@
 """Web UI for Lehigh Valley Court AI."""
 
-import os, secrets
+import os, secrets, time
 from datetime import timedelta
 from functools import wraps
 from urllib.parse import urlparse
@@ -15,6 +15,26 @@ oauth = OAuth()
 
 def _api_url():
     return os.environ.get('API_URL', 'http://localhost:8100')
+
+
+_case_count_cache = {'value': 0, 'expires': 0}
+
+
+def _get_case_count():
+    now = time.time()
+    if now < _case_count_cache['expires']:
+        return _case_count_cache['value']
+    try:
+        from ujs import db
+        with db.connect() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM cases")
+            count = cur.fetchone()[0]
+        _case_count_cache['value'] = count
+        _case_count_cache['expires'] = now + 3600  # 1 hour
+        return count
+    except Exception:
+        return _case_count_cache['value']
 
 
 def _safe_redirect_url(url):
@@ -47,17 +67,7 @@ def login_required(f):
 
 @main_bp.route('/')
 def landing():
-    api_url = _api_url()
-    case_count = 0
-    try:
-        from ujs import db
-        with db.connect() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM cases")
-            case_count = cur.fetchone()[0]
-    except Exception:
-        pass
-    return render_template('landing.html', api_url=api_url, case_count=case_count, **_user_context())
+    return render_template('landing.html', api_url=_api_url(), case_count=_get_case_count(), **_user_context())
 
 
 @main_bp.route('/login')
@@ -116,6 +126,12 @@ def logout():
     return redirect('/')
 
 
+@main_bp.route('/settings')
+@login_required
+def settings():
+    return render_template('settings.html', api_url=_api_url(), **_user_context())
+
+
 @main_bp.route('/chat')
 @main_bp.route('/chat/<conversation_id>')
 @login_required
@@ -123,7 +139,7 @@ def chat(conversation_id=None):
     api_url = _api_url()
     initial_query = request.args.get('q', '')
     return render_template('chat.html', api_url=api_url, initial_query=initial_query,
-                           conversation_id=conversation_id or '', **_user_context())
+                           conversation_id=conversation_id or '', case_count=_get_case_count(), **_user_context())
 
 
 def create_app():

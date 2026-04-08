@@ -27,7 +27,7 @@
 
   <!-- Sidebar -->
   <aside id="sidebar" class="fixed md:relative z-50 w-60 bg-navy border-r border-navy-border flex flex-col shrink-0 h-full -translate-x-full md:translate-x-0 transition-transform duration-200">
-    <div class="p-3.5 border-b border-navy-border flex items-center justify-between">
+    <div class="h-12 px-3.5 border-b border-navy-border flex items-center justify-between shrink-0">
       <a href="/" class="flex items-center gap-2 no-underline">
         <div class="w-6 h-6 border border-gold rounded-full flex items-center justify-center">
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#c8a03a" stroke-width="1.2"/><path d="M8 17l4-10 4 10" stroke="#c8a03a" stroke-width="1.2" stroke-linecap="round"/></svg>
@@ -38,17 +38,40 @@
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
       </button>
     </div>
-    <div id="chat-list" class="flex-1 overflow-y-auto p-2 space-y-0.5"></div>
-    <div class="p-3 border-t border-navy-border space-y-1.5">
-      {% if user %}
-      <div class="flex items-center gap-2">
-        {% if user.picture %}<img src="{{ user.picture }}" class="w-5 h-5 rounded-full" referrerpolicy="no-referrer">{% endif %}
-        <span class="text-[10px] text-court-dim truncate">{{ user.name or user.email }}</span>
-        <a href="/logout" class="text-[10px] text-court-muted hover:text-court-mid ml-auto shrink-0">Sign out</a>
+    <!-- Nav items -->
+    <nav class="p-2 space-y-0.5 shrink-0">
+      <button onclick="showSection('chats')" id="nav-chats" class="sidebar-nav-item active w-full flex items-center gap-2.5 px-2.5 py-2 rounded text-[12px] text-court-bright bg-navy-hover border border-navy-border transition">
+        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+        Chats
+      </button>
+      <a href="/settings" id="nav-settings" class="sidebar-nav-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded text-[12px] text-court-dim hover:text-court-mid hover:bg-navy-hover border border-transparent transition">
+        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
+        Settings
+      </a>
+    </nav>
+    <!-- Chat list -->
+    <div id="chat-list" class="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5"></div>
+    <!-- User footer -->
+    {% if user %}
+    <div class="border-t border-navy-border p-2.5 shrink-0">
+      <div class="flex items-center gap-2.5">
+        {% if user.picture %}
+        <img src="{{ user.picture }}" class="w-8 h-8 rounded-full shrink-0 ring-1 ring-navy-border" referrerpolicy="no-referrer">
+        {% else %}
+        <div class="w-8 h-8 rounded-full bg-navy-hover border border-navy-border flex items-center justify-center shrink-0">
+          <span class="text-xs text-court-mid font-medium">{{ (user.name or user.email)[0]|upper }}</span>
+        </div>
+        {% endif %}
+        <div class="min-w-0 flex-1">
+          <div class="text-[12px] text-court-bright font-medium truncate">{{ user.name or 'User' }}</div>
+          <div class="text-[10px] text-court-dim truncate">{{ user.email }}</div>
+        </div>
+        <a href="/logout" class="shrink-0 p-1.5 rounded hover:bg-navy-hover text-court-dim hover:text-red-400 transition" title="Sign out">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+        </a>
       </div>
-      {% endif %}
-      <div id="stats" class="text-[10px] text-court-muted"></div>
     </div>
+    {% endif %}
   </aside>
 
   <!-- Main -->
@@ -64,13 +87,6 @@
       <div class="flex items-center gap-3">
         <a href="/" class="text-xs text-court-mid hover:text-court-bright">Home</a>
         <button onclick="newChat()" class="text-[11px] font-medium text-navy bg-gold hover:bg-gold-dim rounded px-3.5 py-1.5">+ New search</button>
-        {% if user %}
-        <div class="flex items-center gap-2 pl-2 border-l border-navy-border">
-          {% if user.picture %}<img src="{{ user.picture }}" class="w-6 h-6 rounded-full" referrerpolicy="no-referrer">{% endif %}
-          <span class="text-[11px] text-court-dim">{{ user.email }}</span>
-          <a href="/logout" class="text-[11px] text-court-muted hover:text-court-mid">Sign out</a>
-        </div>
-        {% endif %}
       </div>
     </nav>
 
@@ -89,7 +105,7 @@
             <svg id="btn-spin" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
           </button>
         </div>
-        <p class="text-[10px] text-court-muted text-center mt-1.5">Lehigh & Northampton Counties · Not legal advice</p>
+        <p class="text-[10px] text-court-muted text-center mt-1.5">{{ "{:,}".format(case_count) }} cases · Lehigh & Northampton Counties · Not legal advice</p>
       </div>
     </div>
   </div>
@@ -248,9 +264,6 @@ function botBubbleStatic(contentId) {
 
 /* --- Init --- */
 loadConversations();
-apiFetch(API + '/stats').then(r => r.json()).then(d => {
-  document.getElementById('stats').textContent = d.cases.toLocaleString() + ' cases indexed';
-}).catch(() => {});
 
 // Route: /chat/{id} → load conversation, /chat?q= → new with query, /chat → welcome
 const CONV_ID = '{{ conversation_id }}';
