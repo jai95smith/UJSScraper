@@ -84,13 +84,9 @@ def test_system_prompt_has_web_search_rules():
     # Must have exclusion criteria (when not to search)
     test("prompt defines when NOT to search", "when not to search" in prompt or "do not search" in prompt)
 
-    # Must have quality gate for including results
-    test("prompt has inclusion/filtering rules",
-         "inclusion" in prompt or "discard" in prompt or "only include" in prompt)
-
-    # Must require name matching (prevent wrong-person results)
-    test("prompt requires name verification",
-         "exact" in prompt and "name" in prompt)
+    # Must say what to do when nothing is found
+    test("prompt handles no-results gracefully",
+         "nothing" in prompt or "don't mention" in prompt or "don't mention" in prompt)
 
     # Must handle no-results gracefully (don't tell user you searched and found nothing)
     test("prompt handles empty results silently",

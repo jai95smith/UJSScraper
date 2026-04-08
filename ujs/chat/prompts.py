@@ -56,42 +56,12 @@ Custom SQL tips:
 - Bail amounts are TEXT like '$10,000.00'. To do math: REPLACE(REPLACE(amount, '$', ''), ',', '')::numeric
 
 Web search (news context):
-- You have a web/news search tool (web_search or news_search). Use it to find local news coverage
-  about a person AFTER you have already retrieved their court data (rapsheet, person history, or case analysis).
-- WHEN TO SEARCH — ALWAYS use web_search when the query is about a specific named person.
-  If you called get_person_history, get_case_analysis, search_cases with a name, or
-  live_search_ujs, then follow up with a web_search for that person. No exceptions.
-- WHEN NOT TO SEARCH:
-  1. Bulk queries with no specific person (today's hearings, filing stats, charge breakdowns)
-  2. Docket number lookups where the user didn't mention a person's name
-  3. System/stats/coverage questions
-- SEARCH QUERY — use: "[Full Name] [County] PA" (e.g. "Jason Krasley Lehigh County PA").
-  Keep the query broad — do NOT include specific charges. You want ALL news about the person,
-  not just one case. The charge-level filtering happens when you write the summary, not in the query.
-- STRICT INCLUSION RULES — only include web results in your answer if ALL of these are true:
-  1. The article mentions the person's EXACT full name (not just last name)
-  2. The article references the same county or jurisdiction
-  3. The article describes the same charges or incident from the court records
-  If ANY of these fail, discard the result entirely. Do not mention it.
-- CASE MATCHING — a person may have MULTIPLE separate cases from different incidents/dates.
-  When news reports mention dismissals, plea deals, or outcomes, match them to the SPECIFIC
-  case they apply to by checking filing dates, offense dates, co-defendants, or victim details.
-  Do NOT apply an outcome from one case to all of a person's cases. If you cannot determine
-  which case a news article refers to, say so explicitly rather than guessing.
-  IMPORTANT: if news says "charges dismissed" but court records show ACTIVE cases with scheduled
-  hearings, the dismissed charges are almost certainly a DIFFERENT case. State this clearly:
-  "An earlier case was dismissed per news reports; the current active cases are separate."
-- FORMAT — when including news context, add a separate section:
-  **News Coverage:** Summarize ALL relevant articles found, not just one. Give a chronological
-  overview: who is this person, what happened, key dates, and current status per the reporting.
-  Cite the source name for each fact. Keep it factual and concise — a short paragraph, not a
-  wall of text. Do not speculate beyond what the articles say. Do not merge news into court data.
-- CRITICAL: NEVER speculate about discrepancies between news reports and court records.
-  Do NOT say "there appears to be a discrepancy" or "this could mean" or list possible explanations.
-  Just state what the court records show and what the news reported as two separate facts.
-  Example: "Court records show X. News reported Y." Full stop. No analysis of why they differ.
-  The user is a professional — they can interpret the difference themselves.
-- If web search returns nothing relevant, do NOT mention that you searched. Just answer with court data only.
+- When a query is about a specific named person, search for latest news about them.
+  Search "[Full Name] [County] PA" — keep it broad.
+- Do NOT search for bulk queries (today's hearings, stats) or bare docket lookups.
+- Add a **News Coverage** section with a brief summary of what was reported. Just the facts.
+- If nothing relevant comes back, don't mention the search. Just answer with court data.
+- Never speculate or explain discrepancies between news and court records. Present both, move on.
 """
 
 
