@@ -283,6 +283,8 @@ function toggleSidebar() {
 // Preferences: API-backed with localStorage fallback
 const _prefsApiFields = new Set(['email_alerts', 'weekly_digest', 'notify_frequency']);
 let _saveTimer;
+let _pendingApiUpdates = {};
+let _saving = false;
 
 function saveSetting(key, value) {
   // Always save to localStorage as cache
@@ -290,19 +292,35 @@ function saveSetting(key, value) {
   local[key] = value;
   localStorage.setItem('gavel_settings', JSON.stringify(local));
 
-  // Debounce API save for API-backed fields
+  // Batch + debounce API saves (500ms, collects multiple rapid changes)
   if (_prefsApiFields.has(key)) {
+    _pendingApiUpdates[key] = value;
     clearTimeout(_saveTimer);
-    _saveTimer = setTimeout(() => {
-      apiFetch(API + '/preferences', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [key]: value })
-      }).then(() => showToast('Settings saved')).catch(() => showToast('Failed to save', 'error'));
-    }, 300);
+    if (_saving) return; // Don't show toast while already saving
+    _saveTimer = setTimeout(_flushApiSettings, 500);
   } else {
     showToast('Settings saved');
   }
+}
+
+function _flushApiSettings() {
+  const updates = { ..._pendingApiUpdates };
+  _pendingApiUpdates = {};
+  if (!Object.keys(updates).length) return;
+  _saving = true;
+  apiFetch(API + '/preferences', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates)
+  }).then(() => {
+    showToast('Settings saved');
+    _saving = false;
+    // Flush any changes that came in while saving
+    if (Object.keys(_pendingApiUpdates).length) setTimeout(_flushApiSettings, 200);
+  }).catch(() => {
+    showToast('Failed to save', 'error');
+    _saving = false;
+  });
 }
 
 async function loadSettings() {

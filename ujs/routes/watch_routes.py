@@ -15,6 +15,7 @@ router = APIRouter(tags=["Watches"])
 # Rate limiting: user_id -> list of timestamps
 _watch_rates = defaultdict(list)
 _WATCH_RATE_LIMIT = 5  # watches per minute
+_PREFS_RATE_LIMIT = 10  # preference updates per minute
 _WATCH_RATE_WINDOW = 60
 
 # Valid PA docket format
@@ -28,12 +29,12 @@ def _require_user(request: Request):
     return user
 
 
-def _check_watch_rate(user_id):
+def _check_rate(key, limit):
     now = time.time()
-    _watch_rates[user_id] = [t for t in _watch_rates[user_id] if now - t < _WATCH_RATE_WINDOW]
-    if len(_watch_rates[user_id]) >= _WATCH_RATE_LIMIT:
+    _watch_rates[key] = [t for t in _watch_rates[key] if now - t < _WATCH_RATE_WINDOW]
+    if len(_watch_rates[key]) >= limit:
         return True
-    _watch_rates[user_id].append(now)
+    _watch_rates[key].append(now)
     return False
 
 
@@ -58,7 +59,7 @@ def add_watch(body: WatchRequest, request: Request):
         return JSONResponse(status_code=401, content={"error": "Authentication required"})
     if not _DOCKET_RE.match(body.docket_number):
         return JSONResponse(status_code=400, content={"error": "Invalid docket number format"})
-    if _check_watch_rate(user["sub"]):
+    if _check_rate(f"watch:{user['sub']}", _WATCH_RATE_LIMIT):
         return JSONResponse(status_code=429, content={"error": "Too many watch requests. Try again in a minute."})
     with db.connect() as conn:
         wid = db.add_user_watch(conn, user["sub"], user["email"], body.docket_number,
@@ -119,6 +120,8 @@ def update_preferences(body: PreferencesUpdate, request: Request):
     user = _require_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"error": "Authentication required"})
+    if _check_rate(f"prefs:{user['sub']}", _PREFS_RATE_LIMIT):
+        return JSONResponse(status_code=429, content={"error": "Too many updates. Try again in a minute."})
     updates = {k: v for k, v in body.dict().items() if v is not None}
     if not updates:
         return {"status": "no changes"}
