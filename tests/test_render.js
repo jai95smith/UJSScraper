@@ -138,6 +138,28 @@ test('incomplete fenced block doesnt break', out13.length > 0);
 const out14 = renderMd('Paragraph one.\n\n---\n\n**News Coverage**\n\nParagraph two.');
 test('HR separates sections', out14.includes('<hr') && out14.includes('News Coverage'));
 
+// --- XSS prevention ---
+console.log('\n--- XSS prevention ---');
+
+const xss1 = renderMd('<script>alert("xss")</script>');
+test('script tag escaped', !xss1.includes('<script>') && xss1.includes('&lt;script&gt;'));
+
+const xss2 = renderMd('**<img src=x onerror=alert(1)>**');
+test('img onerror in bold escaped', !xss2.includes('<img') && xss2.includes('&lt;img'));
+
+const xss3 = renderMd('## <script>alert("xss")</script>');
+test('script in header escaped', !xss3.includes('<script>'));
+
+const xss4 = renderMd('| Name |\n|------|\n| <script>alert(1)</script> |');
+test('script in md table escaped', !xss4.includes('<script>'));
+
+const xss5json = JSON.stringify({headers:["Name"],rows:[['<img src=x onerror="alert(1)">']]});
+const xss5 = renderMd('```table\n' + xss5json + '\n```');
+test('script in fenced table escaped', !xss5.includes('<img src=x'));
+
+const xss6 = renderMd('- <a href="javascript:alert(1)">click</a>');
+test('javascript: link tag escaped', !xss6.includes('<a href'));
+
 // ---------------------------------------------------------------
 console.log(`\n${'='.repeat(60)}`);
 console.log(`Results: ${PASS} passed, ${FAIL} failed, ${PASS+FAIL} total`);

@@ -35,7 +35,7 @@ function renderMdTable(block) {
     const cells = parse(r);
     const tag = (i===0 && hasSep) ? 'th' : 'td';
     const cls = tag==='th' ? 'text-left text-court-dim font-medium px-2 py-1.5 border-b border-navy-border bg-navy/50' : 'text-left text-court-text px-2 py-1 border-b border-navy-border/50';
-    out += '<tr>' + cells.map(c=>`<${tag} class="${cls}">${c}</${tag}>`).join('') + '</tr>';
+    out += '<tr>' + cells.map(c=>`<${tag} class="${cls}">${esc2(c)}</${tag}>`).join('') + '</tr>';
   });
   return out + '</table></div>';
 }
@@ -49,8 +49,10 @@ function renderMd(text) {
     return `\u2603BLOCK${idx}\u2603`;
   });
 
-  // Step 2: Inline markdown
+  // Step 2: Escape HTML entities FIRST — prevents XSS from response content
   html = html.replace(/&/g, '&amp;');
+  html = html.replace(/</g, '&lt;');
+  html = html.replace(/>/g, '&gt;');
   html = html.replace(/\n{3,}/g, '\n\n');
   html = html.replace(/^---$/gm, '<hr class="border-navy-border my-3">');
   html = html.replace(/((?:^\|.+$\n?){2,})/gm, m => renderMdTable(m));
