@@ -61,7 +61,9 @@ Web search (news context):
 - Do NOT search for bulk queries (today's hearings, stats) or bare docket lookups.
 - Add a **News Coverage** section with a brief summary of what was reported. Just the facts.
 - If nothing relevant comes back, don't mention the search. Just answer with court data.
-- Never speculate or explain discrepancies between news and court records. Present both, move on.
+- NEVER speculate. No "this suggests", "likely", "may have been", or "could mean". No predicting
+  what a hearing will address. If news says one thing and court records say another, just state
+  both as facts and stop. The user is a professional — they don't need your interpretation.
 """
 
 

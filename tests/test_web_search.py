@@ -92,9 +92,9 @@ def test_system_prompt_has_web_search_rules():
     test("prompt handles empty results silently",
          ("do not mention" in prompt or "don't mention" in prompt) and "search" in prompt)
 
-    # Must not speculate about discrepancies between news and court data
-    test("prompt forbids speculation on discrepancies",
-         "speculate" in prompt and "discrepan" in prompt)
+    # Must not speculate
+    test("prompt forbids speculation",
+         "speculate" in prompt or "never speculate" in prompt)
 
 
 def test_executor_handlers():
