@@ -370,6 +370,17 @@ async function pollJob(jobId, statusEl, contentEl, msgId) {
         const idx = fullJob.response.indexOf('\n\n');
         const text = idx >= 0 ? fullJob.response.slice(idx + 2) : fullJob.response;
         if (text) renderFinalResponse(contentEl, text, msgId);
+
+        // Keep polling briefly for news to arrive (runs in background thread)
+        if (text && text.includes('Searching for news')) {
+          for (let poll = 0; poll < 10; poll++) {
+            await new Promise(r => setTimeout(r, 2000));
+            const updated = await fetch(API + '/ask/job/' + jobId).then(r => r.json());
+            const uidx = updated.response.indexOf('\n\n');
+            const utext = uidx >= 0 ? updated.response.slice(uidx + 2) : updated.response;
+            if (utext !== text) { renderFinalResponse(contentEl, utext, msgId); chat.scrollTop = chat.scrollHeight; break; }
+          }
+        }
         break;
       }
     } catch(e) { stopThinking(statusEl.id); break; }
@@ -445,6 +456,8 @@ function renderMd(text) {
   html = html.replace(/^### (.+)$/gm, '<h4 class="text-white font-semibold text-[14px] mt-4 mb-1">$1</h4>');
   html = html.replace(/^## (.+)$/gm, '<h3 class="text-white font-semibold text-[15px] mt-5 mb-1.5 pb-1 border-b border-navy-border">$1</h3>');
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Source lines in gold
+  html = html.replace(/\*Source: (.+?)\*/g, '<em class="text-gold text-[12px] not-italic">Source: $1</em>');
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
   html = html.replace(/^- (.+)$/gm, '<div class="pl-4 py-[1px] text-[14px] before:content-[\'·\'] before:text-gold before:mr-2">$1</div>');
   html = html.replace(/^\d+\. (.+)$/gm, '<div class="pl-4 py-[1px] text-[14px]">$1</div>');

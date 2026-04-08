@@ -131,6 +131,60 @@ def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=F
     return None
 
 
+def _run_news_pass(job_id, question, court_answer, conversation_id, timeout_at):
+    """Background thread: search for news and append to completed job."""
+    try:
+        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+        news_messages = [{
+            "role": "user",
+            "content": _extract_person_context(question, court_answer),
+        }]
+
+        news_text = _run_tool_loop(
+            client, get_news_prompt(), get_news_tools(), news_messages,
+            job_id, timeout_at, silent=True,
+        )
+
+        news_loading = "\n\n---\n\n*Searching for news coverage...*"
+        if news_text and "NO_NEWS_FOUND" not in news_text:
+            clean_news = news_text.strip()
+            for prefix in ["## News Coverage\n", "**News Coverage**\n", "### News Coverage\n"]:
+                if clean_news.startswith(prefix):
+                    clean_news = clean_news[len(prefix):].strip()
+            news_final = "\n\n---\n\n**News Coverage**\n\n" + clean_news
+            _update_job(job_id, replace_in_response=(news_loading, news_final))
+            # Update conversation with news appended
+            _append_news_to_conversation(conversation_id, news_final)
+        else:
+            _update_job(job_id, replace_in_response=(news_loading, ""))
+    except Exception as e:
+        print(f"[news_pass] Error: {e}")
+        _update_job(job_id, replace_in_response=(
+            "\n\n---\n\n*Searching for news coverage...*", ""))
+
+
+def _append_news_to_conversation(conversation_id, news_text):
+    """Append news section to the last assistant message in a conversation."""
+    if not conversation_id:
+        return
+    try:
+        with db.connect() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT messages FROM conversations WHERE id = %s", (conversation_id,))
+            row = cur.fetchone()
+            if row:
+                msgs = json.loads(row[0]) if isinstance(row[0], str) else (row[0] or [])
+                # Find last assistant message and append news
+                for i in range(len(msgs) - 1, -1, -1):
+                    if msgs[i].get("role") == "assistant":
+                        msgs[i]["content"] += news_text
+                        break
+                cur.execute("UPDATE conversations SET messages = %s, updated_at = NOW() WHERE id = %s",
+                            (json.dumps(msgs), conversation_id))
+    except Exception:
+        pass
+
+
 def _run_job(job_id, question, history, conversation_id=None):
     """Run the chat job — two passes: court data, then news."""
     key = os.environ.get("ANTHROPIC_API_KEY")
@@ -169,49 +223,20 @@ def _run_job(job_id, question, history, conversation_id=None):
         _update_job(job_id, append_response="\n\n" + court_answer)
 
         # ---------------------------------------------------------------
-        # Pass 2: News search (only for person queries, separate call)
+        # Pass 2: News search (parallel — mark job complete immediately,
+        # news appends when ready)
         # ---------------------------------------------------------------
-        if _is_person_query(question, court_answer) and time.time() < timeout_at - 15:
+        do_news = _is_person_query(question, court_answer) and time.time() < timeout_at - 15
+
+        if do_news:
             _update_job(job_id, append_response="\n\n---\n\n*Searching for news coverage...*")
 
-            news_messages = [{
-                "role": "user",
-                "content": _extract_person_context(question, court_answer),
-            }]
-
-            news_text = _run_tool_loop(
-                client, get_news_prompt(), get_news_tools(), news_messages,
-                job_id, timeout_at, silent=True,
-            )
-
-            news_loading = "\n\n---\n\n*Searching for news coverage...*"
-            if news_text and "NO_NEWS_FOUND" not in news_text:
-                # Strip any duplicate header Claude may have added
-                clean_news = news_text.strip()
-                for prefix in ["## News Coverage\n", "**News Coverage**\n", "### News Coverage\n"]:
-                    if clean_news.startswith(prefix):
-                        clean_news = clean_news[len(prefix):].strip()
-                news_final = "\n\n---\n\n**News Coverage**\n\n" + clean_news
-                _update_job(job_id, replace_in_response=(news_loading, news_final))
-            else:
-                # No news — remove the loading indicator
-                _update_job(job_id, replace_in_response=(news_loading, ""))
-
-        # ---------------------------------------------------------------
-        # Done
-        # ---------------------------------------------------------------
+        # Mark job as completed NOW so user sees court data immediately
         duration = int((time.time() - start) * 1000)
         _update_job(job_id, status="completed", completed_at="NOW()")
 
-        # Save to conversation — use clean court_answer + news, not raw job response
-        save_text = court_answer or ""
-        job = get_job(job_id)
-        raw = job.get("response", "")
-        # Extract news section if present
-        news_idx = raw.find("\n\n---\n\n**News Coverage**")
-        if news_idx >= 0:
-            save_text += raw[news_idx:]
-        _save_to_conversation(conversation_id, save_text)
+        # Save court answer to conversation immediately
+        _save_to_conversation(conversation_id, court_answer)
 
         # Log
         try:
@@ -224,6 +249,14 @@ def _run_job(job_id, question, history, conversation_id=None):
                 )
         except Exception:
             pass
+
+        # Run news in background — appends to completed job and updates conversation
+        if do_news:
+            threading.Thread(
+                target=_run_news_pass,
+                args=(job_id, question, court_answer, conversation_id, timeout_at),
+                daemon=True,
+            ).start()
 
     except Exception as e:
         _update_job(job_id, status="error", error=str(e)[:500], completed_at="NOW()")
