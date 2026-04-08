@@ -490,7 +490,7 @@ def _get_charge_stats(conn, inputs):
 def _news_search(conn, inputs):
     """Search for news using Gemini with Google Search grounding."""
     from google import genai
-    from google.genai.types import Tool, GoogleSearch
+    from google.genai import types
 
     query = inputs.get("query", "")
     if not query:
@@ -504,7 +504,9 @@ def _news_search(conn, inputs):
                      f"Return ONLY factual summaries of what news outlets reported. "
                      f"Include the source name and date for each article. "
                      f"If no relevant news is found, say 'No relevant news coverage found.'",
-            config={"tools": [Tool(google_search=GoogleSearch())]},
+            config=types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+            ),
         )
         text = response.text if response.text else "No results returned."
 

@@ -123,6 +123,11 @@ def _run_job(job_id, question, history, conversation_id=None):
                 if tool_results:
                     messages.append({"role": "user", "content": tool_results})
             else:
+                # Log server-side tools (web_search) that ran in this final turn
+                for block in response.content:
+                    if block.type == "server_tool_use":
+                        _update_job(job_id, append_response="..web search", append_tool="web_search")
+
                 # Extract text from the response we already have
                 text_parts = [b.text for b in response.content if hasattr(b, "text")]
                 if text_parts:

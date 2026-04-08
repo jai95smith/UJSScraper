@@ -136,6 +136,12 @@ def ask_stream(question: str, api_key: Optional[str] = None, history: Optional[l
             if tool_results:
                 messages.append({"role": "user", "content": tool_results})
         else:
+            # Log server-side tools (web_search) that ran in this final turn
+            for block in response.content:
+                if block.type == "server_tool_use":
+                    tools_used.append("web_search")
+                    yield "..web search"
+
             yield "\n\n"
             full_text = ""
             try:
