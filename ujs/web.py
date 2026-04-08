@@ -33,6 +33,13 @@ def chat(conversation_id=None):
 def create_app():
     app = Flask(__name__, template_folder='templates', static_folder='static')
     app.register_blueprint(main_bp)
+
+    @app.after_request
+    def no_cache(response):
+        if 'text/html' in response.content_type:
+            response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        return response
+
     return app
 
 
