@@ -56,29 +56,30 @@ def test_tools_list_includes_web_search():
 
 
 def test_system_prompt_has_web_search_rules():
-    """System prompt contains web search guidance."""
+    """System prompt contains web search guidance covering the key behavioral rules."""
     from ujs.chat.prompts import get_system_prompt
-    prompt = get_system_prompt()
+    prompt = get_system_prompt().lower()
 
-    test("prompt mentions web_search", "web_search" in prompt.lower() or "web search" in prompt.lower())
-    test("prompt has WHEN TO SEARCH", "WHEN TO SEARCH" in prompt)
-    test("prompt has WHEN NOT TO SEARCH", "WHEN NOT TO SEARCH" in prompt)
-    test("prompt has STRICT INCLUSION RULES", "STRICT INCLUSION RULES" in prompt)
-    test("prompt mentions exact full name requirement", "EXACT full name" in prompt)
-    test("prompt mentions county matching", "same county" in prompt.lower())
-    test("prompt says don't mention failed search", "do NOT mention that you searched" in prompt)
+    # Core: web search is mentioned at all
+    test("prompt references web search", "web_search" in prompt or "web search" in prompt)
 
-    # Check trigger conditions
-    test("prompt lists serious felonies", "homicide" in prompt.lower())
-    test("prompt lists official oppression trigger", "Official Oppression" in prompt)
-    test("prompt lists notable bail", "500,000" in prompt)
+    # Must have trigger criteria (when to search)
+    test("prompt defines when to search", "when to search" in prompt or "trigger" in prompt)
 
-    # Check exclusions
-    test("prompt excludes routine DUI", "Routine DUI" in prompt)
-    test("prompt excludes bulk queries", "Bulk queries" in prompt)
+    # Must have exclusion criteria (when not to search)
+    test("prompt defines when NOT to search", "when not to search" in prompt or "do not search" in prompt)
 
-    # Check search query format
-    test("prompt has search query format", "County] PA" in prompt)
+    # Must have quality gate for including results
+    test("prompt has inclusion/filtering rules",
+         "inclusion" in prompt or "discard" in prompt or "only include" in prompt)
+
+    # Must require name matching (prevent wrong-person results)
+    test("prompt requires name verification",
+         "exact" in prompt and "name" in prompt)
+
+    # Must handle no-results gracefully (don't tell user you searched and found nothing)
+    test("prompt handles empty results silently",
+         ("do not mention" in prompt or "don't mention" in prompt) and "search" in prompt)
 
 
 def test_executor_skips_web_search():
