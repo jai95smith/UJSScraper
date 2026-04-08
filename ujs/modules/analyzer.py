@@ -4,6 +4,7 @@
 import os, time, traceback, random
 from datetime import datetime
 
+import psycopg2
 from ujs import db
 from ujs.modules.ingest import deep_analyze_docket
 
@@ -42,49 +43,54 @@ def run(delay=DEFAULT_DELAY):
                 time.sleep(delay)
                 continue
 
-            # 2. Analyze unanalyzed cases
-            with db.connect() as conn:
-                cur = conn.cursor()
+            # 2. Analyze unanalyzed cases — claim with advisory lock held through analysis
+            lock_conn = psycopg2.connect(db.get_db_url())
+            dn = None
+            try:
+                cur = lock_conn.cursor()
                 cur.execute("""
                     SELECT c.docket_number FROM cases c
                     LEFT JOIN analyses a ON c.docket_number = a.docket_number AND a.doc_type = 'docket'
                     WHERE a.id IS NULL
                     ORDER BY
-                        -- Priority: cases with upcoming events first
                         CASE WHEN EXISTS (SELECT 1 FROM events e WHERE e.docket_number = c.docket_number) THEN 0 ELSE 1 END,
-                        -- Then active over closed
                         CASE WHEN c.status ILIKE '%%active%%' THEN 0 ELSE 1 END,
-                        -- Then most recent
                         c.created_at DESC
-                    LIMIT 10
+                    LIMIT 20
                 """)
-                rows = cur.fetchall()
-                row = random.choice(rows) if rows else None
-
-            if row:
-                dn = row[0]
-                if dn in _failed_dockets:
-                    # Skip known failures — mark as analyzed with empty to unblock queue
-                    with db.connect() as conn:
-                        db.store_analysis(conn, dn, {"error": "analysis_failed"}, "docket")
-                    continue
-                print(f"[analyzer:{worker_id}] Analyze: {dn}")
-                _start = time.time()
-                try:
-                    deep_analyze_docket(dn)
-                    _dur = int((time.time() - _start) * 1000)
-                    print(f"[analyzer:{worker_id}] Done: {dn} ({_dur}ms)")
-                    db.log_event("analyzer", "analyzed", docket_number=dn, duration_ms=_dur)
-                except Exception as e:
-                    err = str(e)
-                    _dur = int((time.time() - _start) * 1000)
-                    print(f"[analyzer:{worker_id}] Error: {dn}: {err}")
-                    db.log_event("analyzer", "error", docket_number=dn, detail=err, duration_ms=_dur, success=False)
-                    _failed_dockets.add(dn)
-                    if "429" in err:
-                        print("[analyzer:{worker_id}] Rate limited, pausing 5 min...")
-                        time.sleep(300)
+                for (candidate,) in cur.fetchall():
+                    if candidate in _failed_dockets:
                         continue
+                    cur.execute("SELECT pg_try_advisory_lock(hashtext(%s))", (candidate,))
+                    if cur.fetchone()[0]:
+                        dn = candidate
+                        break
+
+                if dn:
+                    if dn in _failed_dockets:
+                        with db.connect() as conn:
+                            db.store_analysis(conn, dn, {"error": "analysis_failed"}, "docket")
+                    else:
+                        print(f"[analyzer:{worker_id}] Analyze: {dn}")
+                        _start = time.time()
+                        try:
+                            deep_analyze_docket(dn)
+                            _dur = int((time.time() - _start) * 1000)
+                            print(f"[analyzer:{worker_id}] Done: {dn} ({_dur}ms)")
+                            db.log_event("analyzer", "analyzed", docket_number=dn, duration_ms=_dur)
+                        except Exception as e:
+                            err = str(e)
+                            _dur = int((time.time() - _start) * 1000)
+                            print(f"[analyzer:{worker_id}] Error: {dn}: {err}")
+                            db.log_event("analyzer", "error", docket_number=dn, detail=err, duration_ms=_dur, success=False)
+                            _failed_dockets.add(dn)
+                            if "429" in err:
+                                print(f"[analyzer:{worker_id}] Rate limited, pausing 5 min...")
+                                time.sleep(300)
+            finally:
+                lock_conn.close()
+
+            if dn:
                 time.sleep(delay)
                 continue
 
