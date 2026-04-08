@@ -2,7 +2,6 @@
 
 {% block head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-<script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js"></script>
 {% endblock %}
 
 {% block extra_css %}
@@ -16,7 +15,12 @@ body { background: #132240; height: 100dvh; overflow: hidden; }
 .prose strong { color: #e8edf5; font-weight: 600; }
 .chart-wrap canvas { width: 100% !important; height: auto !important; max-height: 300px; }
 .thinking-dots { display: inline-flex; gap: 3px; align-items: center; margin-left: 6px; vertical-align: middle; }
-.thinking-dots .dot { width: 4px; height: 4px; border-radius: 50%; background: #c8a03a; opacity: 0.3; }
+.thinking-dots .dot { width: 4px; height: 4px; border-radius: 50%; background: #c8a03a; animation: pulse-dot 1s ease-in-out infinite; }
+.thinking-dots .dot:nth-child(2) { animation-delay: 0.15s; }
+.thinking-dots .dot:nth-child(3) { animation-delay: 0.3s; }
+.thinking-dots.fade-out { animation: fade-out 0.3s ease-out forwards; }
+@keyframes pulse-dot { 0%, 100% { opacity: 0.3; transform: scale(1); } 50% { opacity: 1; transform: scale(1.4); } }
+@keyframes fade-out { to { opacity: 0; } }
 {% endblock %}
 
 {% block body %}
@@ -217,37 +221,10 @@ function botBubbleStart(statusId, contentId) {
   </div>`;
 }
 
-let thinkingAnimations = {};
-function startThinking(statusId) {
-  const dotsEl = document.getElementById(statusId + '-dots');
-  if (!dotsEl) return;
-  const dots = dotsEl.querySelectorAll('.dot');
-  thinkingAnimations[statusId] = anime({
-    targets: dots,
-    opacity: [0.3, 1],
-    scale: [1, 1.4],
-    delay: anime.stagger(120),
-    loop: true,
-    direction: 'alternate',
-    easing: 'easeInOutSine',
-    duration: 400,
-  });
-}
+function startThinking(statusId) { /* CSS animation handles it automatically */ }
 function stopThinking(statusId) {
-  if (thinkingAnimations[statusId]) {
-    thinkingAnimations[statusId].pause();
-    delete thinkingAnimations[statusId];
-  }
   const dotsEl = document.getElementById(statusId + '-dots');
-  if (dotsEl) {
-    anime({
-      targets: dotsEl,
-      opacity: 0,
-      duration: 300,
-      easing: 'easeOutQuad',
-      complete: () => dotsEl.remove(),
-    });
-  }
+  if (dotsEl) { dotsEl.classList.add('fade-out'); setTimeout(() => dotsEl.remove(), 300); }
 }
 function retryBubble(question) {
   return `<div class="max-w-2xl py-1">
@@ -335,7 +312,7 @@ async function send() {
   btn.disabled = false;
   document.getElementById('btn-text').classList.remove('hidden');
   document.getElementById('btn-spin').classList.add('hidden');
-  anime({ targets: statusEl, opacity: 0.5, duration: 400, easing: 'easeOutQuad' });
+  statusEl.style.transition = 'opacity 0.4s'; statusEl.style.opacity = '0.5';
   input.focus();
 }
 
