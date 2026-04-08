@@ -79,13 +79,18 @@ def _save_to_conversation(conversation_id, response_text):
 
 
 def _is_person_query(question, court_answer):
-    """Check if this query is about a specific named person (worth searching news)."""
-    # If the court answer mentions a specific person's cases, it's a person query
-    if any(kw in court_answer.lower() for kw in ["docket", "charges", "case", "hearing", "bail"]):
-        # Check it's not a bulk query
-        if not any(kw in question.lower() for kw in ["how many", "stats", "filing", "trend", "coverage"]):
-            return True
-    return False
+    """Check if this query is about a specific named person (worth searching news).
+    Must find a capitalized proper name in the question — not just keywords in the answer."""
+    import re
+    q = question.strip()
+    # Look for a proper name pattern: two+ capitalized words (First Last)
+    # Matches "Jason Krasley", "Krasley, Jason Michael", etc.
+    has_name = bool(re.search(r'[A-Z][a-z]+[\s,]+[A-Z][a-z]+', q))
+    if not has_name:
+        return False
+    # Confirm court answer actually found person data (not "no results")
+    answer_lower = court_answer.lower()
+    return any(kw in answer_lower for kw in ["docket", "charges", "case", "bail", "cp-"])
 
 
 def _extract_person_context(question, court_answer):
