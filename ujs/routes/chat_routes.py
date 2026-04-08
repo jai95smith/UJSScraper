@@ -1,23 +1,43 @@
 """Chat routes — server-side conversations with job-based responses."""
 
-import json, uuid
-from fastapi import APIRouter, Query
+import json, time, uuid
+from collections import defaultdict
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 
 from ujs import db
 
 router = APIRouter(tags=["Chat"])
 
+# Rate limiting: IP -> list of timestamps
+_rate_limits = defaultdict(list)
+_RATE_LIMIT = 10  # requests per minute
+_RATE_WINDOW = 60  # seconds
+
+
+def _check_rate_limit(request: Request):
+    """Returns True if rate limited."""
+    ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    timestamps = _rate_limits[ip]
+    # Prune old entries
+    _rate_limits[ip] = [t for t in timestamps if now - t < _RATE_WINDOW]
+    if len(_rate_limits[ip]) >= _RATE_LIMIT:
+        return True
+    _rate_limits[ip].append(now)
+    return False
+
 
 class AskRequest(BaseModel):
-    question: str
+    question: str = Field(..., max_length=2000)
     conversation_id: Optional[str] = None
 
 
 def _nanoid():
-    return str(uuid.uuid4())[:8]
+    """Generate a cryptographically random 16-char ID."""
+    return uuid.uuid4().hex[:16]
 
 
 # --- Conversations ---
@@ -81,8 +101,10 @@ def get_conversation_job(cid: str):
 # --- Ask (creates job, appends to conversation) ---
 
 @router.post("/ask")
-def ask(body: AskRequest):
+def ask(body: AskRequest, request: Request):
     """Submit a question. Creates conversation if needed, starts background job."""
+    if _check_rate_limit(request):
+        return JSONResponse(status_code=429, content={"error": "Rate limit exceeded. Try again in a minute."})
     from ujs.chat.jobs import create_job
 
     cid = body.conversation_id
@@ -124,9 +146,9 @@ def ask(body: AskRequest):
 
 
 @router.get("/ask")
-def ask_get(q: str = Query(...)):
+def ask_get(q: str = Query(..., max_length=2000), request: Request = None):
     """Submit via GET."""
-    return ask(AskRequest(question=q))
+    return ask(AskRequest(question=q), request)
 
 
 # --- Job polling ---

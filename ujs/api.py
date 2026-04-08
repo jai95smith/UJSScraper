@@ -66,14 +66,21 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+_ALLOWED_ORIGINS = [
+    "https://gavelsearch.com",
+    "https://www.gavelsearch.com",
+    "http://localhost:8000",  # local Flask dev
+    "http://localhost:3000",  # local dev
+]
+app.add_middleware(CORSMiddleware, allow_origins=_ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"])
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
-    import traceback
-    traceback.print_exc()
-    return JSONResponse(status_code=500, content={"error": str(exc)})
+    import traceback, logging
+    logging.error(f"Unhandled exception on {request.url.path}: {exc}")
+    traceback.print_exc()  # Server-side only
+    return JSONResponse(status_code=500, content={"error": "An internal error occurred."})
 
 
 # Mount routers

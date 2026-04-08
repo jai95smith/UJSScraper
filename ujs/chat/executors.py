@@ -332,23 +332,37 @@ def _get_stats_query(conn, inputs):
 
 def _run_custom_query(conn, inputs):
     sql = inputs["sql"].strip()
-    sql_upper = sql.upper()
+    # Remove comments that could hide malicious SQL
+    import re
+    sql_clean = re.sub(r'/\*.*?\*/', ' ', sql, flags=re.DOTALL)  # block comments
+    sql_clean = re.sub(r'--.*$', ' ', sql_clean, flags=re.MULTILINE)  # line comments
+    sql_upper = sql_clean.upper().strip()
+
     blocked = ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE",
-               "CREATE", "GRANT", "REVOKE", "COPY", "EXECUTE", "SET ", "COMMIT", "ROLLBACK", "BEGIN", ";"]
+               "CREATE", "GRANT", "REVOKE", "COPY", "EXECUTE", "SET ",
+               "COMMIT", "ROLLBACK", "BEGIN", "PREPARE", "DEALLOCATE",
+               "LISTEN", "NOTIFY", "LOAD", "DO ", "CALL "]
     for word in blocked:
         if word in sql_upper:
             return f"Blocked: query contains '{word}'. Only SELECT queries allowed."
     if not sql_upper.startswith("SELECT"):
         return "Blocked: query must start with SELECT."
+    # Block multiple statements (even without semicolons some drivers allow it)
+    if ';' in sql_clean:
+        return "Blocked: multiple statements not allowed."
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("SET statement_timeout = '5s'")
+        cur.execute("SET transaction_read_only = ON")
         cur.execute(sql)
         rows = cur.fetchall()
         cur.execute("RESET statement_timeout")
+        cur.execute("RESET transaction_read_only")
         return json.dumps([dict(r) for r in rows[:100]], default=str)
     except Exception as e:
-        return f"Query error: {str(e)[:300]}. Fix the SQL and try again."
+        cur.execute("RESET transaction_read_only")
+        # Don't leak DB internals — generic message
+        return "Query failed. Check SQL syntax and try again."
 
 
 def _get_analysis_coverage(conn, inputs):
