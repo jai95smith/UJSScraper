@@ -428,9 +428,24 @@ function renderMd(text) {
   return html;
 }
 
+function localizeLabels(labels) {
+  return labels.map(label => {
+    const d = new Date(label);
+    if (isNaN(d.getTime())) return label;
+    // If it looks like an hourly timestamp, show short local time
+    if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}/.test(label))
+      return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    // If just a date
+    if (/^\d{4}-\d{2}-\d{2}$/.test(label))
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return label;
+  });
+}
+
 function renderChart(id, config) {
   const el = document.getElementById(id); if (!el) return;
   if (chartInstances[id]) chartInstances[id].destroy();
+  if (config.labels) config.labels = localizeLabels(config.labels);
   const colors = ['#c8a03a','#3b82f6','#8b5cf6','#ec4899','#10b981','#06b6d4','#f43f5e','#84cc16'];
   if (config.datasets) config.datasets.forEach((ds, i) => {
     if (config.type === 'pie' || config.type === 'doughnut') {
