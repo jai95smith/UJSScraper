@@ -6,7 +6,7 @@ import os
 NEWS_SEARCH_PROVIDER = os.environ.get("NEWS_SEARCH_PROVIDER", "claude")
 
 # Anthropic server-side web search — executed by the API, not by us.
-_CLAUDE_WEB_SEARCH = {"type": "web_search_20250305", "name": "web_search", "max_uses": 3}
+_CLAUDE_WEB_SEARCH = {"type": "web_search_20250305", "name": "web_search", "max_uses": 5}
 
 # Gemini-grounded search — client-side tool, executed by us.
 _GEMINI_NEWS_SEARCH = {
