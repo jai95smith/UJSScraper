@@ -269,37 +269,46 @@ function toggleSidebar() {
   document.getElementById('sidebar-overlay').classList.toggle('hidden');
 }
 
-// Settings are stored in localStorage for now (no backend yet)
+// Preferences: API-backed with localStorage fallback
+const _prefsApiFields = new Set(['email_alerts', 'weekly_digest', 'notify_frequency']);
+let _saveTimer;
+
 function saveSetting(key, value) {
-  const settings = JSON.parse(localStorage.getItem('gavel_settings') || '{}');
-  settings[key] = value;
-  localStorage.setItem('gavel_settings', JSON.stringify(settings));
-  showSaved();
-}
+  // Always save to localStorage as cache
+  const local = JSON.parse(localStorage.getItem('gavel_settings') || '{}');
+  local[key] = value;
+  localStorage.setItem('gavel_settings', JSON.stringify(local));
 
-function loadSettings() {
-  const settings = JSON.parse(localStorage.getItem('gavel_settings') || '{}');
-  if (settings.role) document.getElementById('role-select').value = settings.role;
-  if (settings.default_county) document.getElementById('county-select').value = settings.default_county;
-  if (settings.email_alerts) document.getElementById('email-alerts').checked = true;
-  if (settings.weekly_digest) document.getElementById('weekly-digest').checked = true;
-  if (settings.include_news === false) document.getElementById('include-news').checked = false;
-  if (settings.auto_expand) document.getElementById('auto-expand').checked = true;
-}
-
-let _savedTimeout;
-function showSaved() {
-  let el = document.getElementById('saved-toast');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'saved-toast';
-    el.className = 'fixed bottom-6 right-6 bg-navy border border-gold/40 text-gold text-[12px] px-4 py-2 rounded-lg shadow-lg transition-opacity duration-300';
-    el.textContent = 'Settings saved';
-    document.body.appendChild(el);
+  // Debounce API save for API-backed fields
+  if (_prefsApiFields.has(key)) {
+    clearTimeout(_saveTimer);
+    _saveTimer = setTimeout(() => {
+      apiFetch(API + '/preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [key]: value })
+      }).then(() => showToast('Settings saved')).catch(() => showToast('Failed to save', 'error'));
+    }, 300);
+  } else {
+    showToast('Settings saved');
   }
-  el.style.opacity = '1';
-  clearTimeout(_savedTimeout);
-  _savedTimeout = setTimeout(() => { el.style.opacity = '0'; }, 1500);
+}
+
+async function loadSettings() {
+  // Load API preferences
+  try {
+    const res = await apiFetch(API + '/preferences');
+    const prefs = await res.json();
+    if (prefs.email_alerts != null) document.getElementById('email-alerts').checked = prefs.email_alerts;
+    if (prefs.weekly_digest != null) document.getElementById('weekly-digest').checked = prefs.weekly_digest;
+  } catch(e) {}
+
+  // Load localStorage settings (non-API fields)
+  const local = JSON.parse(localStorage.getItem('gavel_settings') || '{}');
+  if (local.role) document.getElementById('role-select').value = local.role;
+  if (local.default_county) document.getElementById('county-select').value = local.default_county;
+  if (local.include_news === false) document.getElementById('include-news').checked = false;
+  if (local.auto_expand) document.getElementById('auto-expand').checked = true;
 }
 
 async function deleteAllChats() {
@@ -310,9 +319,9 @@ async function deleteAllChats() {
     for (const c of chats) {
       await apiFetch(API + '/conversations/' + c.id, { method: 'DELETE' });
     }
-    alert('All chats deleted.');
+    showToast('All chats deleted');
   } catch(e) {
-    if (e !== 'auth') alert('Failed to delete chats.');
+    if (e !== 'auth') showToast('Failed to delete chats', 'error');
   }
 }
 
@@ -360,7 +369,8 @@ async function removeWatch(dn, btnEl) {
     if (!remaining) {
       document.getElementById('watches-list').innerHTML = '<div class="text-[12px] text-court-dim py-2">No watched dockets yet.</div>';
     }
-  } catch(e) { if (e !== 'auth') alert('Failed to remove watch.'); }
+    showToast('Stopped watching', 'info');
+  } catch(e) { if (e !== 'auth') showToast('Failed to remove watch', 'error'); }
 }
 
 loadSettings();
