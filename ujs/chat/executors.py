@@ -384,11 +384,18 @@ def _get_analysis_coverage(conn, inputs):
 
 
 def _render_table(conn, inputs):
-    table_json = json.dumps({"title": inputs.get("title", ""), "headers": inputs["headers"], "rows": inputs["rows"]})
+    headers = inputs.get("headers", [])
+    rows = inputs.get("rows", [])
+    if not headers or not rows:
+        return "Error: render_table requires 'headers' and 'rows' arrays."
+    table_json = json.dumps({"title": inputs.get("title", ""), "headers": headers, "rows": rows})
     return f"TABLE_RENDERED. Include this exact block in your response:\n```table\n{table_json}\n```"
 
 
 def _render_chart(conn, inputs):
+    for field in ("type", "title", "labels", "datasets"):
+        if field not in inputs:
+            return f"Error: render_chart requires '{field}'."
     chart_json = json.dumps({"type": inputs["type"], "title": inputs["title"],
                              "labels": inputs["labels"], "datasets": inputs["datasets"]})
     return f"CHART_RENDERED. Include this exact block in your response:\n```chart\n{chart_json}\n```"
