@@ -154,12 +154,15 @@ def ask_get(q: str = Query(..., max_length=2000), request: Request = None):
 # --- Job polling ---
 
 @router.get("/ask/job/{job_id}")
-def job_status(job_id: str, after: int = Query(0)):
-    """Poll for job progress."""
+def job_status(job_id: str, after: int = Query(0), cid: str = Query(None)):
+    """Poll for job progress. Requires matching conversation_id for access."""
     from ujs.chat.jobs import get_job
     job = get_job(job_id)
     if not job:
         return JSONResponse(status_code=404, content={"error": "Job not found"})
+    # Verify ownership: job must belong to the claimed conversation
+    if cid and job.get("conversation_id") and job["conversation_id"] != cid:
+        return JSONResponse(status_code=403, content={"error": "Access denied"})
 
     response = job.get("response", "")
     return {

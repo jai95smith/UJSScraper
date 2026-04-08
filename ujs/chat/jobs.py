@@ -10,9 +10,20 @@ from ujs.chat.tools import TOOLS, get_news_tools
 from ujs.chat.executors import execute_tool
 from ujs.chat.cleanup import structure_news, is_person_query
 
-# In-memory news cache: {name_lower: (structured_text, timestamp)}
+# In-memory news cache: {key: (structured_text, timestamp)}
 _news_cache = {}
 _NEWS_CACHE_TTL = 86400  # 24 hours
+_NEWS_CACHE_MAX = 500  # max entries
+
+
+def _cache_set(key, value):
+    """Set cache entry, evicting oldest if over max size."""
+    _news_cache[key] = (value, time.time())
+    if len(_news_cache) > _NEWS_CACHE_MAX:
+        # Evict oldest entries
+        sorted_keys = sorted(_news_cache, key=lambda k: _news_cache[k][1])
+        for k in sorted_keys[:len(_news_cache) - _NEWS_CACHE_MAX]:
+            del _news_cache[k]
 
 
 def create_job(question, history=None, conversation_id=None):
@@ -40,8 +51,11 @@ def get_job(job_id):
     return None
 
 
+_ALLOWED_JOB_COLUMNS = {"status", "error", "completed_at"}
+
+
 def _update_job(job_id, **kwargs):
-    """Update job fields."""
+    """Update job fields. Column names are whitelisted to prevent SQL injection."""
     with db.connect() as conn:
         cur = conn.cursor()
         sets = []
@@ -57,21 +71,23 @@ def _update_job(job_id, **kwargs):
             elif k == "append_tool":
                 sets.append("tools_log = array_append(tools_log, %s)")
                 params.append(v)
-            else:
+            elif k in _ALLOWED_JOB_COLUMNS:
                 sets.append(f"{k} = %s")
                 params.append(v)
+            else:
+                raise ValueError(f"Disallowed column in _update_job: {k}")
         params.append(job_id)
         cur.execute(f"UPDATE chat_jobs SET {', '.join(sets)} WHERE id = %s", params)
 
 
 def _save_to_conversation(conversation_id, response_text):
-    """Append assistant response to conversation messages."""
+    """Append assistant response to conversation messages. Uses row lock to prevent lost updates."""
     if not conversation_id:
         return
     try:
         with db.connect() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT messages FROM conversations WHERE id = %s", (conversation_id,))
+            cur.execute("SELECT messages FROM conversations WHERE id = %s FOR UPDATE", (conversation_id,))
             row = cur.fetchone()
             if row:
                 msgs = json.loads(row[0]) if isinstance(row[0], str) else (row[0] or [])
@@ -365,7 +381,7 @@ def _run_job(job_id, question, history, conversation_id=None):
                 if news_text and "NO_NEWS_FOUND" not in news_text:
                     structured = structure_news(news_text)
                     if structured:
-                        _news_cache[cache_key] = (structured, time.time())
+                        _cache_set(cache_key, structured)
                         news_section = "\n\n---\n\n**News Coverage**\n\n" + structured
                         _update_job(job_id, replace_in_response=(news_loading, news_section))
                     else:
