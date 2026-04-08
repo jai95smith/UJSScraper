@@ -380,97 +380,106 @@ async function pollJob(jobId, statusEl, contentEl, msgId) {
 /* --- Rendering --- */
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-function renderTableHtml(json) {
+/* ---------------------------------------------------------------
+ * Rendering pipeline: fenced blocks first, then inline markdown.
+ * All rendering goes through renderMd(). renderFinalResponse()
+ * calls renderMd() then post-processes charts that need <canvas>.
+ * --------------------------------------------------------------- */
+
+function esc2(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* --- Block renderers --- */
+
+function renderTableBlock(json) {
   try {
     const t = JSON.parse(json);
-    const th = t.headers.map(h => `<th class="text-left text-court-dim font-medium px-2 py-1.5 border-b border-navy-border bg-navy/50 text-[12px]">${esc(h)}</th>`).join('');
+    const th = t.headers.map(h =>
+      `<th class="text-left text-court-dim font-medium px-2 py-1.5 border-b border-navy-border bg-navy/50 text-[12px] whitespace-nowrap">${esc2(h)}</th>`
+    ).join('');
     const rows = t.rows.map(r => '<tr>' + r.map(c =>
-      `<td class="text-left text-court-text px-2 py-1 border-b border-navy-border/50 text-[12px]">${esc(c)}</td>`
+      `<td class="text-left text-court-text px-2 py-1 border-b border-navy-border/50 text-[12px]">${esc2(String(c))}</td>`
     ).join('') + '</tr>').join('');
-    const title = t.title ? `<div class="text-white font-semibold text-[13px] mb-2">${esc(t.title)}</div>` : '';
-    return `<div class="my-3">${title}<div class="overflow-x-auto"><table class="w-full border-collapse"><tr>${th}</tr>${rows}</table></div></div>`;
-  } catch(e) { return '<div class="text-red-400 text-[12px]">Table render error</div>'; }
+    const title = t.title ? `<div class="text-white font-semibold text-[13px] mb-2">${esc2(t.title)}</div>` : '';
+    return `<div class="my-3">${title}<div class="overflow-x-auto"><table class="w-full border-collapse"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  } catch(e) { return `<div class="text-red-400 text-[12px]">Table error: ${esc2(e.message)}</div>`; }
 }
 
-function renderFinalResponse(contentEl, text, msgId) {
-  // Extract charts (tables handled inline by renderMd)
-  const parts = text.split(/```chart\s*\n([\s\S]*?)```/g);
-  let textContent = '';
-  const chartConfigs = [];
-  for (let i = 0; i < parts.length; i++) {
-    if (i % 2 === 0) textContent += parts[i]; else chartConfigs.push(parts[i].trim());
-  }
-  contentEl.innerHTML = renderMd(textContent.trim());
-  const parent = contentEl.parentElement;
-  chartConfigs.forEach((json, i) => {
-    try {
-      const config = JSON.parse(json);
-      const cid = 'chart-' + msgId + '-' + i;
-      const el = document.createElement('div');
-      el.className = 'max-w-2xl py-2';
-      el.innerHTML = `<div class="bg-navy/50 border border-navy-border rounded-xl p-4"><canvas id="${cid}" style="width:100%;max-height:300px;"></canvas></div>`;
-      parent.parentNode.insertBefore(el, parent.nextSibling);
-      setTimeout(() => renderChart(cid, config), 300);
-    } catch(e) { console.error('Chart render error:', e); }
+function renderMdTable(block) {
+  const rows = block.trim().split('\n').filter(r => r.includes('|'));
+  if (rows.length < 2) return block;
+  const hasSep = /^\|?\s*[-:\s|]+$/.test(rows[1]);
+  const dataRows = hasSep ? [rows[0], ...rows.slice(2)] : rows;
+  const parse = r => { let s=r.trim(); if(s[0]==='|')s=s.slice(1); if(s.slice(-1)==='|')s=s.slice(0,-1); return s.split('|').map(c=>c.trim()); };
+  let out = '<div class="overflow-x-auto my-3"><table class="w-full text-[12px] border-collapse">';
+  dataRows.forEach((r,i) => {
+    const cells = parse(r);
+    const tag = (i===0 && hasSep) ? 'th' : 'td';
+    const cls = tag==='th' ? 'text-left text-court-dim font-medium px-2 py-1.5 border-b border-navy-border bg-navy/50' : 'text-left text-court-text px-2 py-1 border-b border-navy-border/50';
+    out += '<tr>' + cells.map(c=>`<${tag} class="${cls}">${c}</${tag}>`).join('') + '</tr>';
   });
+  return out + '</table></div>';
 }
+
+/* --- Main render pipeline --- */
 
 function renderMd(text) {
-  // Render ```table blocks inline
-  let html = text.replace(/```table\s*\n([\s\S]*?)```/g, function(_, json) {
-    return renderTableHtml(json);
+  // Step 1: Extract all fenced blocks (```type\n...\n```) into placeholders.
+  // This protects them from inline markdown processing.
+  const blocks = [];
+  let html = text.replace(/```(\w+)\s*\n([\s\S]*?)```/g, function(_, type, content) {
+    const idx = blocks.length;
+    blocks.push({type, content: content.trim()});
+    return `\x00BLOCK${idx}\x00`;
   });
-  html = html.replace(/```chart\s*\n[\s\S]*?```/g,
-    '<div class="my-3 py-2 text-[11px] text-court-dim flex items-center gap-2"><svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Preparing chart...</div>');
-  html = html.replace(/&(?!amp;)/g, '&amp;');
-  // Trim excessive newlines (3+ → 2)
+
+  // Step 2: Inline markdown on the remaining text
+  html = html.replace(/&/g, '&amp;');
   html = html.replace(/\n{3,}/g, '\n\n');
-  // Horizontal rules
   html = html.replace(/^---$/gm, '<hr class="border-navy-border my-3">');
-  // Tables — must run before headers/bold to avoid conflicts
-  html = html.replace(/((?:^\|.+$\n?){2,})/gm, function(table) {
-    const rows = table.trim().split('\n').filter(r => r.trim() && r.includes('|'));
-    if (rows.length < 2) return table;
-    // Check if row 2 is a separator (|---|---|)
-    const isSep = /^[\s|:-]+$/.test(rows[1].replace(/-/g, ''));
-    const hasSep = /^\|?\s*[-:]+/.test(rows[1]);
-    const sepRow = isSep || hasSep;
-    const dataRows = sepRow ? [rows[0], ...rows.slice(2)] : rows;
-    const parseRow = r => {
-      // Handle rows that may or may not end with |
-      let s = r.trim();
-      if (s.startsWith('|')) s = s.slice(1);
-      if (s.endsWith('|')) s = s.slice(0, -1);
-      return s.split('|').map(c => c.trim());
-    };
-    let out = '<div class="overflow-x-auto my-3"><table class="w-full text-[12px] border-collapse">';
-    dataRows.forEach((r, i) => {
-      const cells = parseRow(r);
-      const tag = (i === 0 && sepRow) ? 'th' : 'td';
-      const cls = tag === 'th'
-        ? 'text-left text-court-dim font-medium px-2 py-1.5 border-b border-navy-border bg-navy/50'
-        : 'text-left text-court-text px-2 py-1 border-b border-navy-border/50';
-      out += '<tr>' + cells.map(c => `<${tag} class="${cls}">${c}</${tag}>`).join('') + '</tr>';
-    });
-    out += '</table></div>';
-    return out;
-  });
-  // Headers
+
+  // Markdown tables (pipe syntax) — before inline formatting
+  html = html.replace(/((?:^\|.+$\n?){2,})/gm, m => renderMdTable(m));
+
   html = html.replace(/^### (.+)$/gm, '<h4 class="text-white font-semibold text-[14px] mt-4 mb-1">$1</h4>');
   html = html.replace(/^## (.+)$/gm, '<h3 class="text-white font-semibold text-[15px] mt-5 mb-1.5 pb-1 border-b border-navy-border">$1</h3>');
-  // Bold/italic
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  // Lists
   html = html.replace(/^- (.+)$/gm, '<div class="pl-4 py-[1px] text-[14px] before:content-[\'·\'] before:text-gold before:mr-2">$1</div>');
   html = html.replace(/^\d+\. (.+)$/gm, '<div class="pl-4 py-[1px] text-[14px]">$1</div>');
-  // Paragraphs
   html = html.replace(/\n\n/g, '</p><p class="mt-2">');
   html = html.replace(/\n/g, '<br>');
   html = '<p>' + html + '</p>';
   html = html.replace(/<p class="mt-2"><\/p>/g, '');
   html = html.replace(/<p><\/p>/g, '');
+
+  // Step 3: Replace placeholders with rendered blocks
+  html = html.replace(/\x00BLOCK(\d+)\x00/g, function(_, idx) {
+    const b = blocks[parseInt(idx)];
+    if (b.type === 'table') return renderTableBlock(b.content);
+    if (b.type === 'chart') return `<div data-chart='${esc2(b.content)}' class="my-3 py-2 text-[11px] text-court-dim">Loading chart...</div>`;
+    // Unknown block type — render as code
+    return `<pre class="bg-navy/50 rounded p-2 text-[12px] my-2 overflow-x-auto"><code>${esc2(b.content)}</code></pre>`;
+  });
+
   return html;
+}
+
+function renderFinalResponse(contentEl, text, msgId) {
+  contentEl.innerHTML = renderMd(text.trim());
+
+  // Post-process: find chart placeholders and render with Chart.js
+  contentEl.querySelectorAll('[data-chart]').forEach((el, i) => {
+    try {
+      const config = JSON.parse(el.dataset.chart);
+      const cid = 'chart-' + msgId + '-' + i;
+      el.className = 'max-w-2xl py-2';
+      el.innerHTML = `<div class="bg-navy/50 border border-navy-border rounded-xl p-4"><canvas id="${cid}" style="width:100%;max-height:300px;"></canvas></div>`;
+      el.removeAttribute('data-chart');
+      setTimeout(() => renderChart(cid, config), 300);
+    } catch(e) { el.textContent = 'Chart error: ' + e.message; }
+  });
 }
 
 function localizeLabels(labels) {
