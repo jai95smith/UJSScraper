@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from ujs import db
-from ujs.routes import search, docket, analytics, chat_routes, rapsheet, admin
+from ujs.routes import search, docket, analytics, chat_routes, rapsheet, admin, watch_routes
 
 
 # -------------------------------------------------------------------
@@ -121,3 +121,4 @@ app.include_router(analytics.router)
 app.include_router(chat_routes.router)
 app.include_router(rapsheet.router)
 app.include_router(admin.router)
+app.include_router(watch_routes.router)

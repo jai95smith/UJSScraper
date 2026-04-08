@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Unsubscribe — Lehigh Valley Court AI{% endblock %}
+{% block body %}
+<div class="min-h-screen bg-navy flex items-center justify-center px-4">
+  <div class="text-center max-w-sm">
+    {% if success %}
+    <div class="text-gold text-4xl mb-4">
+      <svg class="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 13l4 4L19 7"/></svg>
+    </div>
+    <h1 class="text-lg font-semibold text-court-bright mb-2">Unsubscribed</h1>
+    <p class="text-sm text-court-dim mb-6">You will no longer receive email alerts. You can re-enable them anytime in your settings.</p>
+    {% else %}
+    <h1 class="text-lg font-semibold text-court-bright mb-2">Invalid Link</h1>
+    <p class="text-sm text-court-dim mb-6">This unsubscribe link is invalid or has already been used.</p>
+    {% endif %}
+    <a href="/chat" class="inline-block bg-gold hover:bg-gold-dim text-navy font-medium text-sm rounded px-5 py-2 transition">Go to GavelSearch</a>
+  </div>
+</div>
+{% endblock %}

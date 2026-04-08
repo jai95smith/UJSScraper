@@ -919,3 +919,119 @@ def get_stats(conn):
     row = cur.fetchone()
     stats["oldest_active_scrape"] = row["min"].isoformat() if row["min"] else None
     return stats
+
+
+# ---------------------------------------------------------------------------
+# User Watches (per-user docket monitoring)
+# ---------------------------------------------------------------------------
+
+_MAX_WATCHES_PER_USER = 25
+
+
+def add_user_watch(conn, user_id, user_email, docket_number, label=None, notify_frequency='daily'):
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM user_watches WHERE user_id = %s", (user_id,))
+    if cur.fetchone()[0] >= _MAX_WATCHES_PER_USER:
+        return None  # limit reached
+    cur.execute("""
+        INSERT INTO user_watches (user_id, user_email, docket_number, label, notify_frequency)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (user_id, docket_number) DO UPDATE SET label = EXCLUDED.label, notify_frequency = EXCLUDED.notify_frequency
+        RETURNING id
+    """, (user_id, user_email, docket_number, label, notify_frequency))
+    if not get_case(conn, docket_number):
+        queue_ingest(conn, docket_number, priority=5)
+    return cur.fetchone()[0]
+
+
+def remove_user_watch(conn, user_id, docket_number):
+    cur = conn.cursor()
+    cur.execute("DELETE FROM user_watches WHERE user_id = %s AND docket_number = %s", (user_id, docket_number))
+    return cur.rowcount > 0
+
+
+def get_user_watches(conn, user_id):
+    cur = _dict_cur(conn)
+    cur.execute("""
+        SELECT w.id, w.docket_number, w.label, w.notify_frequency, w.created_at, w.last_notified_at,
+               c.caption, c.status, c.county, c.filing_date, c.last_scraped,
+               (SELECT COUNT(*) FROM change_log cl WHERE cl.docket_number = w.docket_number
+                AND cl.detected_at > COALESCE(w.last_notified_at, w.created_at)) AS pending_changes
+        FROM user_watches w
+        LEFT JOIN cases c ON w.docket_number = c.docket_number
+        WHERE w.user_id = %s
+        ORDER BY w.created_at DESC
+    """, (user_id,))
+    return [dict(r) for r in cur.fetchall()]
+
+
+def is_watching(conn, user_id, docket_number):
+    cur = conn.cursor()
+    cur.execute("SELECT 1 FROM user_watches WHERE user_id = %s AND docket_number = %s", (user_id, docket_number))
+    return cur.fetchone() is not None
+
+
+def get_pending_notifications(conn, frequency='daily'):
+    """Get users with unsent changes on watched dockets."""
+    cur = _dict_cur(conn)
+    cur.execute("""
+        SELECT w.user_id, w.user_email, w.docket_number, w.label, w.notify_frequency,
+               c.caption, c.county,
+               cl.change_type, cl.field_name, cl.old_value, cl.new_value, cl.detected_at,
+               p.unsubscribe_token
+        FROM user_watches w
+        JOIN change_log cl ON cl.docket_number = w.docket_number
+            AND cl.detected_at > COALESCE(w.last_notified_at, w.created_at)
+        LEFT JOIN cases c ON w.docket_number = c.docket_number
+        LEFT JOIN user_preferences p ON w.user_id = p.user_id
+        WHERE w.notify_frequency = %s
+          AND (p.email_alerts IS NULL OR p.email_alerts = TRUE)
+        ORDER BY w.user_id, w.docket_number, cl.detected_at
+    """, (frequency,))
+    return [dict(r) for r in cur.fetchall()]
+
+
+def mark_notified(conn, user_id, docket_numbers):
+    """Mark watches as notified for a list of docket numbers."""
+    cur = conn.cursor()
+    for dn in docket_numbers:
+        cur.execute("UPDATE user_watches SET last_notified_at = NOW() WHERE user_id = %s AND docket_number = %s",
+                    (user_id, dn))
+
+
+# ---------------------------------------------------------------------------
+# User Preferences
+# ---------------------------------------------------------------------------
+
+def get_or_create_preferences(conn, user_id):
+    cur = _dict_cur(conn)
+    cur.execute("SELECT * FROM user_preferences WHERE user_id = %s", (user_id,))
+    row = cur.fetchone()
+    if row:
+        return dict(row)
+    cur = conn.cursor()
+    cur.execute("INSERT INTO user_preferences (user_id) VALUES (%s) ON CONFLICT DO NOTHING", (user_id,))
+    cur = _dict_cur(conn)
+    cur.execute("SELECT * FROM user_preferences WHERE user_id = %s", (user_id,))
+    return dict(cur.fetchone())
+
+
+def update_preferences(conn, user_id, **kwargs):
+    allowed = {'email_alerts', 'weekly_digest', 'notify_frequency'}
+    sets, params = [], []
+    for k, v in kwargs.items():
+        if k in allowed:
+            sets.append(f"{k} = %s")
+            params.append(v)
+    if not sets:
+        return
+    params.append(user_id)
+    cur = conn.cursor()
+    cur.execute(f"UPDATE user_preferences SET {', '.join(sets)}, updated_at = NOW() WHERE user_id = %s", params)
+
+
+def get_preferences_by_token(conn, token):
+    cur = _dict_cur(conn)
+    cur.execute("SELECT * FROM user_preferences WHERE unsubscribe_token = %s", (token,))
+    row = cur.fetchone()
+    return dict(row) if row else None

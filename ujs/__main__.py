@@ -8,6 +8,7 @@ COMMANDS = {
     "monitor": "ujs.modules.monitor",
     "docket": "ujs.modules.docket_pdf",
     "ingest": "ujs.modules.ingest",
+    "notify": "ujs.modules.notify",
     "api": None,  # handled separately
     "mcp": None,  # handled separately
 }
@@ -19,6 +20,7 @@ Commands:
   monitor   Hourly monitor for new filings & events (file-based)
   docket    Download and analyze docket sheet PDFs
   ingest    DB ingest pipeline — scrape, analyze, store, refresh
+  notify    Send docket watch email notifications
   api       Start the REST API server
 
 Examples:

@@ -117,6 +117,21 @@ def auth_callback():
     return redirect(next_url)
 
 
+@main_bp.route('/unsubscribe/<token>')
+def unsubscribe(token):
+    """Public one-click unsubscribe — no login required (CAN-SPAM compliance)."""
+    from ujs import db as _db
+    try:
+        with _db.connect() as conn:
+            prefs = _db.get_preferences_by_token(conn, token)
+            if prefs:
+                _db.update_preferences(conn, prefs["user_id"], email_alerts=False)
+                return render_template('unsubscribe.html', api_url=_api_url(), success=True)
+    except Exception:
+        pass
+    return render_template('unsubscribe.html', api_url=_api_url(), success=False)
+
+
 @main_bp.route('/logout')
 def logout():
     user = session.get('user')

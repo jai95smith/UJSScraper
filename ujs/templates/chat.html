@@ -123,6 +123,7 @@ const USER_TOKEN = '{{ user_token }}';
 let allChats = [];
 let currentChatId = null;
 let chartInstances = {};
+let watchedDockets = new Set();
 
 function apiFetch(url, opts = {}) {
   opts.headers = { ...opts.headers, 'Authorization': 'Bearer ' + USER_TOKEN };
@@ -264,6 +265,7 @@ function botBubbleStatic(contentId) {
 
 /* --- Init --- */
 loadConversations();
+loadWatchedDockets();
 
 // Route: /chat/{id} → load conversation, /chat?q= → new with query, /chat → welcome
 const CONV_ID = '{{ conversation_id }}';
@@ -422,6 +424,9 @@ function esc(s) { const d = document.createElement('div'); d.textContent = s; re
 function renderFinalResponse(contentEl, text, msgId) {
   contentEl.innerHTML = renderMd(text.trim());
 
+  // Post-process: inject watch buttons on docket numbers
+  injectWatchButtons(contentEl);
+
   // Post-process: find chart placeholders and render with Chart.js
   contentEl.querySelectorAll('[data-chart]').forEach((el, i) => {
     try {
@@ -433,6 +438,81 @@ function renderFinalResponse(contentEl, text, msgId) {
       setTimeout(() => renderChart(cid, config), 300);
     } catch(e) { el.textContent = 'Chart error: ' + e.message; }
   });
+}
+
+/* --- Watch docket buttons --- */
+const DOCKET_RE = /\b([A-Z]{2}-\d{2}-[A-Z]{2}-\d{7}-\d{4})\b/g;
+
+async function loadWatchedDockets() {
+  try {
+    const res = await apiFetch(API + '/watches');
+    const watches = await res.json();
+    watchedDockets = new Set(watches.map(w => w.docket_number));
+  } catch(e) {}
+}
+
+function injectWatchButtons(el) {
+  // Walk text nodes and find docket numbers, wrap with a watch toggle
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+  const matches = [];
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (DOCKET_RE.test(node.textContent)) {
+      matches.push(node);
+    }
+    DOCKET_RE.lastIndex = 0;
+  }
+  matches.forEach(node => {
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    const text = node.textContent;
+    DOCKET_RE.lastIndex = 0;
+    let m;
+    const seen = new Set();
+    while ((m = DOCKET_RE.exec(text)) !== null) {
+      const dn = m[1];
+      if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+      const span = document.createElement('span');
+      span.textContent = dn;
+      frag.appendChild(span);
+      // Only add one button per unique docket per response
+      if (!seen.has(dn)) {
+        seen.add(dn);
+        const btn = document.createElement('button');
+        btn.className = 'inline-flex items-center ml-1 align-middle text-court-dim hover:text-gold transition';
+        btn.title = watchedDockets.has(dn) ? 'Stop watching' : 'Watch this docket';
+        btn.innerHTML = watchedDockets.has(dn)
+          ? '<svg class="w-3.5 h-3.5 text-gold" fill="currentColor" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>'
+          : '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
+        btn.onclick = (e) => { e.preventDefault(); toggleWatch(dn, btn); };
+        frag.appendChild(btn);
+      }
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+    node.parentNode.replaceChild(frag, node);
+  });
+}
+
+async function toggleWatch(dn, btnEl) {
+  const isWatching = watchedDockets.has(dn);
+  try {
+    if (isWatching) {
+      await apiFetch(API + '/watches/' + encodeURIComponent(dn), { method: 'DELETE' });
+      watchedDockets.delete(dn);
+      btnEl.title = 'Watch this docket';
+      btnEl.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
+    } else {
+      await apiFetch(API + '/watches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ docket_number: dn })
+      });
+      watchedDockets.add(dn);
+      btnEl.title = 'Stop watching';
+      btnEl.innerHTML = '<svg class="w-3.5 h-3.5 text-gold" fill="currentColor" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>';
+    }
+  } catch(e) { if (e !== 'auth') console.error('Watch toggle failed:', e); }
 }
 
 function localizeLabels(labels) {
