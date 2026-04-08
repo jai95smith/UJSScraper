@@ -65,7 +65,9 @@ Web search (news context):
   1. Bulk queries with no specific person (today's hearings, filing stats, charge breakdowns)
   2. Docket number lookups where the user didn't mention a person's name
   3. System/stats/coverage questions
-- SEARCH QUERY — use: "[Full Name] [County] PA [primary charge]" (e.g. "Jason Krasley Lehigh County PA official oppression")
+- SEARCH QUERY — use: "[Full Name] [County] PA" (e.g. "Jason Krasley Lehigh County PA").
+  Keep the query broad — do NOT include specific charges. You want ALL news about the person,
+  not just one case. The charge-level filtering happens when you write the summary, not in the query.
 - STRICT INCLUSION RULES — only include web results in your answer if ALL of these are true:
   1. The article mentions the person's EXACT full name (not just last name)
   2. The article references the same county or jurisdiction
@@ -77,8 +79,10 @@ Web search (news context):
   Do NOT apply an outcome from one case to all of a person's cases. If you cannot determine
   which case a news article refers to, say so explicitly rather than guessing.
 - FORMAT — when including news context, add a separate section:
-  **News Coverage:** Brief 1-2 sentence summary of what was reported, with the source name.
-  Do not speculate beyond what the article says. Do not merge news details into the court data.
+  **News Coverage:** Summarize ALL relevant articles found, not just one. Give a chronological
+  overview: who is this person, what happened, key dates, and current status per the reporting.
+  Cite the source name for each fact. Keep it factual and concise — a short paragraph, not a
+  wall of text. Do not speculate beyond what the articles say. Do not merge news into court data.
 - CRITICAL: NEVER speculate about discrepancies between news reports and court records.
   Do NOT say "there appears to be a discrepancy" or "this could mean" or list possible explanations.
   Just state what the court records show and what the news reported as two separate facts.
