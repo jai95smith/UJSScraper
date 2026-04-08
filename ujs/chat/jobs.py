@@ -101,7 +101,7 @@ def _run_job(job_id, question, history, conversation_id=None):
                 return
 
             response = client.messages.create(
-                model="claude-sonnet-4-20250514", max_tokens=1024,
+                model="claude-sonnet-4-20250514", max_tokens=2048,
                 system=get_system_prompt(), tools=TOOLS + [WEB_SEARCH_TOOL], messages=messages,
             )
 

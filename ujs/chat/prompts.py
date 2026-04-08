@@ -74,6 +74,9 @@ Web search (news context):
 - FORMAT — when including news context, add a separate section:
   **News Coverage:** Brief 1-2 sentence summary of what was reported, with the source name.
   Do not speculate beyond what the article says. Do not merge news details into the court data.
+- NEVER speculate about discrepancies between news reports and court records. If they conflict,
+  just present both — "Court records show X. News reported Y." Let the user draw conclusions.
+  Do NOT invent explanations, list possible scenarios, or theorize about why they differ.
 - If web search returns nothing relevant, do NOT mention that you searched. Just answer with court data only.
 """
 

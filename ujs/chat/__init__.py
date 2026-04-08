@@ -36,7 +36,7 @@ def _run_chat(client, model, question, max_rounds=10):
 
         try:
             response = client.messages.create(
-                model=model, max_tokens=1024,
+                model=model, max_tokens=2048,
                 system=get_system_prompt(), tools=TOOLS + [WEB_SEARCH_TOOL], messages=messages,
             )
         except Exception as e:
@@ -109,7 +109,7 @@ def ask_stream(question: str, api_key: Optional[str] = None, history: Optional[l
 
         try:
             response = client.messages.create(
-                model="claude-sonnet-4-20250514", max_tokens=1024,
+                model="claude-sonnet-4-20250514", max_tokens=2048,
                 system=get_system_prompt(), tools=TOOLS + [WEB_SEARCH_TOOL], messages=messages,
             )
         except Exception as e:
@@ -140,7 +140,7 @@ def ask_stream(question: str, api_key: Optional[str] = None, history: Optional[l
             full_text = ""
             try:
                 with client.messages.stream(
-                    model="claude-sonnet-4-20250514", max_tokens=1024,
+                    model="claude-sonnet-4-20250514", max_tokens=2048,
                     system=get_system_prompt(), tools=TOOLS + [WEB_SEARCH_TOOL], messages=messages,
                 ) as stream:
                     for text in stream.text_stream:
