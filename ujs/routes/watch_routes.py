@@ -19,7 +19,7 @@ def _require_user(request: Request):
 
 
 class WatchRequest(BaseModel):
-    docket_number: str = Field(..., max_length=50)
+    docket_number: str = Field(..., min_length=1, max_length=50)
     label: Optional[str] = Field(None, max_length=100)
     notify_frequency: Optional[str] = Field('daily', pattern='^(immediate|daily|none)$')
 
