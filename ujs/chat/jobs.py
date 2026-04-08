@@ -10,6 +10,10 @@ from ujs.chat.tools import TOOLS, get_news_tools
 from ujs.chat.executors import execute_tool
 from ujs.chat.cleanup import structure_news, is_person_query
 
+# In-memory news cache: {name_lower: (structured_text, timestamp)}
+_news_cache = {}
+_NEWS_CACHE_TTL = 86400  # 24 hours
+
 
 def create_job(question, history=None, conversation_id=None):
     """Create a chat job and start processing in background. Returns job_id."""
@@ -79,79 +83,222 @@ def _save_to_conversation(conversation_id, response_text):
 
 
 
+_CONTEXT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "name": {"type": "string", "description": "Person's full name"},
+        "county": {"type": "string", "description": "County (e.g. Lehigh)"},
+        "charges": {"type": "string", "description": "Key charges in plain English, comma separated"},
+        "details": {"type": "string", "description": "Any notable details (employer, co-defendants, role)"},
+    },
+    "required": ["name"],
+}
+
+
 def _extract_person_context(question, court_answer):
-    """Extract person name and case summary for news search."""
-    # Take first 500 chars of court answer as context
+    """Extract structured person context for news search using Gemini."""
+    from ujs.chat.cleanup import _gemini_json
+
+    result = _gemini_json(
+        f"Extract the person's name, county, key charges, and any notable details "
+        f"(employer, role, co-defendants) from this court data.\n\n"
+        f"Question: {question}\n\nCourt answer:\n{court_answer[:1500]}",
+        _CONTEXT_SCHEMA,
+    )
+    if result and result.get("name"):
+        parts = [f"Person: {result['name']}"]
+        if result.get("county"):
+            parts.append(f"Location: {result['county']} County, PA")
+        if result.get("charges"):
+            parts.append(f"Charges: {result['charges']}")
+        if result.get("details"):
+            parts.append(f"Details: {result['details']}")
+        return "\n".join(parts)
+
+    # Fallback: raw truncation
     return f"Question: {question}\n\nCourt records answer:\n{court_answer[:500]}"
 
 
-def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=False, stream_final=False):
+def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=False, stream=False):
     """Run a tool-use loop until end_turn or timeout. Returns final text.
     If silent=True, don't write status/tool names to the job response.
-    If stream_final=True, stream the final text response to the DB in chunks."""
+    If stream=True, stream the final text response to DB in chunks (buffers fenced blocks)."""
     for round_num in range(20):
         if time.time() > timeout_at:
             return None
 
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514", max_tokens=2048,
-            system=system, tools=tools, messages=messages,
-        )
-
-        if response.stop_reason == "tool_use":
-            messages.append({"role": "assistant", "content": response.content})
-            tool_results = []
-            for block in response.content:
-                if block.type == "server_tool_use":
-                    if not silent:
-                        _update_job(job_id, append_tool="web_search")
-                elif block.type == "tool_use":
-                    if not silent:
-                        tool_name = block.name.replace("_", " ")
-                        _update_job(job_id, append_response=f"..{tool_name}", append_tool=block.name)
-                    result = execute_tool(block.name, block.input)
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": result,
-                    })
-            if tool_results:
-                messages.append({"role": "user", "content": tool_results})
+        if stream and not silent:
+            # Use streaming API — handles both tool_use and end_turn in one call
+            result = _streamed_turn(client, system, tools, messages, job_id)
+            if result is None:
+                continue  # tool_use turn — loop continues
+            return result  # end_turn — final text
         else:
-            # Final text response — stream or return all at once
-            if stream_final and not silent:
-                return _stream_final_response(client, system, tools, messages, job_id)
-            text_parts = [b.text for b in response.content if hasattr(b, "text")]
-            return "".join(text_parts) if text_parts else ""
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514", max_tokens=2048,
+                system=system, tools=tools, messages=messages,
+            )
+
+            if response.stop_reason == "tool_use":
+                messages.append({"role": "assistant", "content": response.content})
+                tool_results = []
+                for block in response.content:
+                    if block.type == "server_tool_use":
+                        if not silent:
+                            _update_job(job_id, append_tool="web_search")
+                    elif block.type == "tool_use":
+                        if not silent:
+                            tool_name = block.name.replace("_", " ")
+                            _update_job(job_id, append_response=f"..{tool_name}", append_tool=block.name)
+                        result = execute_tool(block.name, block.input)
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": result,
+                        })
+                if tool_results:
+                    messages.append({"role": "user", "content": tool_results})
+            else:
+                text_parts = [b.text for b in response.content if hasattr(b, "text")]
+                return "".join(text_parts) if text_parts else ""
 
     return None
 
 
-def _stream_final_response(client, system, tools, messages, job_id):
-    """Re-run the final turn with streaming, writing chunks to the DB."""
+def _streamed_turn(client, system, tools, messages, job_id):
+    """Single streaming turn. Returns final text on end_turn, None on tool_use (caller loops).
+    Buffers fenced blocks (```...```) so partial JSON never hits the DB.
+    Properly tracks tool IDs and handles server_tool_use blocks."""
     full_text = ""
-    _update_job(job_id, append_response="\n\n")
     buffer = ""
+    fence_depth = 0  # Tracks nested ``` pairs
+    backtick_trail = ""  # Tracks partial ``` across chunk boundaries
+    first_text = True
+
+    # Tool tracking: {block_id: {"name": str, "json_str": str}}
+    tool_blocks = {}
+    current_block_id = None
+    current_block_type = None
+    has_tool_use = False
+
+    def _flush(force=False):
+        nonlocal buffer, first_text
+        if not buffer:
+            return
+        if fence_depth > 0 and not force:
+            return  # Hold fenced content
+        if first_text:
+            _update_job(job_id, append_response="\n\n" + buffer)
+            first_text = False
+        else:
+            _update_job(job_id, append_response=buffer)
+        buffer = ""
+
+    def _track_fences(text):
+        """Track ``` fence markers, handling partial sequences across chunks."""
+        nonlocal fence_depth, backtick_trail
+        check = backtick_trail + text
+        backtick_trail = ""
+        i = 0
+        while i < len(check):
+            if check[i] == '`':
+                # Count consecutive backticks
+                start = i
+                while i < len(check) and check[i] == '`':
+                    i += 1
+                count = i - start
+                if count >= 3:
+                    if fence_depth > 0:
+                        fence_depth -= 1
+                    else:
+                        fence_depth += 1
+                elif i == len(check):
+                    # Partial backticks at end of chunk — carry over
+                    backtick_trail = check[start:]
+            else:
+                i += 1
+
     try:
         with client.messages.stream(
             model="claude-sonnet-4-20250514", max_tokens=2048,
             system=system, tools=tools, messages=messages,
         ) as stream:
-            for text in stream.text_stream:
-                full_text += text
-                buffer += text
-                # Flush to DB every ~80 chars for smooth streaming
-                if len(buffer) >= 80:
-                    _update_job(job_id, append_response=buffer)
-                    buffer = ""
-        # Flush remaining
-        if buffer:
-            _update_job(job_id, append_response=buffer)
+            for event in stream:
+                if not hasattr(event, 'type'):
+                    continue
+
+                if event.type == 'content_block_start':
+                    block = event.content_block
+                    btype = getattr(block, 'type', None)
+                    current_block_id = getattr(block, 'id', None)
+                    current_block_type = btype
+
+                    if btype == 'tool_use':
+                        has_tool_use = True
+                        name = block.name
+                        _update_job(job_id, append_response=f"..{name.replace('_', ' ')}", append_tool=name)
+                        tool_blocks[block.id] = {"name": name, "json_str": ""}
+                    elif btype == 'server_tool_use':
+                        has_tool_use = True
+                        _update_job(job_id, append_tool="web_search")
+
+                elif event.type == 'content_block_delta':
+                    delta = event.delta
+                    dtype = getattr(delta, 'type', None)
+
+                    if dtype == 'input_json_delta' and current_block_id in tool_blocks:
+                        tool_blocks[current_block_id]["json_str"] += delta.partial_json
+                    elif dtype == 'text_delta':
+                        text = delta.text
+                        full_text += text
+                        buffer += text
+                        _track_fences(text)
+                        if fence_depth == 0 and len(buffer) >= 80:
+                            _flush()
+
+                elif event.type == 'content_block_stop':
+                    current_block_id = None
+                    current_block_type = None
+
+        # Flush remaining buffer
+        _flush(force=True)
+
     except Exception as e:
-        if buffer:
-            _update_job(job_id, append_response=buffer)
-        if not full_text:
+        _flush(force=True)
+        if not full_text and not tool_blocks:
             return f"Streaming error: {str(e)[:200]}"
+
+    # If tool_use turn, execute tools and update message history
+    client_tools = {bid: tb for bid, tb in tool_blocks.items()
+                    if tb["name"] != "web_search"}
+    if has_tool_use and client_tools:
+        assistant_content = []
+        if full_text:
+            assistant_content.append({"type": "text", "text": full_text})
+        for bid, tb in tool_blocks.items():
+            try:
+                inp = json.loads(tb["json_str"]) if tb["json_str"] else {}
+            except json.JSONDecodeError:
+                inp = {}
+            assistant_content.append({"type": "tool_use", "id": bid, "name": tb["name"], "input": inp})
+
+        messages.append({"role": "assistant", "content": assistant_content})
+        tool_results = []
+        for bid, tb in client_tools.items():
+            try:
+                inp = json.loads(tb["json_str"]) if tb["json_str"] else {}
+            except json.JSONDecodeError:
+                inp = {}
+            result = execute_tool(tb["name"], inp)
+            tool_results.append({"type": "tool_result", "tool_use_id": bid, "content": result})
+        if tool_results:
+            messages.append({"role": "user", "content": tool_results})
+        return None  # tool_use turn — caller should loop
+
+    # server_tool_use only (web_search) — response includes results already
+    if has_tool_use and not client_tools:
+        return full_text  # Text from the server-tool turn
+
     return full_text
 
 
@@ -185,7 +332,7 @@ def _run_job(job_id, question, history, conversation_id=None):
         # ---------------------------------------------------------------
         court_answer = _run_tool_loop(
             client, get_court_prompt(), TOOLS, list(messages),
-            job_id, timeout_at, stream_final=True,
+            job_id, timeout_at, stream=True,
         )
 
         if court_answer is None:
@@ -198,28 +345,33 @@ def _run_job(job_id, question, history, conversation_id=None):
         # ---------------------------------------------------------------
         news_section = ""
         if is_person_query(question, court_answer) and time.time() < timeout_at - 15:
-            _update_job(job_id, append_response="\n\n---\n\n*Searching for news coverage...*")
+            # Check cache first
+            context = _extract_person_context(question, court_answer)
+            cache_key = context.split("\n")[0].lower().strip()  # "Person: jason michael krasley"
+            cached = _news_cache.get(cache_key)
+            if cached and (time.time() - cached[1]) < _NEWS_CACHE_TTL:
+                news_section = "\n\n---\n\n**News Coverage**\n\n" + cached[0]
+                _update_job(job_id, append_response=news_section)
+            else:
+                _update_job(job_id, append_response="\n\n---\n\n*Searching for news coverage...*")
 
-            news_messages = [{
-                "role": "user",
-                "content": _extract_person_context(question, court_answer),
-            }]
+                news_messages = [{"role": "user", "content": context}]
+                news_text = _run_tool_loop(
+                    client, get_news_prompt(), get_news_tools(), news_messages,
+                    job_id, timeout_at, silent=True,
+                )
 
-            news_text = _run_tool_loop(
-                client, get_news_prompt(), get_news_tools(), news_messages,
-                job_id, timeout_at, silent=True,
-            )
-
-            news_loading = "\n\n---\n\n*Searching for news coverage...*"
-            if news_text and "NO_NEWS_FOUND" not in news_text:
-                structured = structure_news(news_text)
-                if structured:
-                    news_section = "\n\n---\n\n**News Coverage**\n\n" + structured
-                    _update_job(job_id, replace_in_response=(news_loading, news_section))
+                news_loading = "\n\n---\n\n*Searching for news coverage...*"
+                if news_text and "NO_NEWS_FOUND" not in news_text:
+                    structured = structure_news(news_text)
+                    if structured:
+                        _news_cache[cache_key] = (structured, time.time())
+                        news_section = "\n\n---\n\n**News Coverage**\n\n" + structured
+                        _update_job(job_id, replace_in_response=(news_loading, news_section))
+                    else:
+                        _update_job(job_id, replace_in_response=(news_loading, ""))
                 else:
                     _update_job(job_id, replace_in_response=(news_loading, ""))
-            else:
-                _update_job(job_id, replace_in_response=(news_loading, ""))
 
         # ---------------------------------------------------------------
         # Done — single completion, single conversation save
