@@ -426,7 +426,11 @@ function renderFinalResponse(contentEl, text, msgId) {
 }
 
 function renderMd(text) {
-  let html = text.replace(/```chart\s*\n[\s\S]*?```/g,
+  // Render ```table blocks inline
+  let html = text.replace(/```table\s*\n([\s\S]*?)```/g, function(_, json) {
+    return renderTableHtml(json);
+  });
+  html = html.replace(/```chart\s*\n[\s\S]*?```/g,
     '<div class="my-3 py-2 text-[11px] text-court-dim flex items-center gap-2"><svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Preparing chart...</div>');
   html = html.replace(/&(?!amp;)/g, '&amp;');
   // Trim excessive newlines (3+ → 2)
