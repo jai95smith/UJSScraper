@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """Slow background analyzer — processes queue + stale dockets at a safe rate."""
 
-import time, traceback
+import os, time, traceback, random
 from datetime import datetime
 
 from ujs import db
 from ujs.modules.ingest import deep_analyze_docket
 
-DEFAULT_DELAY = 5  # seconds between each analysis (~12/min)
+DEFAULT_DELAY = 3  # seconds between each analysis (~20/min)
 _failed_dockets = set()  # skip dockets that keep failing
 
 
 def run(delay=DEFAULT_DELAY):
     """Run forever: process queue items first, then stale dockets."""
-    print(f"[analyzer] Starting slow analyzer (delay={delay}s)")
+    worker_id = os.getpid()
+    print(f"[analyzer:{worker_id}] Starting (delay={delay}s)")
 
     while True:
         try:
@@ -23,19 +24,19 @@ def run(delay=DEFAULT_DELAY):
 
             if job:
                 job_id, docket_number = job
-                print(f"[analyzer] Queue: {docket_number}")
+                print(f"[analyzer:{worker_id}] Queue: {docket_number}")
                 try:
                     deep_analyze_docket(docket_number)
                     with db.connect() as conn:
                         db.complete_ingest_job(conn, job_id)
-                    print(f"[analyzer] Done: {docket_number}")
+                    print(f"[analyzer:{worker_id}] Done: {docket_number}")
                 except Exception as e:
                     err = str(e)
-                    print(f"[analyzer] Error: {docket_number}: {err}")
+                    print(f"[analyzer:{worker_id}] Error: {docket_number}: {err}")
                     with db.connect() as conn:
                         db.complete_ingest_job(conn, job_id, error=err)
                     if "429" in err:
-                        print("[analyzer] Rate limited, pausing 5 min...")
+                        print("[analyzer:{worker_id}] Rate limited, pausing 5 min...")
                         time.sleep(300)
                         continue
                 time.sleep(delay)
@@ -55,9 +56,10 @@ def run(delay=DEFAULT_DELAY):
                         CASE WHEN c.status ILIKE '%%active%%' THEN 0 ELSE 1 END,
                         -- Then most recent
                         c.created_at DESC
-                    LIMIT 1
+                    LIMIT 10
                 """)
-                row = cur.fetchone()
+                rows = cur.fetchall()
+                row = random.choice(rows) if rows else None
 
             if row:
                 dn = row[0]
@@ -66,21 +68,21 @@ def run(delay=DEFAULT_DELAY):
                     with db.connect() as conn:
                         db.store_analysis(conn, dn, {"error": "analysis_failed"}, "docket")
                     continue
-                print(f"[analyzer] Analyze: {dn}")
+                print(f"[analyzer:{worker_id}] Analyze: {dn}")
                 _start = time.time()
                 try:
                     deep_analyze_docket(dn)
                     _dur = int((time.time() - _start) * 1000)
-                    print(f"[analyzer] Done: {dn} ({_dur}ms)")
+                    print(f"[analyzer:{worker_id}] Done: {dn} ({_dur}ms)")
                     db.log_event("analyzer", "analyzed", docket_number=dn, duration_ms=_dur)
                 except Exception as e:
                     err = str(e)
                     _dur = int((time.time() - _start) * 1000)
-                    print(f"[analyzer] Error: {dn}: {err}")
+                    print(f"[analyzer:{worker_id}] Error: {dn}: {err}")
                     db.log_event("analyzer", "error", docket_number=dn, detail=err, duration_ms=_dur, success=False)
                     _failed_dockets.add(dn)
                     if "429" in err:
-                        print("[analyzer] Rate limited, pausing 5 min...")
+                        print("[analyzer:{worker_id}] Rate limited, pausing 5 min...")
                         time.sleep(300)
                         continue
                 time.sleep(delay)
@@ -92,7 +94,7 @@ def run(delay=DEFAULT_DELAY):
 
             if stale:
                 dn = stale[0]["docket_number"]
-                print(f"[analyzer] Refresh: {dn}")
+                print(f"[analyzer:{worker_id}] Refresh: {dn}")
                 _start = time.time()
                 try:
                     deep_analyze_docket(dn)
@@ -101,10 +103,10 @@ def run(delay=DEFAULT_DELAY):
                 except Exception as e:
                     err = str(e)
                     _dur = int((time.time() - _start) * 1000)
-                    print(f"[analyzer] Refresh error {dn}: {err}")
+                    print(f"[analyzer:{worker_id}] Refresh error {dn}: {err}")
                     db.log_event("analyzer", "refresh_error", docket_number=dn, detail=err, duration_ms=_dur, success=False)
                     if "429" in err:
-                        print("[analyzer] Rate limited, pausing 5 min...")
+                        print("[analyzer:{worker_id}] Rate limited, pausing 5 min...")
                         time.sleep(300)
                         continue
                 time.sleep(delay)
@@ -114,7 +116,7 @@ def run(delay=DEFAULT_DELAY):
             time.sleep(30)
 
         except Exception as e:
-            print(f"[analyzer] Unexpected error: {e}")
+            print(f"[analyzer:{worker_id}] Unexpected error: {e}")
             traceback.print_exc()
             time.sleep(60)
 
