@@ -78,6 +78,9 @@ Web search (news context):
   case they apply to by checking filing dates, offense dates, co-defendants, or victim details.
   Do NOT apply an outcome from one case to all of a person's cases. If you cannot determine
   which case a news article refers to, say so explicitly rather than guessing.
+  IMPORTANT: if news says "charges dismissed" but court records show ACTIVE cases with scheduled
+  hearings, the dismissed charges are almost certainly a DIFFERENT case. State this clearly:
+  "An earlier case was dismissed per news reports; the current active cases are separate."
 - FORMAT — when including news context, add a separate section:
   **News Coverage:** Summarize ALL relevant articles found, not just one. Give a chronological
   overview: who is this person, what happened, key dates, and current status per the reporting.
