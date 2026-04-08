@@ -45,6 +45,10 @@ def _update_job(job_id, **kwargs):
             if k == "append_response":
                 sets.append("response = response || %s")
                 params.append(v)
+            elif k == "replace_in_response":
+                old, new = v
+                sets.append("response = REPLACE(response, %s, %s)")
+                params.extend([old, new])
             elif k == "append_tool":
                 sets.append("tools_log = array_append(tools_log, %s)")
                 params.append(v)
@@ -170,7 +174,7 @@ def _run_job(job_id, question, history, conversation_id=None):
         # Pass 2: News search (only for person queries, separate call)
         # ---------------------------------------------------------------
         if _is_person_query(question, court_answer) and time.time() < timeout_at - 15:
-            _update_job(job_id, append_response="..searching news")
+            _update_job(job_id, append_response="\n\n---\n\n*Searching for news coverage...*")
 
             news_messages = [{
                 "role": "user",
@@ -182,13 +186,18 @@ def _run_job(job_id, question, history, conversation_id=None):
                 job_id, timeout_at,
             )
 
+            news_loading = "\n\n---\n\n*Searching for news coverage...*"
             if news_text and "NO_NEWS_FOUND" not in news_text:
                 # Strip any duplicate header Claude may have added
                 clean_news = news_text.strip()
                 for prefix in ["## News Coverage\n", "**News Coverage**\n", "### News Coverage\n"]:
                     if clean_news.startswith(prefix):
                         clean_news = clean_news[len(prefix):].strip()
-                _update_job(job_id, append_response="\n\n---\n\n**News Coverage**\n\n" + clean_news)
+                news_final = "\n\n---\n\n**News Coverage**\n\n" + clean_news
+                _update_job(job_id, replace_in_response=(news_loading, news_final))
+            else:
+                # No news — remove the loading indicator
+                _update_job(job_id, replace_in_response=(news_loading, ""))
 
         # ---------------------------------------------------------------
         # Done
