@@ -8,6 +8,7 @@ import anthropic
 from ujs.chat.prompts import get_court_prompt, get_news_prompt
 from ujs.chat.tools import TOOLS, get_news_tools
 from ujs.chat.executors import execute_tool
+from ujs.chat.cleanup import structure_news
 
 
 def _log_query(question, tools_used, response_length, duration_ms, error=None):
@@ -93,7 +94,9 @@ def ask(question: str, api_key: Optional[str] = None) -> str:
             timeout=30,
         )
         if news_answer and "NO_NEWS_FOUND" not in news_answer:
-            full_answer += "\n\n---\n\n**News Coverage**\n\n" + news_answer.strip()
+            clean = structure_news(news_answer)
+            if clean:
+                full_answer += "\n\n---\n\n**News Coverage**\n\n" + clean
 
     duration = int((time.time() - start) * 1000)
     _log_query(question, court_tools + ["news_search"], len(full_answer), duration)

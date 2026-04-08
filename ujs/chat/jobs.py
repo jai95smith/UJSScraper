@@ -8,6 +8,7 @@ from ujs import db
 from ujs.chat.prompts import get_court_prompt, get_news_prompt
 from ujs.chat.tools import TOOLS, get_news_tools
 from ujs.chat.executors import execute_tool
+from ujs.chat.cleanup import structure_news
 
 
 def create_job(question, history=None, conversation_id=None):
@@ -131,55 +132,6 @@ def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=F
     return None
 
 
-_NEWS_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "has_news": {"type": "boolean", "description": "True if relevant news was found"},
-        "summary": {"type": "string", "description": "1-2 paragraph factual summary of news coverage. No preamble, no speculation. Just facts."},
-    },
-    "required": ["has_news", "summary"],
-}
-
-
-def _structure_news(raw_text):
-    """Use Gemini Flash to clean raw Claude news output into structured text.
-    Returns clean summary string or None if no news."""
-    try:
-        from google import genai
-        from google.genai import types
-
-        client = genai.Client()
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=f"Extract the factual news summary from this text. Remove any preamble, "
-                     f"headers, narration ('I searched...', 'Let me...'), and speculation. "
-                     f"Keep only the factual reporting — who, what, when, where.\n\n{raw_text}",
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_json_schema=_NEWS_SCHEMA,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
-            ),
-        )
-        result = json.loads(response.text)
-        if result.get("has_news") and result.get("summary", "").strip():
-            return result["summary"].strip()
-    except Exception as e:
-        print(f"[structure_news] Gemini error: {e}")
-        # Fallback: basic cleanup
-        clean = raw_text.strip()
-        for prefix in ["## News Coverage\n", "**News Coverage**\n", "### News Coverage\n"]:
-            if clean.startswith(prefix):
-                clean = clean[len(prefix):].strip()
-        lines = clean.split("\n")
-        while lines and any(lines[0].lower().startswith(p) for p in [
-            "i'll ", "i will ", "let me ", "now ", "here ", "searching", "based on"
-        ]):
-            lines.pop(0)
-        clean = "\n".join(lines).strip()
-        return clean if clean else None
-    return None
-
-
 def _run_job(job_id, question, history, conversation_id=None):
     """Run the chat job — two sequential passes: court data, then news.
     Job stays 'running' until both passes complete. Frontend sees court
@@ -239,7 +191,7 @@ def _run_job(job_id, question, history, conversation_id=None):
 
             news_loading = "\n\n---\n\n*Searching for news coverage...*"
             if news_text and "NO_NEWS_FOUND" not in news_text:
-                structured = _structure_news(news_text)
+                structured = structure_news(news_text)
                 if structured:
                     news_section = "\n\n---\n\n**News Coverage**\n\n" + structured
                     _update_job(job_id, replace_in_response=(news_loading, news_section))
