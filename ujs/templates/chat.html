@@ -393,24 +393,14 @@ function renderTableHtml(json) {
 }
 
 function renderFinalResponse(contentEl, text, msgId) {
-  // Extract tables
-  const tableParts = text.split(/```table\s*\n([\s\S]*?)```/g);
-  let textWithCharts = '';
-  const tableConfigs = [];
-  for (let i = 0; i < tableParts.length; i++) {
-    if (i % 2 === 0) textWithCharts += tableParts[i]; else tableConfigs.push(tableParts[i].trim());
-  }
-  // Extract charts
-  const parts = textWithCharts.split(/```chart\s*\n([\s\S]*?)```/g);
+  // Extract charts (tables handled inline by renderMd)
+  const parts = text.split(/```chart\s*\n([\s\S]*?)```/g);
   let textContent = '';
   const chartConfigs = [];
   for (let i = 0; i < parts.length; i++) {
     if (i % 2 === 0) textContent += parts[i]; else chartConfigs.push(parts[i].trim());
   }
-  // Render markdown + inline tables
-  let rendered = renderMd(textContent.trim());
-  tableConfigs.forEach(json => { rendered += renderTableHtml(json); });
-  contentEl.innerHTML = rendered;
+  contentEl.innerHTML = renderMd(textContent.trim());
   const parent = contentEl.parentElement;
   chartConfigs.forEach((json, i) => {
     try {
