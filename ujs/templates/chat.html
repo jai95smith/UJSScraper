@@ -398,11 +398,12 @@ async function pollJob(jobId, statusEl, contentEl, msgId) {
           const newContent = parts.slice(1).join('\n\n');
           if (newContent !== lastContent) {
             const rendered = renderMd(newContent);
-            if (!contentStarted) {
-              stopThinking(statusEl.id);
-              contentStarted = true;
+            const isFirstContent = !contentStarted;
+            const isBigUpdate = newContent.length - lastContent.length > 100;
+            if (!contentStarted) { stopThinking(statusEl.id); contentStarted = true; }
+            if (isBigUpdate && !typewriterActive) {
               typewrite(contentEl, rendered);
-            } else {
+            } else if (!typewriterActive) {
               contentEl.innerHTML = rendered;
               chat.scrollTop = chat.scrollHeight;
             }
@@ -504,6 +505,11 @@ function renderMd(text) {
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   // Source lines in gold (handles *Source:*, **Source:**, Source:)
   html = html.replace(/\*{1,2}Source:\*{0,2}\s*(.+?)$/gm, '<div class="text-gold text-[12px] mt-2">Source: $1</div>');
+  // News loading indicator with pulse animation
+  html = html.replace(/\*Searching for news coverage\.\.\.\*/g,
+    '<div class="text-court-dim text-[13px] mt-3 flex items-center gap-2 animate-pulse">' +
+    '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>' +
+    'Searching for news coverage...</div>');
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
   html = html.replace(/^- (.+)$/gm, '<div class="pl-4 py-[1px] text-[14px] before:content-[\'·\'] before:text-gold before:mr-2">$1</div>');
   html = html.replace(/^\d+\. (.+)$/gm, '<div class="pl-4 py-[1px] text-[14px]">$1</div>');
