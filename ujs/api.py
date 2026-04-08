@@ -59,11 +59,17 @@ async def lifespan(app):
 # App
 # -------------------------------------------------------------------
 
+import os as _os
+_is_prod = _os.environ.get('FLASK_ENV') != 'development'
+
 app = FastAPI(
     title="PA UJS Court Search API",
     description="Programmatic access to Pennsylvania Unified Judicial System court records.",
     version="2.0.0",
     lifespan=lifespan,
+    docs_url=None if _is_prod else "/docs",
+    redoc_url=None if _is_prod else "/redoc",
+    openapi_url=None if _is_prod else "/openapi.json",
 )
 
 _ALLOWED_ORIGINS = [
@@ -72,7 +78,32 @@ _ALLOWED_ORIGINS = [
     "http://localhost:8000",  # local Flask dev
     "http://localhost:3000",  # local dev
 ]
-app.add_middleware(CORSMiddleware, allow_origins=_ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
+    max_age=3600,
+)
+
+
+from starlette.middleware.base import BaseHTTPMiddleware
+
+_MAX_BODY = 1 * 1024 * 1024  # 1MB
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        # Reject oversized bodies
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > _MAX_BODY:
+            return JSONResponse(status_code=413, content={"error": "Request too large"})
+        response = await call_next(request)
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 @app.exception_handler(Exception)

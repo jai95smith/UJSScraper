@@ -39,7 +39,14 @@
       </button>
     </div>
     <div id="chat-list" class="flex-1 overflow-y-auto p-2 space-y-0.5"></div>
-    <div class="p-3 border-t border-navy-border">
+    <div class="p-3 border-t border-navy-border space-y-1.5">
+      {% if user %}
+      <div class="flex items-center gap-2">
+        {% if user.picture %}<img src="{{ user.picture }}" class="w-5 h-5 rounded-full" referrerpolicy="no-referrer">{% endif %}
+        <span class="text-[10px] text-court-dim truncate">{{ user.name or user.email }}</span>
+        <a href="/logout" class="text-[10px] text-court-muted hover:text-court-mid ml-auto shrink-0">Sign out</a>
+      </div>
+      {% endif %}
       <div id="stats" class="text-[10px] text-court-muted"></div>
     </div>
   </aside>
@@ -57,6 +64,13 @@
       <div class="flex items-center gap-3">
         <a href="/" class="text-xs text-court-mid hover:text-court-bright">Home</a>
         <button onclick="newChat()" class="text-[11px] font-medium text-navy bg-gold hover:bg-gold-dim rounded px-3.5 py-1.5">+ New search</button>
+        {% if user %}
+        <div class="flex items-center gap-2 pl-2 border-l border-navy-border">
+          {% if user.picture %}<img src="{{ user.picture }}" class="w-6 h-6 rounded-full" referrerpolicy="no-referrer">{% endif %}
+          <span class="text-[11px] text-court-dim">{{ user.email }}</span>
+          <a href="/logout" class="text-[11px] text-court-muted hover:text-court-mid">Sign out</a>
+        </div>
+        {% endif %}
       </div>
     </nav>
 
@@ -89,21 +103,30 @@ const messages = document.getElementById('messages');
 const input = document.getElementById('q');
 const btn = document.getElementById('btn');
 
+const USER_TOKEN = '{{ user_token }}';
 let allChats = [];
 let currentChatId = null;
 let chartInstances = {};
 
+function apiFetch(url, opts = {}) {
+  opts.headers = { ...opts.headers, 'Authorization': 'Bearer ' + USER_TOKEN };
+  return fetch(url, opts).then(res => {
+    if (res.status === 401) { window.location.href = '/login'; return Promise.reject('auth'); }
+    return res;
+  });
+}
+
 /* --- Server-side conversations --- */
 async function loadConversations() {
   try {
-    const res = await fetch(API + '/conversations');
+    const res = await apiFetch(API + '/conversations');
     allChats = await res.json();
   } catch(e) { allChats = []; }
   renderChatList();
 }
 async function loadConversation(id) {
   try {
-    const res = await fetch(API + '/conversations/' + id);
+    const res = await apiFetch(API + '/conversations/' + id);
     if (!res.ok) return null;
     return await res.json();
   } catch(e) { return null; }
@@ -158,7 +181,7 @@ function newChat() {
 }
 async function loadChat(id) {
   const conv = await loadConversation(id);
-  if (!conv) return;
+  if (!conv) { history.replaceState({}, '', '/chat'); newChat(); return; }
   currentChatId = id;
   history.pushState({}, '', '/chat/' + id);
   const w = document.getElementById('welcome'); if (w) w.remove();
@@ -181,7 +204,7 @@ async function loadChat(id) {
   renderChatList(); chat.scrollTop = chat.scrollHeight; input.focus(); closeMobileSidebar();
 }
 async function deleteChat(id) {
-  await fetch(API + '/conversations/' + id, {method: 'DELETE'});
+  await apiFetch(API + '/conversations/' + id, {method: 'DELETE'});
   allChats = allChats.filter(c => c.id !== id);
   if (currentChatId === id) newChat(); else renderChatList();
 }
@@ -200,7 +223,7 @@ function botBubbleStart(statusId, contentId) {
       <span id="${statusId}-text"></span>
       <span id="${statusId}-dots" class="thinking-dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>
     </div>
-    <div id="${contentId}" class="prose text-[15px] text-court-bright break-words"></div>
+    <div id="${contentId}" class="prose text-[16px] text-court-bright break-words"></div>
   </div>`;
 }
 
@@ -219,13 +242,13 @@ function retryBubble(question) {
 }
 function botBubbleStatic(contentId) {
   return `<div class="max-w-2xl py-1">
-    <div id="${contentId}" class="prose text-[15px] text-court-bright break-words"></div>
+    <div id="${contentId}" class="prose text-[16px] text-court-bright break-words"></div>
   </div>`;
 }
 
 /* --- Init --- */
 loadConversations();
-fetch(API + '/stats').then(r => r.json()).then(d => {
+apiFetch(API + '/stats').then(r => r.json()).then(d => {
   document.getElementById('stats').textContent = d.cases.toLocaleString() + ' cases indexed';
 }).catch(() => {});
 
@@ -273,7 +296,7 @@ async function send() {
 
   try {
     // Submit question — server creates/updates conversation
-    const res = await fetch(API + '/ask', {
+    const res = await apiFetch(API + '/ask', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ question: q, conversation_id: currentChatId })
     });
@@ -302,7 +325,7 @@ async function send() {
 /* --- Check for running job on page load --- */
 async function checkRunningJob(convId) {
   try {
-    const res = await fetch(API + '/conversations/' + convId + '/job');
+    const res = await apiFetch(API + '/conversations/' + convId + '/job');
     const data = await res.json();
     if (data.job_id && (data.status === 'running')) {
       // Resume polling
@@ -347,7 +370,7 @@ async function pollJob(jobId, statusEl, contentEl, msgId, convId) {
   let contentStarted = false;
   while (true) {
     try {
-      const res = await fetch(API + '/ask/job/' + jobId + '?after=' + seen + (convId ? '&cid=' + convId : ''));
+      const res = await apiFetch(API + '/ask/job/' + jobId + '?after=' + seen + (convId ? '&cid=' + convId : ''));
       const data = await res.json();
       if (data.total_length > seen) {
         seen = data.total_length;
@@ -367,7 +390,7 @@ async function pollJob(jobId, statusEl, contentEl, msgId, convId) {
       if (data.status === 'completed' || data.status === 'error') {
         stopThinking(statusEl.id);
         if (data.error) contentEl.textContent = 'Error: ' + data.error;
-        const fullJob = await fetch(API + '/ask/job/' + jobId + (convId ? '?cid=' + convId : '')).then(r => r.json());
+        const fullJob = await apiFetch(API + '/ask/job/' + jobId + (convId ? '?cid=' + convId : '')).then(r => r.json());
         const idx = fullJob.response.indexOf('\n\n');
         const text = idx >= 0 ? fullJob.response.slice(idx + 2) : fullJob.response;
         if (text) renderFinalResponse(contentEl, text, msgId);

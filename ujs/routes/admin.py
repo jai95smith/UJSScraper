@@ -113,9 +113,9 @@ def ingest_status(docket_number: str):
 
 @router.post("/keys", tags=["API Keys"])
 def create_key(name: str, email: Optional[str] = None, admin_token: str = Header(None, alias="x-admin-token")):
-    import os
+    import os, hmac
     expected = os.environ.get("ADMIN_TOKEN", "")
-    if not expected or admin_token != expected:
+    if not expected or not hmac.compare_digest(admin_token or "", expected):
         raise HTTPException(status_code=403, detail="Admin token required.")
     with db.connect() as conn:
         key = db.create_api_key(conn, name, email)

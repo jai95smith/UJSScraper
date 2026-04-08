@@ -130,6 +130,19 @@ if j4 and j5:
 
 
 # ---------------------------------------------------------------
+# Cleanup test conversations (those with no user_id from direct create_job calls)
+try:
+    from ujs import db
+    with db.connect() as conn:
+        cur = conn.cursor()
+        for jj in [j, j2, j3, j4, j5]:
+            if jj and jj.get("conversation_id"):
+                cur.execute("DELETE FROM chat_jobs WHERE conversation_id = %s", (jj["conversation_id"],))
+                cur.execute("DELETE FROM conversations WHERE id = %s", (jj["conversation_id"],))
+        print("Cleaned up test conversations")
+except Exception as e:
+    print(f"Cleanup warning: {e}")
+
 print(f"\n{'=' * 60}")
 print(f"Results: {PASS} passed, {FAIL} failed, {PASS + FAIL} total")
 print(f"{'=' * 60}\n")

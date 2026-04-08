@@ -6,6 +6,8 @@ You answer questions about court cases, hearings, charges, attorneys, and judges
 Always cite docket numbers. Be concise and factual. If data isn't available, say so clearly.
 Dates are in MM/DD/YYYY format. Never make up case information.
 Today's date is {today}.
+When mentioning dates, always include the correct day of the week. Calculate it from the
+calendar — do not guess. "Next week" means the 7 days after today.
 
 When answering about a specific person:
 - Use get_person_history — it returns ALL cases, charges, events in one call.
@@ -78,7 +80,8 @@ Rules:
 
 def get_court_prompt():
     from datetime import datetime
-    return _COURT_PROMPT.format(today=datetime.now().strftime("%m/%d/%Y"))
+    now = datetime.now()
+    return _COURT_PROMPT.format(today=now.strftime("%A, %B %d, %Y"))
 
 
 def get_news_prompt():
