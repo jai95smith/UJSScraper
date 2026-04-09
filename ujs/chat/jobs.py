@@ -93,14 +93,19 @@ def _process_tool_result(result, job_id, silent=False):
     if not result or not isinstance(result, str):
         return result or ""
 
-    # Auto-table from data tools: {"_summary": "...", "_table": {...}}
+    # Auto-inject from tools: {"_summary": "...", "_table": {...}} or {"_summary": "...", "_chart": "..."}
     try:
         parsed = json.loads(result)
-        if isinstance(parsed, dict) and "_table" in parsed:
-            table_json = json.dumps(parsed["_table"])
-            if not silent:
-                _update_job(job_id, append_response=f"\n\n```table\n{table_json}\n```\n\n")
-            return parsed.get("_summary", f"Table with {len(parsed['_table'].get('rows', []))} rows rendered.")
+        if isinstance(parsed, dict):
+            if "_table" in parsed:
+                table_json = json.dumps(parsed["_table"])
+                if not silent:
+                    _update_job(job_id, append_response=f"\n\n```table\n{table_json}\n```\n\n")
+                return parsed.get("_summary", "Table rendered.")
+            if "_chart" in parsed:
+                if not silent:
+                    _update_job(job_id, append_response=f"\n\n```chart\n{parsed['_chart']}\n```\n\n")
+                return parsed.get("_summary", "Chart rendered.")
     except (json.JSONDecodeError, TypeError):
         pass
 

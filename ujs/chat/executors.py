@@ -455,9 +455,12 @@ def _render_chart(conn, inputs):
     for field in ("type", "title", "labels", "datasets"):
         if field not in inputs:
             return f"Error: render_chart requires '{field}'."
+    if not inputs["datasets"] or not inputs["labels"]:
+        return "Error: render_chart requires non-empty 'labels' and 'datasets' arrays."
     chart_json = json.dumps({"type": inputs["type"], "title": inputs["title"],
                              "labels": inputs["labels"], "datasets": inputs["datasets"]})
-    return f"CHART_RENDERED. Include this exact block in your response:\n```chart\n{chart_json}\n```"
+    summary = f"Chart rendered: {inputs['title']} ({inputs['type']}, {len(inputs['labels'])} data points)"
+    return json.dumps({"_summary": summary, "_chart": chart_json})
 
 
 def _get_system_logs(conn, inputs):
