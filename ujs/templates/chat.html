@@ -595,7 +595,7 @@ function renderFinalResponse(contentEl, text, msgId) {
       const config = JSON.parse(el.dataset.chart);
       const cid = 'chart-' + msgId + '-' + i;
       el.className = 'max-w-2xl py-2';
-      el.innerHTML = `<div class="bg-navy/50 border border-navy-border rounded-xl p-4"><canvas id="${cid}" style="width:100%;max-height:300px;"></canvas></div>`;
+      el.innerHTML = `<div class="bg-navy/50 border border-navy-border rounded-xl p-4"><div style="position:relative;width:100%;height:300px"><canvas id="${cid}"></canvas></div></div>`;
       el.removeAttribute('data-chart');
       setTimeout(() => renderChart(cid, config), 300);
     } catch(e) { el.textContent = 'Chart error: ' + e.message; }
@@ -723,7 +723,7 @@ function renderChart(id, config) {
     type: config.type || 'bar',
     data: { labels: config.labels, datasets: config.datasets },
     options: {
-      responsive: true, maintainAspectRatio: true,
+      responsive: true, maintainAspectRatio: false,
       plugins: { title: { display: !!config.title, text: config.title, color: '#e8edf5', font: { size: 13 } }, legend: { labels: { color: '#8fa8c8', font: { size: 11 } } } },
       scales: config.type === 'pie' || config.type === 'doughnut' ? {} : {
         x: { ticks: { color: '#5a7aa0', font: { size: 10 } }, grid: { color: '#1e325408' } },
