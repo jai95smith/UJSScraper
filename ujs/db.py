@@ -437,24 +437,15 @@ def claim_ingest_job(conn):
     """)
     unanalyzed = cur.fetchone()
     if unanalyzed:
-        # Queue it so it gets tracked properly
-        cur.execute("""
-            INSERT INTO ingest_queue (docket_number, priority) VALUES (%s, 2)
-            ON CONFLICT (docket_number) WHERE status = 'pending' DO NOTHING
-            RETURNING id
-        """, (unanalyzed[0],))
-        inserted = cur.fetchone()
-        if inserted:
-            cur.execute("UPDATE ingest_queue SET status = 'processing', started_at = NOW() WHERE id = %s RETURNING id, docket_number", (inserted[0],))
-            return cur.fetchone()
-        # Already in queue (race condition) — just return it for processing
         return (0, unanalyzed[0])
 
     return None
 
 
 def complete_ingest_job(conn, job_id, error=None):
-    """Mark an ingest job as completed or failed."""
+    """Mark an ingest job as completed or failed. Skips if job_id=0 (auto-picked)."""
+    if not job_id:
+        return
     cur = conn.cursor()
     status = "failed" if error else "completed"
     cur.execute("""
