@@ -1,6 +1,6 @@
 """Background chat job runner — generates responses server-side."""
 
-import json, os, re, time, threading, uuid
+import hashlib, json, os, re, time, threading, uuid
 
 import anthropic
 
@@ -373,56 +373,58 @@ def _run_job(job_id, question, history, conversation_id=None):
         save_text = re.sub(r'<invoke\b[^>]*>.*?</invoke>', '', save_text, flags=re.DOTALL).strip()
 
         # ---------------------------------------------------------------
-        # Pass 2: News search (non-blocking — user sees court data immediately)
+        # Pass 2: News search — only on first message in conversation
         # ---------------------------------------------------------------
-        # Classify + extract in one Gemini call (~500ms)
-        is_person, context = classify_and_extract(question, court_answer)
+        news_done = False
+        if is_first_message:
+            is_person, context = classify_and_extract(question, court_answer)
 
-        if is_person and context and time.time() < timeout_at - 15:
-            # Check cache first
-            context_first_line = context.split("\n")[0].lower().strip()
-            cache_key = context_first_line + ":" + " ".join(sorted(question.lower().split()))
-            cached = rcache.get_cached_news(cache_key)
+            if is_person and context and time.time() < timeout_at - 15:
+                news_done = True
+                # Cache key on person name only (not question phrasing)
+                context_first_line = context.split("\n")[0].lower().strip()
+                cache_key = hashlib.md5(context_first_line.encode()).hexdigest()[:16]
+                cached = rcache.get_cached_news(cache_key)
 
-            if cached:
-                news_section = "\n\n---\n\n**News Coverage**\n\n" + cached
-                _update_job(job_id, append_response=news_section)
-                _update_job(job_id, status="completed", completed_at="NOW()")
-                _save_to_conversation(conversation_id, save_text + news_section)
-            else:
-                # Mark court data as complete so user can read it + interact
-                _update_job(job_id, append_response="\n\n---\n\n*Searching for news coverage...*")
-                _update_job(job_id, status="completed", completed_at="NOW()")
-                _save_to_conversation(conversation_id, save_text)
+                if cached:
+                    news_section = "\n\n---\n\n**News Coverage**\n\n" + cached
+                    _update_job(job_id, append_response=news_section)
+                    _update_job(job_id, status="completed", completed_at="NOW()")
+                    _save_to_conversation(conversation_id, save_text + news_section)
+                else:
+                    # Mark court data as complete so user can read it + interact
+                    _update_job(job_id, append_response="\n\n---\n\n*Searching for news coverage...*")
+                    _update_job(job_id, status="completed", completed_at="NOW()")
+                    _save_to_conversation(conversation_id, save_text)
 
-                # Run news search in background thread — appends to response when done
-                def _news_worker():
-                    try:
-                        news_messages = [{"role": "user", "content": context}]
-                        news_text = _run_tool_loop(
-                            client, get_news_prompt(), get_news_tools(), news_messages,
-                            job_id, timeout_at, silent=True,
-                        )
-                        news_loading = "\n\n---\n\n*Searching for news coverage...*"
-                        if news_text and "NO_NEWS_FOUND" not in news_text:
-                            structured = structure_news(news_text)
-                            if structured:
-                                rcache.set_cached_news(cache_key, structured)
-                                news_section = "\n\n---\n\n**News Coverage**\n\n" + structured
-                                _update_job(job_id, replace_in_response=(news_loading, news_section))
-                                _save_to_conversation(conversation_id, save_text + news_section)
+                    # Run news search in background thread — appends to response when done
+                    def _news_worker():
+                        try:
+                            news_messages = [{"role": "user", "content": context}]
+                            news_text = _run_tool_loop(
+                                client, get_news_prompt(), get_news_tools(), news_messages,
+                                job_id, timeout_at, silent=True,
+                            )
+                            news_loading = "\n\n---\n\n*Searching for news coverage...*"
+                            if news_text and "NO_NEWS_FOUND" not in news_text:
+                                structured = structure_news(news_text)
+                                if structured:
+                                    rcache.set_cached_news(cache_key, structured)
+                                    news_section = "\n\n---\n\n**News Coverage**\n\n" + structured
+                                    _update_job(job_id, replace_in_response=(news_loading, news_section))
+                                    _save_to_conversation(conversation_id, save_text + news_section)
+                                else:
+                                    _update_job(job_id, replace_in_response=(news_loading, ""))
                             else:
                                 _update_job(job_id, replace_in_response=(news_loading, ""))
-                        else:
-                            _update_job(job_id, replace_in_response=(news_loading, ""))
-                    except Exception as e:
-                        print(f"[news_worker] Error: {e}")
-                        _update_job(job_id, replace_in_response=(
-                            "\n\n---\n\n*Searching for news coverage...*", ""))
+                        except Exception as e:
+                            print(f"[news_worker] Error: {e}")
+                            _update_job(job_id, replace_in_response=(
+                                "\n\n---\n\n*Searching for news coverage...*", ""))
 
-                threading.Thread(target=_news_worker, daemon=True).start()
-        else:
-            # No news needed — just complete
+                    threading.Thread(target=_news_worker, daemon=True).start()
+
+        if not news_done:
             _update_job(job_id, status="completed", completed_at="NOW()")
             _save_to_conversation(conversation_id, save_text)
 
