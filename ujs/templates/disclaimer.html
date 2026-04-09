@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Disclaimer — GavelSearch{% endblock %}
+{% block body %}
+<div class="min-h-screen bg-navy">
+  <!-- Nav -->
+  <nav class="flex items-center justify-between px-6 md:px-10 h-14 border-b border-navy-border">
+    <a href="/" class="flex items-center gap-3 no-underline">
+      <img src="/static/img/logo-light.svg" class="w-[30px] h-[30px]" alt="GavelSearch">
+      <span class="text-[13px] font-medium text-court-bright">Gavel<span class="text-gold">Search</span></span>
+    </a>
+    <a href="/" class="text-xs text-court-mid hover:text-court-bright">Back to home</a>
+  </nav>
+
+  <main class="max-w-2xl mx-auto px-6 py-12">
+    <h1 class="text-2xl font-semibold text-court-bright mb-2">Disclaimer</h1>
+    <p class="text-sm text-court-dim mb-10">Last updated: April 9, 2026</p>
+
+    <div class="space-y-8 text-[16px] leading-relaxed text-court-mid">
+
+      <section>
+        <h2 class="text-lg font-semibold text-court-bright mb-3">Not Legal Advice</h2>
+        <p>GavelSearch is an informational tool only. Nothing on this site constitutes legal advice, and no attorney-client relationship is created by using this service. If you need legal counsel, consult a licensed attorney.</p>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-semibold text-court-bright mb-3">Data Source &amp; Coverage</h2>
+        <p class="mb-3">All court records are sourced from the <a href="https://ujsportal.pacourts.us" target="_blank" class="text-gold hover:text-gold-dim">Pennsylvania Unified Judicial System (UJS) portal</a>, which is a public resource maintained by the Administrative Office of Pennsylvania Courts.</p>
+        <p class="mb-3">GavelSearch currently covers <strong class="text-court-bright">Lehigh County</strong> and <strong class="text-court-bright">Northampton County</strong>, including:</p>
+        <ul class="list-disc pl-6 space-y-2">
+          <li>Court of Common Pleas (criminal, civil, family)</li>
+          <li>Magisterial District Judge courts</li>
+          <li>PA appellate courts (statewide)</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-semibold text-court-bright mb-3">Accuracy</h2>
+        <p class="mb-3">We make every effort to keep data accurate and current. Court records are refreshed hourly from the UJS portal. However:</p>
+        <ul class="list-disc pl-6 space-y-2">
+          <li>Data may be delayed or incomplete compared to the official court system</li>
+          <li>AI-generated summaries and analysis may contain errors</li>
+          <li>Not all cases have been fully analyzed — coverage varies</li>
+          <li>News coverage results are sourced from web searches and may not be verified</li>
+        </ul>
+        <p class="mt-3">For the most current and authoritative information, always check the <a href="https://ujsportal.pacourts.us" target="_blank" class="text-gold hover:text-gold-dim">official UJS portal</a> directly.</p>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-semibold text-court-bright mb-3">No Affiliation</h2>
+        <p>GavelSearch is not affiliated with, endorsed by, or connected to the Pennsylvania court system, the Administrative Office of Pennsylvania Courts, or any county government.</p>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-semibold text-court-bright mb-3">Use of Information</h2>
+        <p>Court records are public information. However, using this data to harass, stalk, discriminate against, or otherwise harm any individual is prohibited and may violate state and federal law.</p>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-semibold text-court-bright mb-3">Limitation of Liability</h2>
+        <p>GavelSearch is provided "as is" without warranty of any kind. We are not liable for any damages arising from the use of this service, including but not limited to inaccurate data, service interruptions, or decisions made based on information obtained through this tool.</p>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-semibold text-court-bright mb-3">Contact</h2>
+        <p>Questions about this disclaimer can be directed to <a href="mailto:info@gavelsearch.com" class="text-gold hover:text-gold-dim">info@gavelsearch.com</a>.</p>
+      </section>
+
+    </div>
+  </main>
+</div>
+{% endblock %}

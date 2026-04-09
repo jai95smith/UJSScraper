@@ -9,8 +9,8 @@
   </a>
   <div class="hidden md:flex items-center gap-6 absolute left-1/2 -translate-x-1/2">
     <a href="/chat" class="text-xs text-court-mid hover:text-court-bright">Search</a>
-    <span class="text-xs text-court-mid cursor-pointer">About</span>
-    <span class="text-xs text-court-mid cursor-pointer">Disclaimer</span>
+    <a href="/disclaimer" class="text-xs text-court-mid hover:text-court-bright">Disclaimer</a>
+    <a href="/privacy" class="text-xs text-court-mid hover:text-court-bright">Privacy</a>
   </div>
   {% if user %}
   <div class="flex items-center gap-3">
@@ -118,9 +118,8 @@
 <footer class="bg-navy flex flex-col md:flex-row items-center justify-between gap-2 px-5 md:px-10 py-4">
   <span class="text-[11px] text-court-muted text-center md:text-left">GavelSearch · Lehigh & Northampton County court records via PA UJS Portal · Not legal advice</span>
   <div class="flex gap-[18px]">
-    <span class="text-[11px] text-court-muted cursor-pointer">Privacy</span>
-    <span class="text-[11px] text-court-muted cursor-pointer">Disclaimer</span>
-    <span class="text-[11px] text-court-muted cursor-pointer">Feedback</span>
+    <a href="/privacy" class="text-[11px] text-court-muted hover:text-court-mid">Privacy</a>
+    <a href="/disclaimer" class="text-[11px] text-court-muted hover:text-court-mid">Disclaimer</a>
   </div>
 </footer>
 {% endblock %}

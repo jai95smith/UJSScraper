@@ -56,6 +56,16 @@ def _user_context():
     return ctx
 
 
+@main_bp.route('/privacy')
+def privacy():
+    return render_template('privacy.html', api_url=_api_url())
+
+
+@main_bp.route('/disclaimer')
+def disclaimer():
+    return render_template('disclaimer.html', api_url=_api_url())
+
+
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):

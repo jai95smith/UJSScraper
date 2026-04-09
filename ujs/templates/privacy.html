@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Privacy Policy — GavelSearch{% endblock %}
+{% block body %}
+<div class="min-h-screen bg-navy">
+  <!-- Nav -->
+  <nav class="flex items-center justify-between px-6 md:px-10 h-14 border-b border-navy-border">
+    <a href="/" class="flex items-center gap-3 no-underline">
+      <img src="/static/img/logo-light.svg" class="w-[30px] h-[30px]" alt="GavelSearch">
+      <span class="text-[13px] font-medium text-court-bright">Gavel<span class="text-gold">Search</span></span>
+    </a>
+    <a href="/" class="text-xs text-court-mid hover:text-court-bright">Back to home</a>
+  </nav>
+
+  <main class="max-w-2xl mx-auto px-6 py-12">
+    <h1 class="text-2xl font-semibold text-court-bright mb-2">Privacy Policy</h1>
+    <p class="text-sm text-court-dim mb-10">Last updated: April 9, 2026</p>
+
+    <div class="space-y-8 text-[16px] leading-relaxed text-court-mid">
+
+      <section>
+        <h2 class="text-lg font-semibold text-court-bright mb-3">What GavelSearch Is</h2>
+        <p>GavelSearch is a public court records search tool covering Lehigh and Northampton counties in Pennsylvania. All data is sourced from the Pennsylvania Unified Judicial System (UJS) portal, which is publicly available information.</p>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-semibold text-court-bright mb-3">Information We Collect</h2>
+        <p class="mb-3"><strong class="text-court-bright">Account information.</strong> When you sign in with Google, we store your name, email address, and profile picture. This is used solely to identify your account and save your search history.</p>
+        <p class="mb-3"><strong class="text-court-bright">Search history.</strong> Your conversations and searches are stored so you can return to them later. Only you can see your search history.</p>
+        <p><strong class="text-court-bright">Usage data.</strong> We log basic request information (timestamps, query types) to monitor performance and prevent abuse. We do not track you across other websites.</p>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-semibold text-court-bright mb-3">How We Use Your Information</h2>
+        <ul class="list-disc pl-6 space-y-2">
+          <li>To provide and improve the search service</li>
+          <li>To save your conversations and watched dockets</li>
+          <li>To send email notifications about docket changes (if you opt in)</li>
+          <li>To prevent abuse and enforce rate limits</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-semibold text-court-bright mb-3">What We Don't Do</h2>
+        <ul class="list-disc pl-6 space-y-2">
+          <li>We do not sell or share your personal information with third parties</li>
+          <li>We do not use your data for advertising</li>
+          <li>We do not track you across other websites</li>
+          <li>We do not store your Google password</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-semibold text-court-bright mb-3">Data Retention</h2>
+        <p>Your conversations are stored until you delete them. You can delete individual conversations or all history from the settings page. Account data is retained until you request deletion.</p>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-semibold text-court-bright mb-3">Cookies</h2>
+        <p>We use a session cookie to keep you logged in. We do not use tracking cookies or third-party analytics.</p>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-semibold text-court-bright mb-3">Contact</h2>
+        <p>Questions about this policy can be directed to <a href="mailto:privacy@gavelsearch.com" class="text-gold hover:text-gold-dim">privacy@gavelsearch.com</a>.</p>
+      </section>
+
+    </div>
+  </main>
+</div>
+{% endblock %}
