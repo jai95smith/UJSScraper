@@ -53,22 +53,24 @@
     <div id="chat-list" class="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5"></div>
     <!-- User footer -->
     {% if user %}
-    <div class="border-t border-navy-border px-3 shrink-0 flex items-center" style="height:92px">
-      <div class="flex items-center gap-2.5">
+    <div class="border-t border-navy-border px-3.5 shrink-0 flex flex-col justify-center" style="height:92px">
+      <div class="flex items-center gap-3 w-full">
         {% if user.picture %}
-        <img src="{{ user.picture }}" class="w-8 h-8 rounded-full shrink-0 ring-1 ring-navy-border" referrerpolicy="no-referrer">
+        <img src="{{ user.picture }}" class="w-9 h-9 rounded-full shrink-0 ring-2 ring-navy-border" referrerpolicy="no-referrer">
         {% else %}
-        <div class="w-8 h-8 rounded-full bg-navy-hover border border-navy-border flex items-center justify-center shrink-0">
-          <span class="text-xs text-court-mid font-medium">{{ (user.name or user.email)[0]|upper }}</span>
+        <div class="w-9 h-9 rounded-full bg-navy-hover border border-navy-border flex items-center justify-center shrink-0">
+          <span class="text-sm text-court-mid font-medium">{{ (user.name or user.email)[0]|upper }}</span>
         </div>
         {% endif %}
         <div class="min-w-0 flex-1">
-          <div class="text-[12px] text-court-bright font-medium truncate">{{ user.name or 'User' }}</div>
-          <div class="text-[10px] text-court-dim truncate">{{ user.email }}</div>
+          <div class="text-[13px] text-court-bright font-medium truncate">{{ user.name or 'User' }}</div>
+          <div class="text-[11px] text-court-dim truncate">{{ user.email }}</div>
         </div>
-        <a href="/logout" class="shrink-0 p-1.5 rounded hover:bg-navy-hover text-court-dim hover:text-red-400 transition" title="Sign out">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
-        </a>
+      </div>
+      <div class="flex items-center gap-1 mt-1.5 ml-12">
+        <a href="/settings" class="text-[10px] text-court-dim hover:text-court-mid transition">Settings</a>
+        <span class="text-court-dim/30 text-[10px]">·</span>
+        <a href="/logout" class="text-[10px] text-court-dim hover:text-red-400 transition">Sign out</a>
       </div>
     </div>
     {% endif %}
