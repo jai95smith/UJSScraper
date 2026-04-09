@@ -286,20 +286,7 @@ def run_cycle(counties=None, docket_type=None, lookback_days=1,
     except Exception as e:
         print(f"[appellate] Error: {e}")
 
-    # 4. Auto-analyze new unanalyzed dockets
-    if auto_analyze and total_new > 0:
-        try:
-            analyzed = batch_analyze_unanalyzed(limit=analyze_batch, workers=workers)
-            print(f"[auto-analyze] Analyzed {analyzed} new dockets")
-        except Exception as e:
-            print(f"[auto-analyze] Error: {e}")
-
-    # 4. Process ingest queue (on-demand requests)
-    try:
-        queued = process_queue(analyze_batch, workers=workers)
-        print(f"[queue] Processed {queued} jobs")
-    except Exception as e:
-        print(f"[queue] Error: {e}")
+    # 4. Analysis handled by _queue_worker in api.py (continuous, auto-picks unanalyzed)
 
     # 5. Refresh stale records
     try:

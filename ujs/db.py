@@ -408,8 +408,10 @@ def retry_failed_jobs(conn, max_attempts=3):
 
 
 def claim_ingest_job(conn):
-    """Claim the next pending ingest job. Returns (id, docket_number) or None."""
+    """Claim the next job to process. Checks queue first (on-demand requests),
+    then falls back to the next unanalyzed case (most recent first)."""
     cur = conn.cursor()
+    # 1. Check explicit queue (on-demand requests, watchlist adds)
     cur.execute("""
         UPDATE ingest_queue SET status = 'processing', started_at = NOW()
         WHERE id = (
@@ -421,7 +423,34 @@ def claim_ingest_job(conn):
         )
         RETURNING id, docket_number
     """)
-    return cur.fetchone()
+    row = cur.fetchone()
+    if row:
+        return row
+
+    # 2. Auto-pick next unanalyzed case (most recent filing first)
+    cur.execute("""
+        SELECT c.docket_number FROM cases c
+        LEFT JOIN analyses a ON c.docket_number = a.docket_number AND a.doc_type = 'docket'
+        WHERE a.id IS NULL AND c.filing_date IS NOT NULL AND c.filing_date != ''
+        ORDER BY TO_DATE(c.filing_date, 'MM/DD/YYYY') DESC
+        LIMIT 1
+    """)
+    unanalyzed = cur.fetchone()
+    if unanalyzed:
+        # Queue it so it gets tracked properly
+        cur.execute("""
+            INSERT INTO ingest_queue (docket_number, priority) VALUES (%s, 2)
+            ON CONFLICT (docket_number) WHERE status = 'pending' DO NOTHING
+            RETURNING id
+        """, (unanalyzed[0],))
+        inserted = cur.fetchone()
+        if inserted:
+            cur.execute("UPDATE ingest_queue SET status = 'processing', started_at = NOW() WHERE id = %s RETURNING id, docket_number", (inserted[0],))
+            return cur.fetchone()
+        # Already in queue (race condition) — just return it for processing
+        return (0, unanalyzed[0])
+
+    return None
 
 
 def complete_ingest_job(conn, job_id, error=None):
