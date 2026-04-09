@@ -124,6 +124,46 @@ def create_key(name: str, email: Optional[str] = None, admin_token: str = Header
 
 # --- Health ---
 
+@router.get("/costs", tags=["Costs"])
+def get_costs():
+    """Get API cost summary."""
+    with db.connect() as conn:
+        cur = db._dict_cur(conn)
+        cur.execute("""
+            SELECT
+                COUNT(*) as total_calls,
+                SUM(input_tokens) as total_input_tokens,
+                SUM(output_tokens) as total_output_tokens,
+                SUM(thinking_tokens) as total_thinking_tokens,
+                SUM(cost_usd) as total_cost_usd,
+                AVG(cost_usd) as avg_cost_per_doc,
+                COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours') as calls_24h,
+                SUM(cost_usd) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours') as cost_24h,
+                COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '1 hour') as calls_1h,
+                SUM(cost_usd) FILTER (WHERE created_at > NOW() - INTERVAL '1 hour') as cost_1h
+            FROM api_costs
+        """)
+        row = cur.fetchone()
+        return {
+            "total": {
+                "calls": row["total_calls"],
+                "input_tokens": row["total_input_tokens"] or 0,
+                "output_tokens": row["total_output_tokens"] or 0,
+                "thinking_tokens": row["total_thinking_tokens"] or 0,
+                "cost_usd": float(row["total_cost_usd"] or 0),
+                "avg_per_doc": float(row["avg_cost_per_doc"] or 0),
+            },
+            "last_24h": {
+                "calls": row["calls_24h"],
+                "cost_usd": float(row["cost_24h"] or 0),
+            },
+            "last_1h": {
+                "calls": row["calls_1h"],
+                "cost_usd": float(row["cost_1h"] or 0),
+            },
+        }
+
+
 @router.get("/health", tags=["Health"])
 def health():
     try:

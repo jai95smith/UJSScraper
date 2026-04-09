@@ -240,8 +240,8 @@ def parse_bail(text):
     return bail_info
 
 
-def _gemini_extract(text, prompt, schema, api_key=None):
-    """Send text to Gemini Flash with a given schema."""
+def _gemini_extract(text, prompt, schema, api_key=None, docket_number=None):
+    """Send text to Gemini Flash with a given schema. Tracks token costs."""
     key = api_key or os.environ.get("GEMINI_API_KEY")
     if not key:
         raise RuntimeError("Set GEMINI_API_KEY env var or pass api_key")
@@ -258,7 +258,48 @@ def _gemini_extract(text, prompt, schema, api_key=None):
     )
     result = json.loads(response.text)
     _clean_result(result)
+
+    # Track token usage and cost
+    try:
+        usage = response.usage_metadata
+        if usage:
+            _log_cost(
+                docket_number=docket_number,
+                model="gemini-2.5-flash",
+                input_tokens=getattr(usage, 'prompt_token_count', 0) or 0,
+                output_tokens=getattr(usage, 'candidates_token_count', 0) or 0,
+                thinking_tokens=getattr(usage, 'thoughts_token_count', 0) or 0,
+                operation="analyze",
+            )
+    except Exception:
+        pass
+
     return result
+
+
+# Gemini 2.5 Flash pricing (per 1M tokens)
+_PRICING = {
+    "input": 0.15 / 1_000_000,
+    "output": 0.60 / 1_000_000,
+    "thinking": 0.70 / 1_000_000,
+}
+
+
+def _log_cost(docket_number, model, input_tokens, output_tokens, thinking_tokens, operation):
+    """Log API cost to database."""
+    cost = (input_tokens * _PRICING["input"] +
+            output_tokens * _PRICING["output"] +
+            thinking_tokens * _PRICING["thinking"])
+    try:
+        from ujs import db
+        with db.connect() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO api_costs (docket_number, model, input_tokens, output_tokens, thinking_tokens, cost_usd, operation)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (docket_number, model, input_tokens, output_tokens, thinking_tokens, cost, operation))
+    except Exception:
+        pass
 
 
 def _clean_result(obj):
@@ -286,9 +327,9 @@ def _clean_result(obj):
             _clean_result(item)
 
 
-def parse_with_gemini(text, api_key=None):
+def parse_with_gemini(text, api_key=None, docket_number=None):
     """Parse a docket sheet with Gemini."""
-    return _gemini_extract(text, GEMINI_PROMPT, GEMINI_SCHEMA, api_key)
+    return _gemini_extract(text, GEMINI_PROMPT, GEMINI_SCHEMA, api_key, docket_number=docket_number)
 
 
 def parse_summary_with_gemini(text, api_key=None):
@@ -303,7 +344,7 @@ def analyze_docket(docket_number, out_dir=".", use_gemini=True, api_key=None):
 
     if use_gemini:
         try:
-            parsed = parse_with_gemini(text, api_key=api_key)
+            parsed = parse_with_gemini(text, api_key=api_key, docket_number=docket_number)
             parsed["pdf_path"] = pdf_path
             return parsed
         except Exception as e:
