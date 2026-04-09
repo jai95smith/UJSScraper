@@ -89,11 +89,12 @@ GEMINI_SCHEMA = {
 
 GEMINI_PROMPT = """Extract structured data from this PA court docket sheet. Copy values exactly as they appear in the document — do not rephrase, reformat, summarize, or abbreviate any field values. Every string value must be a verbatim copy from the source text.
 
-CRITICAL — EXTRACT EVERY FIELD. Do not leave fields empty/null if the data exists anywhere in the document:
-- BAIL: Look for "Bail" section. Extract type, amount, and status. Common values: "Monetary", "ROR", "Unsecured". Status is usually "Set", "Posted", "Revoked", or "Denied". If bail information exists ANYWHERE in the document, you MUST extract it.
-- DISPOSITIONS: Look in the "Charges" or "Disposition" section. If a charge has any disposition (Guilty Plea, Nolle Prossed, Dismissed, etc.), extract it. Do not leave disposition null if it appears in the document.
-- SENTENCES: Look for "Sentence" section or sentencing information within charges. Extract all sentences including probation, incarceration, fines.
-- ATTORNEYS: Look for "Attorneys" or "Counsel" section. Extract name and role (Defense, Prosecution, etc.).
+IMPORTANT — Check these sections carefully before returning null:
+- BAIL: Look for "Bail" section or bail information within docket entries. Common values: "Monetary", "ROR", "Unsecured". Status: "Set", "Posted", "Revoked", "Denied".
+- DISPOSITIONS: Check each charge for disposition text (Guilty Plea, Nolle Prossed, Dismissed, etc.).
+- SENTENCES: Look for "Sentence" section after disposition entries.
+- ATTORNEYS: Look for "Attorneys", "Counsel", or "Representation" sections.
+Only return null for fields that genuinely do not appear in the document. Do NOT fabricate data.
 
 FORMAT RULES:
 - ALL dates: MM/DD/YYYY (e.g. 01/08/2025). Never YYYY-MM-DD.
