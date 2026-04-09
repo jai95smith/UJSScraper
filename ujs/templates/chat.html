@@ -381,42 +381,61 @@ async function checkRunningJob(convId) {
 /* --- Poll job --- */
 async function pollJob(jobId, statusEl, contentEl, msgId, convId) {
   let seen = 0;
+  let lastToolCount = 0;
   const statusTextEl = document.getElementById(statusEl.id + '-text');
-  let contentStarted = false;
+  const dotsEl = document.getElementById(statusEl.id + '-dots');
   while (true) {
     try {
       const res = await apiFetch(API + '/ask/job/' + jobId + '?after=' + seen + (convId ? '&cid=' + convId : ''));
       const data = await res.json();
-      // Update status from tools array
-      if (data.tools && data.tools.length) {
-        const lastTool = data.tools[data.tools.length - 1].replace(/_/g, ' ');
+      const toolCount = data.tools ? data.tools.length : 0;
+
+      // Update status line from tools or response header
+      if (toolCount > lastToolCount) {
+        const lastTool = data.tools[toolCount - 1].replace(/_/g, ' ');
         if (statusTextEl) statusTextEl.textContent = lastTool;
         else statusEl.textContent = lastTool;
+        // Re-show thinking dots when a new tool starts (working on something)
+        if (dotsEl) { dotsEl.classList.remove('fade-out'); dotsEl.style.display = ''; }
+        lastToolCount = toolCount;
       }
+
       if (data.total_length > seen) {
         seen = data.total_length;
         const full = data.response;
         const parts = full.split('\n\n');
         if (parts.length > 1) {
-          if (!data.tools || !data.tools.length) {
+          if (!toolCount) {
             if (statusTextEl) statusTextEl.textContent = parts[0];
             else statusEl.textContent = parts[0];
           }
           contentEl.innerHTML = renderMd(parts.slice(1).join('\n\n'));
-          if (!contentStarted) { stopThinking(statusEl.id); contentStarted = true; }
-        } else if (!data.tools || !data.tools.length) {
+          // Hide dots once real content is streaming, but keep status text
+          if (dotsEl && parts.slice(1).join('').length > 20) {
+            dotsEl.classList.add('fade-out');
+          }
+        } else if (!toolCount) {
           if (statusTextEl) statusTextEl.textContent = full;
           else statusEl.textContent = full;
         }
         chat.scrollTop = chat.scrollHeight;
       }
+
       if (data.status === 'completed' || data.status === 'error') {
         stopThinking(statusEl.id);
-        if (data.error) contentEl.textContent = 'Error: ' + data.error;
+        if (data.error) { contentEl.textContent = 'Error: ' + data.error; break; }
+        // Smooth transition: fetch final, render over existing content (no blank flash)
         const fullJob = await apiFetch(API + '/ask/job/' + jobId + (convId ? '?cid=' + convId : '')).then(r => r.json());
         const idx = fullJob.response.indexOf('\n\n');
         const text = idx >= 0 ? fullJob.response.slice(idx + 2) : fullJob.response;
-        if (text) renderFinalResponse(contentEl, text, msgId);
+        if (text) {
+          contentEl.style.opacity = '0.7';
+          requestAnimationFrame(() => {
+            renderFinalResponse(contentEl, text, msgId);
+            contentEl.style.transition = 'opacity 0.15s';
+            contentEl.style.opacity = '1';
+          });
+        }
         break;
       }
     } catch(e) { stopThinking(statusEl.id); break; }
