@@ -356,7 +356,13 @@ def _run_job(job_id, question, history, conversation_id=None):
         if court_answer is None:
             _update_job(job_id, append_response="\n\nRequest timed out.", status="completed", completed_at="NOW()")
             return
-        # Court answer already streamed to DB by _stream_final_response
+
+        # Get the full response from DB (includes auto-injected tables + streamed text)
+        job_data = get_job(job_id)
+        full_response = job_data.get("response", "") if job_data else ""
+        # Strip the status prefix for saving
+        idx = full_response.find("\n\n")
+        save_text = full_response[idx + 2:] if idx >= 0 else full_response
 
         # ---------------------------------------------------------------
         # Pass 2: News search (non-blocking — user sees court data immediately)
@@ -374,12 +380,12 @@ def _run_job(job_id, question, history, conversation_id=None):
                 news_section = "\n\n---\n\n**News Coverage**\n\n" + cached[0]
                 _update_job(job_id, append_response=news_section)
                 _update_job(job_id, status="completed", completed_at="NOW()")
-                _save_to_conversation(conversation_id, court_answer + news_section)
+                _save_to_conversation(conversation_id, save_text + news_section)
             else:
                 # Mark court data as complete so user can read it + interact
                 _update_job(job_id, append_response="\n\n---\n\n*Searching for news coverage...*")
                 _update_job(job_id, status="completed", completed_at="NOW()")
-                _save_to_conversation(conversation_id, court_answer)
+                _save_to_conversation(conversation_id, save_text)
 
                 # Run news search in background thread — appends to response when done
                 def _news_worker():
@@ -396,7 +402,7 @@ def _run_job(job_id, question, history, conversation_id=None):
                                 _cache_set(cache_key, structured)
                                 news_section = "\n\n---\n\n**News Coverage**\n\n" + structured
                                 _update_job(job_id, replace_in_response=(news_loading, news_section))
-                                _save_to_conversation(conversation_id, court_answer + news_section)
+                                _save_to_conversation(conversation_id, save_text + news_section)
                             else:
                                 _update_job(job_id, replace_in_response=(news_loading, ""))
                         else:
@@ -410,7 +416,7 @@ def _run_job(job_id, question, history, conversation_id=None):
         else:
             # No news needed — just complete
             _update_job(job_id, status="completed", completed_at="NOW()")
-            _save_to_conversation(conversation_id, court_answer)
+            _save_to_conversation(conversation_id, save_text)
 
         # Log
         duration = int((time.time() - start) * 1000)
