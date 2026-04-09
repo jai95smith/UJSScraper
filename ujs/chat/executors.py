@@ -665,7 +665,8 @@ def _case_duration(conn, inputs):
                "ch.disposition_date IS NOT NULL", "ch.disposition_date != ''",
                "ch.disposition_date ~ '^\\d{2}/\\d{2}/\\d{4}$'",
                "c.filing_date IS NOT NULL", "c.filing_date != ''",
-               "c.filing_date ~ '^\\d{2}/\\d{2}/\\d{4}$'"]
+               "c.filing_date ~ '^\\d{2}/\\d{2}/\\d{4}$'",
+               "TO_DATE(ch.disposition_date, 'MM/DD/YYYY') >= TO_DATE(c.filing_date, 'MM/DD/YYYY')"]
     params = []
     if inputs.get("charge_description"):
         charge_clause, charge_params = _expand_charge_search(inputs["charge_description"])
