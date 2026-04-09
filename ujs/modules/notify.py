@@ -7,9 +7,7 @@ Usage:
 """
 
 import html as html_mod
-import os, smtplib, logging
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+import json, os, logging, requests
 from collections import defaultdict
 
 from ujs import db
@@ -17,41 +15,38 @@ from ujs import db
 logger = logging.getLogger("ujs.notify")
 
 SITE_URL = os.environ.get("SITE_URL", "https://gavelsearch.com")
-
-
-def _get_smtp_config():
-    return {
-        "host": os.environ.get("SMTP_HOST", ""),
-        "port": int(os.environ.get("SMTP_PORT", "587")),
-        "user": os.environ.get("SMTP_USER", ""),
-        "pass": os.environ.get("SMTP_PASS", ""),
-        "from": os.environ.get("SMTP_FROM", "alerts@gavelsearch.com"),
-    }
+_BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
 
 def send_email(to, subject, html_body, text_body):
-    """Send an email via SMTP. Returns True on success."""
-    cfg = _get_smtp_config()
-    if not cfg["host"] or not cfg["user"]:
-        logger.warning("SMTP not configured — skipping email to %s", to)
+    """Send an email via Brevo HTTP API. Returns True on success."""
+    api_key = os.environ.get("BREVO_API_KEY")
+    sender_email = os.environ.get("SMTP_FROM", "alerts@gavelsearch.com")
+    sender_name = "GavelSearch"
+
+    if not api_key:
+        logger.warning("BREVO_API_KEY not set — skipping email to %s", to)
         return False
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = cfg["from"]
-    msg["To"] = to
-    msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
-
-    msg.attach(MIMEText(text_body, "plain"))
-    msg.attach(MIMEText(html_body, "html"))
+    payload = {
+        "sender": {"name": sender_name, "email": sender_email},
+        "to": [{"email": to}],
+        "subject": subject,
+        "htmlContent": html_body,
+        "textContent": text_body,
+    }
 
     try:
-        with smtplib.SMTP(cfg["host"], cfg["port"]) as server:
-            server.starttls()
-            server.login(cfg["user"], cfg["pass"])
-            server.send_message(msg)
-        logger.info("Email sent to %s: %s", to, subject)
-        return True
+        r = requests.post(_BREVO_API_URL, json=payload, headers={
+            "api-key": api_key,
+            "Content-Type": "application/json",
+        }, timeout=10)
+        if r.status_code in (200, 201):
+            logger.info("Email sent to %s: %s", to, subject)
+            return True
+        else:
+            logger.error("Brevo API error %s: %s", r.status_code, r.text[:200])
+            return False
     except Exception as e:
         logger.error("Failed to send email to %s: %s", to, e)
         return False
