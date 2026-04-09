@@ -60,8 +60,37 @@ def _get_case_analysis(conn, inputs):
     return json.dumps(analysis, default=str)
 
 
+def _find_all_cases_for_person(conn, name, county=None):
+    """Search both caption AND participants table for all cases matching a name. Deduplicates."""
+    # Search 1: caption (existing method)
+    cases1 = db.search_cases(conn, name=name, county=county, limit=50)
+    found = {c["docket_number"]: dict(c) for c in cases1}
+
+    # Search 2: participants table — catches cases where person isn't in caption
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    name_parts = [w for w in name.replace(",", " ").split() if w]
+    word_clauses = " AND ".join(["p.name ILIKE %s"] * len(name_parts))
+    word_params = [f"%{w}%" for w in name_parts]
+    county_clause = ""
+    if county:
+        county_clause = "AND c.county ILIKE %s"
+        word_params.append(county)
+    cur.execute(f"""
+        SELECT DISTINCT c.* FROM participants p
+        JOIN cases c ON p.docket_number = c.docket_number
+        WHERE {word_clauses} {county_clause}
+        ORDER BY TO_DATE(c.filing_date, 'MM/DD/YYYY') DESC NULLS LAST
+        LIMIT 50
+    """, word_params)
+    for r in cur.fetchall():
+        if r["docket_number"] not in found:
+            found[r["docket_number"]] = dict(r)
+
+    return list(found.values())
+
+
 def _get_person_history(conn, inputs):
-    cases = db.search_cases(conn, name=inputs["name"], county=inputs.get("county"), limit=20)
+    cases = _find_all_cases_for_person(conn, inputs["name"], inputs.get("county"))
     if not cases:
         return f"No cases found for {inputs['name']}"
     history = []
@@ -98,9 +127,13 @@ _CASE_COLS = {"Docket": "docket_number", "Caption": "caption", "County": "county
 
 
 def _search_cases(conn, inputs):
-    results = db.search_cases(conn, name=inputs.get("name"), county=inputs.get("county"),
+    # If searching by name, use the broader person search that checks participants table too
+    if inputs.get("name") and not inputs.get("case_status") and not inputs.get("case_type") and not inputs.get("filed_after"):
+        results = _find_all_cases_for_person(conn, inputs["name"], inputs.get("county"))
+    else:
+        results = [dict(r) for r in db.search_cases(conn, name=inputs.get("name"), county=inputs.get("county"),
                               status=inputs.get("case_status"), docket_type=inputs.get("case_type"),
-                              filed_after=inputs.get("filed_after"), filed_before=inputs.get("filed_before"), limit=20)
+                              filed_after=inputs.get("filed_after"), filed_before=inputs.get("filed_before"), limit=20)]
     return _auto_table([dict(r) for r in results], _CASE_COLS, empty_msg="No cases found.")
 
 
