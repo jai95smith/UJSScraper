@@ -57,7 +57,11 @@ def _cache_key(prefix, normalized):
 _RESPONSE_TTL = 3600  # 1 hour
 
 # Queries containing these patterns are person-specific — don't cache
-_PERSON_PATTERNS = re.compile(r'[A-Z][a-z]+[\s,]+[A-Z][a-z]+|rapsheet|record for', re.IGNORECASE)
+_PERSON_NAME_RE = re.compile(r'[A-Z][a-z]+[\s,]+[A-Z][a-z]+')  # Case-sensitive: "John Smith"
+_PERSON_KEYWORD_RE = re.compile(r'rapsheet|record for|charges? for', re.IGNORECASE)
+
+def _is_person_query(question):
+    return bool(_PERSON_NAME_RE.search(question) or _PERSON_KEYWORD_RE.search(question))
 
 
 def get_cached_response(question):
@@ -65,7 +69,7 @@ def get_cached_response(question):
     r = _get_redis()
     if not r:
         return None
-    if _PERSON_PATTERNS.search(question):
+    if _is_person_query(question):
         return None  # Don't cache person-specific queries
     key = _cache_key("resp", normalize_query(question))
     try:
