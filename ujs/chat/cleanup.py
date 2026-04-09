@@ -66,12 +66,16 @@ _NEWS_SCHEMA = {
     "required": ["has_news", "summary"],
 }
 
-_PERSON_CHECK_SCHEMA = {
+_PERSON_CLASSIFY_SCHEMA = {
     "type": "object",
     "properties": {
         "is_person_query": {"type": "boolean", "description": "True if asking about a specific named individual. False for bulk queries, stats, docket lookups, generic searches."},
+        "name": {"type": "string", "description": "Person's full name (if is_person_query is true, otherwise empty)"},
+        "county": {"type": "string", "description": "County (e.g. Lehigh) if known, otherwise empty"},
+        "charges": {"type": "string", "description": "Key charges in plain English, comma separated (if available)"},
+        "details": {"type": "string", "description": "Any notable details (employer, co-defendants, role)"},
     },
-    "required": ["is_person_query"],
+    "required": ["is_person_query", "name"],
 }
 
 
@@ -79,29 +83,45 @@ _PERSON_CHECK_SCHEMA = {
 # Public functions
 # ---------------------------------------------------------------
 
-def is_person_query(question, court_answer):
-    """Classify whether this question is about a specific named person.
-    Returns True if news search should run."""
+def classify_and_extract(question, court_answer):
+    """Classify if person query AND extract context in one Gemini call.
+    Returns (is_person, context_string) or (False, None) on failure."""
     # Quick reject: court answer found nothing
     al = court_answer.lower()
     if any(p in al for p in ["no case", "not found", "no result", "couldn't find"]):
-        return False
+        return False, None
 
     result = _gemini_json(
-        f"Does this question ask about a specific named person? "
-        f"Answer true ONLY if the question itself contains a person's name "
-        f"(first and last name, or last name comma first name). "
-        f"Answer false for: docket number lookups, bulk queries, stats, "
-        f"generic searches, system questions.\n\n"
-        f"Question: {question}",
-        _PERSON_CHECK_SCHEMA,
+        f"Analyze this court records question and answer.\n"
+        f"1. Is it about a specific named person (first+last name)? "
+        f"Answer false for docket lookups, bulk queries, stats, generic searches.\n"
+        f"2. If yes, extract their name, county, key charges, and notable details.\n\n"
+        f"Question: {question}\n\nCourt answer:\n{court_answer[:1500]}",
+        _PERSON_CLASSIFY_SCHEMA,
     )
     if result is not None:
-        return result["is_person_query"]
+        is_person = result["is_person_query"]
+        if is_person and result.get("name"):
+            parts = [f"Person: {result['name']}"]
+            if result.get("county"):
+                parts.append(f"Location: {result['county']} County, PA")
+            if result.get("charges"):
+                parts.append(f"Charges: {result['charges']}")
+            if result.get("details"):
+                parts.append(f"Details: {result['details']}")
+            return True, "\n".join(parts)
+        return is_person, None
 
-    # Fallback: capitalized two-word name
+    # Fallback: regex check
     import re
-    return bool(re.search(r'[A-Z][a-z]+[\s,]+[A-Z][a-z]+', question.strip()))
+    is_person = bool(re.search(r'[A-Z][a-z]+[\s,]+[A-Z][a-z]+', question.strip()))
+    return is_person, f"Question: {question}\n\nCourt records answer:\n{court_answer[:500]}" if is_person else None
+
+
+def is_person_query(question, court_answer):
+    """Legacy wrapper — returns bool only."""
+    is_person, _ = classify_and_extract(question, court_answer)
+    return is_person
 
 
 def structure_news(raw_text):

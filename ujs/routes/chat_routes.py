@@ -1,9 +1,9 @@
 """Chat routes — server-side conversations with job-based responses."""
 
-import json, time, uuid
+import asyncio, json, time, uuid
 from collections import defaultdict
 from fastapi import APIRouter, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Optional, List
 
@@ -218,3 +218,53 @@ def job_status(job_id: str, after: int = Query(0), cid: str = Query(None), reque
         "total_length": len(response),
         "error": job.get("error"),
     }
+
+
+@router.get("/ask/job/{job_id}/stream")
+async def job_stream(job_id: str, cid: str = Query(None), request: Request = None):
+    """SSE stream for job progress. Pushes updates as they happen."""
+    user = _require_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"error": "Authentication required"})
+
+    # Verify ownership once upfront
+    from ujs.chat.jobs import get_job
+    job = get_job(job_id)
+    if not job:
+        return JSONResponse(status_code=404, content={"error": "Job not found"})
+    conv_id = job.get("conversation_id")
+    if conv_id:
+        with db.connect() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT 1 FROM conversations WHERE id = %s AND user_id = %s", (conv_id, user["sub"]))
+            if not cur.fetchone():
+                return JSONResponse(status_code=403, content={"error": "Access denied"})
+
+    async def event_generator():
+        seen = 0
+        last_tools = 0
+        while True:
+            job = get_job(job_id)
+            if not job:
+                yield f"data: {json.dumps({'status': 'error', 'error': 'Job not found'})}\n\n"
+                break
+
+            response = job.get("response", "")
+            tools = job.get("tools_log", [])
+            total = len(response)
+
+            # Only send if something changed
+            if total > seen or len(tools) > last_tools or job["status"] in ("completed", "error"):
+                yield f"data: {json.dumps({'status': job['status'], 'tools': tools, 'response': response[seen:], 'total_length': total, 'error': job.get('error')})}\n\n"
+                seen = total
+                last_tools = len(tools)
+
+            if job["status"] in ("completed", "error"):
+                # Send one final full response
+                yield f"data: {json.dumps({'status': job['status'], 'tools': tools, 'response': response, 'total_length': total, 'error': job.get('error'), 'done': True})}\n\n"
+                break
+
+            await asyncio.sleep(0.3)  # Check every 300ms server-side (no client round trip)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

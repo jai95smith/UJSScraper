@@ -8,7 +8,7 @@ from ujs import db
 from ujs.chat.prompts import get_court_prompt, get_news_prompt
 from ujs.chat.tools import TOOLS, get_news_tools
 from ujs.chat.executors import execute_tool
-from ujs.chat.cleanup import structure_news, is_person_query
+from ujs.chat.cleanup import structure_news, classify_and_extract
 
 # In-memory news cache: {key: (structured_text, timestamp)}
 _news_cache = {}
@@ -102,40 +102,6 @@ def _save_to_conversation(conversation_id, response_text):
 
 
 
-_CONTEXT_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "name": {"type": "string", "description": "Person's full name"},
-        "county": {"type": "string", "description": "County (e.g. Lehigh)"},
-        "charges": {"type": "string", "description": "Key charges in plain English, comma separated"},
-        "details": {"type": "string", "description": "Any notable details (employer, co-defendants, role)"},
-    },
-    "required": ["name"],
-}
-
-
-def _extract_person_context(question, court_answer):
-    """Extract structured person context for news search using Gemini."""
-    from ujs.chat.cleanup import _gemini_json
-
-    result = _gemini_json(
-        f"Extract the person's name, county, key charges, and any notable details "
-        f"(employer, role, co-defendants) from this court data.\n\n"
-        f"Question: {question}\n\nCourt answer:\n{court_answer[:1500]}",
-        _CONTEXT_SCHEMA,
-    )
-    if result and result.get("name"):
-        parts = [f"Person: {result['name']}"]
-        if result.get("county"):
-            parts.append(f"Location: {result['county']} County, PA")
-        if result.get("charges"):
-            parts.append(f"Charges: {result['charges']}")
-        if result.get("details"):
-            parts.append(f"Details: {result['details']}")
-        return "\n".join(parts)
-
-    # Fallback: raw truncation
-    return f"Question: {question}\n\nCourt records answer:\n{court_answer[:500]}"
 
 
 def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=False, stream=False):
@@ -380,51 +346,61 @@ def _run_job(job_id, question, history, conversation_id=None):
         # Court answer already streamed to DB by _stream_final_response
 
         # ---------------------------------------------------------------
-        # Pass 2: News search (sequential, same thread)
+        # Pass 2: News search (non-blocking — user sees court data immediately)
         # ---------------------------------------------------------------
-        news_section = ""
-        if is_person_query(question, court_answer) and time.time() < timeout_at - 15:
-            # Extract person context first, then build cache key from it
-            context = _extract_person_context(question, court_answer)
-            # Cache key includes extracted name+county so different people don't collide
+        # Classify + extract in one Gemini call (~500ms)
+        is_person, context = classify_and_extract(question, court_answer)
+
+        if is_person and context and time.time() < timeout_at - 15:
+            # Check cache first
             context_first_line = context.split("\n")[0].lower().strip()
             cache_key = context_first_line + ":" + " ".join(sorted(question.lower().split()))
             cached = _news_cache.get(cache_key)
+
             if cached and (time.time() - cached[1]) < _NEWS_CACHE_TTL:
                 news_section = "\n\n---\n\n**News Coverage**\n\n" + cached[0]
                 _update_job(job_id, append_response=news_section)
+                _update_job(job_id, status="completed", completed_at="NOW()")
+                _save_to_conversation(conversation_id, court_answer + news_section)
             else:
+                # Mark court data as complete so user can read it + interact
                 _update_job(job_id, append_response="\n\n---\n\n*Searching for news coverage...*")
+                _update_job(job_id, status="completed", completed_at="NOW()")
+                _save_to_conversation(conversation_id, court_answer)
 
-                news_messages = [{"role": "user", "content": context}]
-                news_text = _run_tool_loop(
-                    client, get_news_prompt(), get_news_tools(), news_messages,
-                    job_id, timeout_at, silent=True,
-                )
+                # Run news search in background thread — appends to response when done
+                def _news_worker():
+                    try:
+                        news_messages = [{"role": "user", "content": context}]
+                        news_text = _run_tool_loop(
+                            client, get_news_prompt(), get_news_tools(), news_messages,
+                            job_id, timeout_at, silent=True,
+                        )
+                        news_loading = "\n\n---\n\n*Searching for news coverage...*"
+                        if news_text and "NO_NEWS_FOUND" not in news_text:
+                            structured = structure_news(news_text)
+                            if structured:
+                                _cache_set(cache_key, structured)
+                                news_section = "\n\n---\n\n**News Coverage**\n\n" + structured
+                                _update_job(job_id, replace_in_response=(news_loading, news_section))
+                                _save_to_conversation(conversation_id, court_answer + news_section)
+                            else:
+                                _update_job(job_id, replace_in_response=(news_loading, ""))
+                        else:
+                            _update_job(job_id, replace_in_response=(news_loading, ""))
+                    except Exception as e:
+                        print(f"[news_worker] Error: {e}")
+                        _update_job(job_id, replace_in_response=(
+                            "\n\n---\n\n*Searching for news coverage...*", ""))
 
-                news_loading = "\n\n---\n\n*Searching for news coverage...*"
-                if news_text and "NO_NEWS_FOUND" not in news_text:
-                    structured = structure_news(news_text)
-                    if structured:
-                        _cache_set(cache_key, structured)
-                        news_section = "\n\n---\n\n**News Coverage**\n\n" + structured
-                        _update_job(job_id, replace_in_response=(news_loading, news_section))
-                    else:
-                        _update_job(job_id, replace_in_response=(news_loading, ""))
-                else:
-                    _update_job(job_id, replace_in_response=(news_loading, ""))
-
-        # ---------------------------------------------------------------
-        # Done — single completion, single conversation save
-        # ---------------------------------------------------------------
-        duration = int((time.time() - start) * 1000)
-        _update_job(job_id, status="completed", completed_at="NOW()")
-
-        # Save complete answer (court + news) to conversation
-        save_text = court_answer + news_section
-        _save_to_conversation(conversation_id, save_text)
+                threading.Thread(target=_news_worker, daemon=True).start()
+        else:
+            # No news needed — just complete
+            _update_job(job_id, status="completed", completed_at="NOW()")
+            _save_to_conversation(conversation_id, court_answer)
 
         # Log
+        duration = int((time.time() - start) * 1000)
         try:
             with db.connect() as conn:
                 cur = conn.cursor()

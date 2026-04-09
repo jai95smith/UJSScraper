@@ -378,65 +378,104 @@ async function checkRunningJob(convId) {
   }
 }
 
-/* --- Poll job --- */
+/* --- Stream/Poll job --- */
+const _FRIENDLY = {render_table:'Building table',render_chart:'Building chart',get_upcoming_hearings:'Fetching hearings',get_person_history:'Looking up records',search_cases:'Searching cases',fuzzy_name_search:'Searching names',live_search_ujs:'Searching UJS portal',run_custom_query:'Running query',web_search:'Searching news'};
+
+function _handleJobData(data, state) {
+  const { statusEl, statusTextEl, dotsEl, contentEl } = state;
+  const toolCount = data.tools ? data.tools.length : 0;
+
+  // Update status from tools
+  if (toolCount > state.lastToolCount) {
+    const raw = data.tools[toolCount - 1];
+    const friendly = _FRIENDLY[raw] || raw.replace(/_/g, ' ');
+    if (statusTextEl) statusTextEl.textContent = friendly;
+    else statusEl.textContent = friendly;
+    if (dotsEl) { dotsEl.classList.remove('fade-out'); dotsEl.style.display = ''; }
+    state.lastToolCount = toolCount;
+  }
+
+  if (data.total_length > state.seen) {
+    state.seen = data.total_length;
+    const full = data.response;
+    const parts = full.split('\n\n');
+    if (parts.length > 1) {
+      if (!toolCount) {
+        if (statusTextEl) statusTextEl.textContent = parts[0];
+        else statusEl.textContent = parts[0];
+      }
+      contentEl.innerHTML = renderMd(parts.slice(1).join('\n\n'));
+      if (dotsEl && parts.slice(1).join('').length > 20) dotsEl.classList.add('fade-out');
+    } else if (!toolCount) {
+      if (statusTextEl) statusTextEl.textContent = full;
+      else statusEl.textContent = full;
+    }
+    chat.scrollTop = chat.scrollHeight;
+  }
+}
+
+function _finishJob(data, state) {
+  const { statusEl, contentEl, msgId } = state;
+  stopThinking(statusEl.id);
+  if (data.error) { contentEl.textContent = 'Error: ' + data.error; return; }
+  const resp = data.response || '';
+  const idx = resp.indexOf('\n\n');
+  const text = idx >= 0 ? resp.slice(idx + 2) : resp;
+  if (text) {
+    contentEl.style.opacity = '0.7';
+    requestAnimationFrame(() => {
+      renderFinalResponse(contentEl, text, msgId);
+      contentEl.style.transition = 'opacity 0.15s';
+      contentEl.style.opacity = '1';
+    });
+  }
+}
+
 async function pollJob(jobId, statusEl, contentEl, msgId, convId) {
-  let seen = 0;
-  let lastToolCount = 0;
   const statusTextEl = document.getElementById(statusEl.id + '-text');
   const dotsEl = document.getElementById(statusEl.id + '-dots');
+  const state = { seen: 0, lastToolCount: 0, statusEl, statusTextEl, dotsEl, contentEl, msgId };
+
+  // Try SSE first
+  const sseUrl = API + '/ask/job/' + jobId + '/stream?cid=' + (convId || '');
+  try {
+    const sseRes = await fetch(sseUrl, { headers: { 'Authorization': 'Bearer ' + USER_TOKEN } });
+    if (sseRes.ok && sseRes.headers.get('content-type')?.includes('text/event-stream')) {
+      const reader = sseRes.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop(); // keep incomplete line
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            _handleJobData(data, state);
+            if (data.done) { _finishJob(data, state); return; }
+            if (data.status === 'completed' || data.status === 'error') { _finishJob(data, state); return; }
+          } catch(e) {}
+        }
+      }
+      // Stream ended without done event — fetch final state
+      const fallback = await apiFetch(API + '/ask/job/' + jobId + (convId ? '?cid=' + convId : '')).then(r => r.json());
+      _finishJob(fallback, state);
+      return;
+    }
+  } catch(e) { /* SSE failed — fall through to polling */ }
+
+  // Fallback: HTTP polling
   while (true) {
     try {
-      const res = await apiFetch(API + '/ask/job/' + jobId + '?after=' + seen + (convId ? '&cid=' + convId : ''));
+      const res = await apiFetch(API + '/ask/job/' + jobId + '?after=' + state.seen + (convId ? '&cid=' + convId : ''));
       const data = await res.json();
-      const toolCount = data.tools ? data.tools.length : 0;
-
-      // Update status line from tools or response header
-      if (toolCount > lastToolCount) {
-        const lastTool = data.tools[toolCount - 1].replace(/_/g, ' ');
-        const friendlyNames = {render_table:'Building table',render_chart:'Building chart',get_upcoming_hearings:'Fetching hearings',get_person_history:'Looking up records',search_cases:'Searching cases',fuzzy_name_search:'Searching names',live_search_ujs:'Searching UJS portal',run_custom_query:'Running query',web_search:'Searching news'};
-        if (statusTextEl) statusTextEl.textContent = friendlyNames[data.tools[toolCount-1]] || lastTool;
-        else statusEl.textContent = friendlyNames[data.tools[toolCount-1]] || lastTool;
-        // Re-show thinking dots when a new tool starts
-        if (dotsEl) { dotsEl.classList.remove('fade-out'); dotsEl.style.display = ''; }
-        lastToolCount = toolCount;
-      }
-
-      if (data.total_length > seen) {
-        seen = data.total_length;
-        const full = data.response;
-        const parts = full.split('\n\n');
-        if (parts.length > 1) {
-          if (!toolCount) {
-            if (statusTextEl) statusTextEl.textContent = parts[0];
-            else statusEl.textContent = parts[0];
-          }
-          contentEl.innerHTML = renderMd(parts.slice(1).join('\n\n'));
-          // Hide dots once real content is streaming, but keep status text
-          if (dotsEl && parts.slice(1).join('').length > 20) {
-            dotsEl.classList.add('fade-out');
-          }
-        } else if (!toolCount) {
-          if (statusTextEl) statusTextEl.textContent = full;
-          else statusEl.textContent = full;
-        }
-        chat.scrollTop = chat.scrollHeight;
-      }
-
+      _handleJobData(data, state);
       if (data.status === 'completed' || data.status === 'error') {
-        stopThinking(statusEl.id);
-        if (data.error) { contentEl.textContent = 'Error: ' + data.error; break; }
-        // Smooth transition: fetch final, render over existing content (no blank flash)
         const fullJob = await apiFetch(API + '/ask/job/' + jobId + (convId ? '?cid=' + convId : '')).then(r => r.json());
-        const idx = fullJob.response.indexOf('\n\n');
-        const text = idx >= 0 ? fullJob.response.slice(idx + 2) : fullJob.response;
-        if (text) {
-          contentEl.style.opacity = '0.7';
-          requestAnimationFrame(() => {
-            renderFinalResponse(contentEl, text, msgId);
-            contentEl.style.transition = 'opacity 0.15s';
-            contentEl.style.opacity = '1';
-          });
-        }
+        _finishJob(fullJob, state);
         break;
       }
     } catch(e) { stopThinking(statusEl.id); break; }
