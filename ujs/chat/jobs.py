@@ -318,7 +318,7 @@ def _run_job(job_id, question, history, conversation_id=None):
 
     client = anthropic.Anthropic(api_key=key)
     start = time.time()
-    timeout_at = start + 120
+    timeout_at = start + 180  # 3 minutes — large tables need multiple API rounds
 
     # Build messages
     messages = []
