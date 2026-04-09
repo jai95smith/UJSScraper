@@ -290,11 +290,19 @@ def run_cycle(counties=None, docket_type=None, lookback_days=1,
 
     # 4. Analysis handled by ujs-worker service (continuous, auto-picks unanalyzed)
 
-    # 5. Refresh watched dockets first (users expect timely alerts)
+    # 5. Refresh watched dockets (prioritized, capped per cycle)
     try:
         with db.connect() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT DISTINCT docket_number FROM user_watches")
+            # Only refresh watches not checked in last 4 hours, active cases first, cap at 50/cycle
+            cur.execute("""
+                SELECT DISTINCT w.docket_number FROM user_watches w
+                JOIN cases c ON w.docket_number = c.docket_number
+                WHERE c.last_scraped < NOW() - INTERVAL '4 hours' OR c.last_scraped IS NULL
+                ORDER BY CASE WHEN c.status ILIKE '%%active%%' THEN 0 ELSE 1 END,
+                         c.last_scraped ASC NULLS FIRST
+                LIMIT 50
+            """)
             watched = [r[0] for r in cur.fetchall()]
         if watched:
             refreshed_watched = 0
@@ -302,13 +310,16 @@ def run_cycle(counties=None, docket_type=None, lookback_days=1,
                 try:
                     deep_analyze_docket(dn)
                     refreshed_watched += 1
+                    time.sleep(5)  # Rate limit: ~12/min
                 except Exception as e:
                     if "429" in str(e):
-                        print(f"[watched] Rate limited after {refreshed_watched} dockets, pausing")
-                        time.sleep(30)
+                        print(f"[watched] Rate limited after {refreshed_watched}, stopping")
+                        break
                     else:
                         print(f"[watched] Error {dn}: {e}")
             print(f"[watched] Refreshed {refreshed_watched}/{len(watched)} watched dockets")
+        else:
+            print("[watched] All watched dockets are fresh")
     except Exception as e:
         print(f"[watched] Error: {e}")
 
