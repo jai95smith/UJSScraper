@@ -127,7 +127,7 @@ def rapsheet(name: str, county: Optional[str] = None):
             else:
                 entry["analyzed"] = False
 
-            cur.execute("SELECT event_type, event_date, event_status FROM events WHERE docket_number = %s ORDER BY event_date", (dn,))
+            cur.execute("SELECT event_type, event_date, event_status FROM events WHERE docket_number = %s ORDER BY TO_DATE(SUBSTRING(event_date FROM 1 FOR 10), 'MM/DD/YYYY') ASC, event_date ASC", (dn,))
             events = cur.fetchall()
             if events: entry["upcoming_events"] = [dict(e) for e in events]
 

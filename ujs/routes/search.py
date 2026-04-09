@@ -37,7 +37,7 @@ def hearings_today(county: Optional[str] = None, docket_type: Optional[str] = Qu
         if docket_type:
             code = {"criminal": "-CR-", "civil": "-CV-", "traffic": "-TR-"}.get(docket_type.lower(), "")
             if code: clauses.append("c.docket_number LIKE %s"); params.append(f"%{code}%")
-        cur.execute(f"SELECT e.*, c.caption, c.status as case_status, c.county, c.filing_date FROM events e JOIN cases c ON e.docket_number = c.docket_number WHERE {' AND '.join(clauses)} ORDER BY e.event_date ASC", params)
+        cur.execute(f"SELECT e.*, c.caption, c.status as case_status, c.county, c.filing_date FROM events e JOIN cases c ON e.docket_number = c.docket_number WHERE {' AND '.join(clauses)} ORDER BY TO_DATE(SUBSTRING(e.event_date FROM 1 FOR 10), 'MM/DD/YYYY') ASC, e.event_date ASC", params)
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -54,7 +54,7 @@ def hearings_upcoming(days: int = Query(7), county: Optional[str] = None, docket
         if event_type: clauses.append("e.event_type ILIKE %s"); params.append(f"%{event_type}%")
         where = " AND ".join(clauses) if clauses else "TRUE"
         params.append(limit)
-        cur.execute(f"SELECT e.*, c.caption, c.status as case_status, c.county, c.filing_date FROM events e JOIN cases c ON e.docket_number = c.docket_number WHERE {where} ORDER BY e.event_date ASC LIMIT %s", params)
+        cur.execute(f"SELECT e.*, c.caption, c.status as case_status, c.county, c.filing_date FROM events e JOIN cases c ON e.docket_number = c.docket_number WHERE {where} ORDER BY TO_DATE(SUBSTRING(e.event_date FROM 1 FOR 10), 'MM/DD/YYYY') ASC, e.event_date ASC LIMIT %s", params)
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -100,5 +100,5 @@ def search_events(county: Optional[str] = None, docket_type: Optional[str] = Que
             code = {"criminal": "-CR-", "civil": "-CV-", "traffic": "-TR-"}.get(docket_type.lower(), "")
             if code: clauses.append("c.docket_number LIKE %s"); params.append(f"%{code}%")
         where = " AND ".join(clauses) if clauses else "TRUE"
-        cur.execute(f"SELECT e.*, c.caption, c.status as case_status, c.county, c.filing_date FROM events e JOIN cases c ON e.docket_number = c.docket_number WHERE {where} ORDER BY e.event_date ASC LIMIT 200", params)
+        cur.execute(f"SELECT e.*, c.caption, c.status as case_status, c.county, c.filing_date FROM events e JOIN cases c ON e.docket_number = c.docket_number WHERE {where} ORDER BY TO_DATE(SUBSTRING(e.event_date FROM 1 FOR 10), 'MM/DD/YYYY') ASC, e.event_date ASC LIMIT 200", params)
         return [dict(r) for r in cur.fetchall()]

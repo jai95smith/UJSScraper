@@ -771,7 +771,7 @@ def search_by_judge(conn, judge_name, county=None, limit=100):
                c.county, c.filing_date
         FROM analyses a JOIN cases c ON a.docket_number = c.docket_number
         WHERE a.analysis->>'judge' ILIKE %s {county_clause}
-        ORDER BY c.filing_date DESC LIMIT %s
+        ORDER BY TO_DATE(c.filing_date, 'MM/DD/YYYY') DESC LIMIT %s
     """, params)
     return cur.fetchall()
 
@@ -797,7 +797,7 @@ def search_by_attorney(conn, attorney_name, role=None, county=None, limit=100):
         SELECT a.name, a.role, c.docket_number, c.caption, c.status, c.county, c.filing_date
         FROM attorneys a JOIN cases c ON a.docket_number = c.docket_number
         WHERE {' AND '.join(clauses)}
-        ORDER BY c.filing_date DESC LIMIT %s
+        ORDER BY TO_DATE(c.filing_date, 'MM/DD/YYYY') DESC LIMIT %s
     """, params)
     return cur.fetchall()
 
@@ -826,7 +826,7 @@ def search_by_charge(conn, statute=None, description=None, county=None,
         SELECT ch.*, c.caption, c.status, c.county, c.filing_date
         FROM charges ch JOIN cases c ON ch.docket_number = c.docket_number
         WHERE {' AND '.join(clauses)}
-        ORDER BY c.filing_date DESC LIMIT %s
+        ORDER BY TO_DATE(c.filing_date, 'MM/DD/YYYY') DESC LIMIT %s
     """, params)
     return cur.fetchall()
 

@@ -168,7 +168,7 @@ def _get_todays_hearings(conn, inputs):
     if inputs.get("case_type"):
         code = {"criminal": "-CR-", "civil": "-CV-", "traffic": "-TR-"}.get(inputs["case_type"].lower(), "")
         if code: clauses.append("c.docket_number LIKE %s"); params.append(f"%{code}%")
-    cur.execute(f"SELECT e.*, c.caption, c.county FROM events e JOIN cases c ON e.docket_number = c.docket_number WHERE {' AND '.join(clauses)} ORDER BY e.event_date ASC", params)
+    cur.execute(f"SELECT e.*, c.caption, c.county FROM events e JOIN cases c ON e.docket_number = c.docket_number WHERE {' AND '.join(clauses)} ORDER BY TO_DATE(SUBSTRING(e.event_date FROM 1 FOR 10), 'MM/DD/YYYY') ASC, e.event_date ASC", params)
     results = [dict(r) for r in cur.fetchall()]
     return _hearing_results_to_table(results, title=f"Hearings — {today}", empty_msg=f"No hearings today ({today})")
 
@@ -187,7 +187,7 @@ def _get_upcoming_hearings(conn, inputs):
         clauses.append("e.event_type ILIKE %s"); params.append(f"%{inputs['event_type']}%")
     where = " AND ".join(clauses) if clauses else "TRUE"
     params.append(200)
-    cur.execute(f"SELECT e.*, c.caption, c.county FROM events e JOIN cases c ON e.docket_number = c.docket_number WHERE {where} ORDER BY e.event_date ASC LIMIT %s", params)
+    cur.execute(f"SELECT e.*, c.caption, c.county FROM events e JOIN cases c ON e.docket_number = c.docket_number WHERE {where} ORDER BY TO_DATE(SUBSTRING(e.event_date FROM 1 FOR 10), 'MM/DD/YYYY') ASC, e.event_date ASC LIMIT %s", params)
     results = [dict(r) for r in cur.fetchall()]
     date_label = inputs.get('target_date', 'upcoming')
     return _hearing_results_to_table(results, title=f"Hearings — {date_label}", empty_msg=f"No hearings found for {date_label}")
