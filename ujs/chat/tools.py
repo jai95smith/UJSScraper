@@ -211,6 +211,67 @@ TOOLS = [
         },
     },
     {
+        "name": "search_docket_entries",
+        "description": "Search court docket entries (filings, motions, pleas, orders) across all cases. Full-text search on descriptions.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "search_text": {"type": "string", "description": "Text to search for (e.g. 'motion to suppress', 'guilty plea', 'probation violation')"},
+                "county": {"type": "string"},
+                "after_date": {"type": "string", "description": "Only entries after this date (MM/DD/YYYY)"},
+            },
+            "required": ["search_text"],
+        },
+    },
+    {
+        "name": "bail_analytics",
+        "description": "Get bail statistics: average amounts, common types, by charge or county. Use for questions about bail patterns.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "charge_description": {"type": "string", "description": "Filter by charge (e.g. DUI, Theft, Assault)"},
+                "county": {"type": "string"},
+                "group_by": {"type": "string", "enum": ["charge", "county", "judge"], "description": "How to group results"},
+            },
+        },
+    },
+    {
+        "name": "case_duration",
+        "description": "Calculate how long cases take from filing to disposition. Filter by charge type, county, or judge.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "charge_description": {"type": "string", "description": "Filter by charge type (e.g. DUI, Theft)"},
+                "county": {"type": "string"},
+                "judge": {"type": "string"},
+            },
+        },
+    },
+    {
+        "name": "attorney_rankings",
+        "description": "Rank attorneys by case count, win rate, or case types. Find busiest or most successful attorneys.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "county": {"type": "string"},
+                "role": {"type": "string", "description": "Defense, Public Defender, District Attorney, etc."},
+                "rank_by": {"type": "string", "enum": ["case_count", "case_type"], "description": "How to rank"},
+            },
+        },
+    },
+    {
+        "name": "sentencing_patterns",
+        "description": "Analyze sentencing patterns by judge, charge type, or county. Shows common sentence types and durations.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "judge": {"type": "string"},
+                "charge_description": {"type": "string"},
+                "county": {"type": "string"},
+            },
+        },
+    },
+    {
         "name": "run_custom_query",
         "description": """Run a custom read-only SQL query. SELECT only. Schema:
 - cases: docket_number (PK), court_type, caption, status, filing_date, county

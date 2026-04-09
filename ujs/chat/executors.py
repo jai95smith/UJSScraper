@@ -437,6 +437,179 @@ def _get_analysis_coverage(conn, inputs):
                        "note": f"{analyzed} of {total} cases ({pct}%) have full charge/bail/attorney data."})
 
 
+# ---------------------------------------------------------------------------
+# Analytics tools (questions 1-6)
+# ---------------------------------------------------------------------------
+
+def _search_docket_entries(conn, inputs):
+    search = inputs["search_text"]
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    clauses = ["to_tsvector('english', de.description) @@ plainto_tsquery('english', %s)"]
+    params = [search]
+    if inputs.get("county"):
+        clauses.append("c.county ILIKE %s")
+        params.append(inputs["county"])
+    if inputs.get("after_date"):
+        clauses.append("TO_DATE(de.entry_date, 'MM/DD/YYYY') >= TO_DATE(%s, 'MM/DD/YYYY')")
+        params.append(inputs["after_date"])
+    where = " AND ".join(clauses)
+    cur.execute(f"""
+        SELECT de.docket_number, de.entry_date, de.description, c.caption, c.county
+        FROM docket_entries de
+        JOIN cases c ON de.docket_number = c.docket_number
+        WHERE {where}
+        ORDER BY TO_DATE(de.entry_date, 'MM/DD/YYYY') DESC NULLS LAST
+        LIMIT 50
+    """, params)
+    results = [dict(r) for r in cur.fetchall()]
+    return _auto_table(results,
+                       {"Date": "entry_date", "Docket": "docket_number", "Entry": "description", "Case": "caption", "County": "county"},
+                       title=f"Docket entries matching '{search}'",
+                       empty_msg=f"No docket entries found matching '{search}'.")
+
+
+def _bail_analytics(conn, inputs):
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    group = inputs.get("group_by", "charge")
+    clauses = ["b.amount IS NOT NULL", "b.amount != ''", "b.amount != '$0.00'"]
+    params = []
+    if inputs.get("charge_description"):
+        clauses.append("ch.description ILIKE %s")
+        params.append(f"%{inputs['charge_description']}%")
+    if inputs.get("county"):
+        clauses.append("c.county ILIKE %s")
+        params.append(inputs["county"])
+    where = " AND ".join(clauses)
+
+    if group == "judge":
+        group_col = "a.analysis->>'judge'"
+        group_label = "Judge"
+    elif group == "county":
+        group_col = "c.county"
+        group_label = "County"
+    else:
+        group_col = "ch.description"
+        group_label = "Charge"
+
+    cur.execute(f"""
+        SELECT {group_col} as group_label,
+               COUNT(*) as cases,
+               ROUND(AVG(REPLACE(REPLACE(b.amount, '$', ''), ',', '')::numeric)) as avg_bail,
+               ROUND(MIN(REPLACE(REPLACE(b.amount, '$', ''), ',', '')::numeric)) as min_bail,
+               ROUND(MAX(REPLACE(REPLACE(b.amount, '$', ''), ',', '')::numeric)) as max_bail
+        FROM bail b
+        JOIN cases c ON b.docket_number = c.docket_number
+        LEFT JOIN charges ch ON b.docket_number = ch.docket_number AND ch.seq = 1
+        LEFT JOIN analyses a ON b.docket_number = a.docket_number
+        WHERE {where}
+        GROUP BY {group_col}
+        HAVING COUNT(*) >= 2
+        ORDER BY avg_bail DESC
+        LIMIT 20
+    """, params)
+    results = [dict(r) for r in cur.fetchall()]
+    for r in results:
+        for f in ["avg_bail", "min_bail", "max_bail"]:
+            if r.get(f): r[f] = f"${int(r[f]):,}"
+    return _auto_table(results,
+                       {group_label: "group_label", "Cases": "cases", "Avg Bail": "avg_bail", "Min": "min_bail", "Max": "max_bail"},
+                       title="Bail Statistics", empty_msg="No bail data found for these filters.")
+
+
+def _case_duration(conn, inputs):
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    clauses = ["ch.disposition IS NOT NULL", "ch.disposition != ''",
+               "ch.disposition_date IS NOT NULL", "ch.disposition_date != ''",
+               "c.filing_date IS NOT NULL", "c.filing_date != ''"]
+    params = []
+    if inputs.get("charge_description"):
+        clauses.append("ch.description ILIKE %s")
+        params.append(f"%{inputs['charge_description']}%")
+    if inputs.get("county"):
+        clauses.append("c.county ILIKE %s")
+        params.append(inputs["county"])
+    if inputs.get("judge"):
+        clauses.append("a.analysis->>'judge' ILIKE %s")
+        params.append(f"%{inputs['judge']}%")
+    where = " AND ".join(clauses)
+    cur.execute(f"""
+        SELECT ch.description as charge,
+               COUNT(*) as cases,
+               ROUND(AVG(TO_DATE(ch.disposition_date, 'MM/DD/YYYY') - TO_DATE(c.filing_date, 'MM/DD/YYYY'))) as avg_days,
+               ROUND(MIN(TO_DATE(ch.disposition_date, 'MM/DD/YYYY') - TO_DATE(c.filing_date, 'MM/DD/YYYY'))) as min_days,
+               ROUND(MAX(TO_DATE(ch.disposition_date, 'MM/DD/YYYY') - TO_DATE(c.filing_date, 'MM/DD/YYYY'))) as max_days
+        FROM charges ch
+        JOIN cases c ON ch.docket_number = c.docket_number
+        LEFT JOIN analyses a ON ch.docket_number = a.docket_number
+        WHERE {where}
+        GROUP BY ch.description
+        HAVING COUNT(*) >= 3
+        ORDER BY avg_days DESC
+        LIMIT 20
+    """, params)
+    results = [dict(r) for r in cur.fetchall()]
+    return _auto_table(results,
+                       {"Charge": "charge", "Cases": "cases", "Avg Days": "avg_days", "Min": "min_days", "Max": "max_days"},
+                       title="Case Duration (Filing to Disposition)", empty_msg="Not enough disposed cases found.")
+
+
+def _attorney_rankings(conn, inputs):
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    clauses = ["att.name IS NOT NULL", "att.name != ''"]
+    params = []
+    if inputs.get("county"):
+        clauses.append("c.county ILIKE %s")
+        params.append(inputs["county"])
+    if inputs.get("role"):
+        clauses.append("att.role ILIKE %s")
+        params.append(f"%{inputs['role']}%")
+    where = " AND ".join(clauses)
+    cur.execute(f"""
+        SELECT att.name, att.role, COUNT(DISTINCT att.docket_number) as case_count, c.county
+        FROM attorneys att
+        JOIN cases c ON att.docket_number = c.docket_number
+        WHERE {where}
+        GROUP BY att.name, att.role, c.county
+        ORDER BY case_count DESC
+        LIMIT 20
+    """, params)
+    results = [dict(r) for r in cur.fetchall()]
+    return _auto_table(results,
+                       {"Attorney": "name", "Role": "role", "Cases": "case_count", "County": "county"},
+                       title="Attorney Rankings", empty_msg="No attorneys found.")
+
+
+def _sentencing_patterns(conn, inputs):
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    clauses = ["s.sentence_type IS NOT NULL", "s.sentence_type != ''"]
+    params = []
+    if inputs.get("judge"):
+        clauses.append("a.analysis->>'judge' ILIKE %s")
+        params.append(f"%{inputs['judge']}%")
+    if inputs.get("charge_description"):
+        clauses.append("s.charge ILIKE %s")
+        params.append(f"%{inputs['charge_description']}%")
+    if inputs.get("county"):
+        clauses.append("c.county ILIKE %s")
+        params.append(inputs["county"])
+    where = " AND ".join(clauses)
+    cur.execute(f"""
+        SELECT a.analysis->>'judge' as judge, s.sentence_type, COUNT(*) as count,
+               s.charge, s.duration
+        FROM sentences s
+        JOIN cases c ON s.docket_number = c.docket_number
+        LEFT JOIN analyses a ON s.docket_number = a.docket_number
+        WHERE {where}
+        GROUP BY a.analysis->>'judge', s.sentence_type, s.charge, s.duration
+        ORDER BY count DESC
+        LIMIT 30
+    """, params)
+    results = [dict(r) for r in cur.fetchall()]
+    return _auto_table(results,
+                       {"Judge": "judge", "Charge": "charge", "Sentence": "sentence_type", "Duration": "duration", "Count": "count"},
+                       title="Sentencing Patterns", empty_msg="No sentencing data found.")
+
+
 def _render_table(conn, inputs):
     headers = inputs.get("headers", [])
     rows = inputs.get("rows", [])
@@ -686,6 +859,11 @@ HANDLERS = {
     "get_upcoming_hearings": _get_upcoming_hearings,
     "live_search_ujs": _live_search_ujs,
     "get_stats_query": _get_stats_query,
+    "search_docket_entries": _search_docket_entries,
+    "bail_analytics": _bail_analytics,
+    "case_duration": _case_duration,
+    "attorney_rankings": _attorney_rankings,
+    "sentencing_patterns": _sentencing_patterns,
     "run_custom_query": _run_custom_query,
     "get_analysis_coverage": _get_analysis_coverage,
     "render_table": _render_table,
