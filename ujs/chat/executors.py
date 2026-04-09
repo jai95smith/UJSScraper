@@ -71,14 +71,16 @@ def _find_all_cases_for_person(conn, name, county=None):
     name_parts = [w for w in name.replace(",", " ").split() if w]
     word_clauses = " AND ".join(["p.name ILIKE %s"] * len(name_parts))
     word_params = [f"%{w}%" for w in name_parts]
-    county_clause = ""
+    extra_where = ""
     if county:
-        county_clause = "AND c.county ILIKE %s"
+        extra_where = "AND c.county ILIKE %s"
         word_params.append(county)
     cur.execute(f"""
-        SELECT DISTINCT c.* FROM participants p
-        JOIN cases c ON p.docket_number = c.docket_number
-        WHERE {word_clauses} {county_clause}
+        SELECT c.* FROM cases c
+        WHERE c.docket_number IN (
+            SELECT DISTINCT p.docket_number FROM participants p
+            WHERE {word_clauses}
+        ) {extra_where}
         ORDER BY TO_DATE(c.filing_date, 'MM/DD/YYYY') DESC NULLS LAST
         LIMIT 50
     """, word_params)
