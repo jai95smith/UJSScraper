@@ -16,6 +16,22 @@ def execute_tool(name, inputs):
     return f"Unknown tool: {name}"
 
 
+def _auto_table(results, columns, title="", empty_msg="No results found."):
+    """Auto-format a list of dicts into a table-injectable response.
+    Returns JSON with _table key for auto-injection by jobs.py.
+    Claude receives only the summary text — no render_table call needed."""
+    if not results:
+        return empty_msg
+    rows = []
+    for r in results:
+        row = [str(r.get(c, "") or "") for c in columns.values()]
+        rows.append(row)
+    headers = list(columns.keys())
+    table = {"title": title, "headers": headers, "rows": rows}
+    summary = f"Found {len(rows)} results."
+    return json.dumps({"_summary": summary, "_table": table})
+
+
 # ---------------------------------------------------------------------------
 # Lookup tools
 # ---------------------------------------------------------------------------
@@ -78,37 +94,70 @@ def _get_docket_events(conn, inputs):
 # Search tools
 # ---------------------------------------------------------------------------
 
+_CASE_COLS = {"Docket": "docket_number", "Caption": "caption", "County": "county", "Status": "status", "Filed": "filing_date"}
+
+
 def _search_cases(conn, inputs):
     results = db.search_cases(conn, name=inputs.get("name"), county=inputs.get("county"),
                               status=inputs.get("case_status"), docket_type=inputs.get("case_type"),
                               filed_after=inputs.get("filed_after"), filed_before=inputs.get("filed_before"), limit=20)
-    return json.dumps([dict(r) for r in results], default=str) if results else "No cases found."
+    return _auto_table([dict(r) for r in results], _CASE_COLS, empty_msg="No cases found.")
 
 
 def _fuzzy_name_search(conn, inputs):
     results = db.fuzzy_name_search(conn, inputs["name"], limit=10)
-    return json.dumps([dict(r) for r in results], default=str) if results else f"No close matches found for: {inputs['name']}"
+    return _auto_table([dict(r) for r in results], _CASE_COLS, empty_msg=f"No close matches found for: {inputs['name']}")
 
 
 def _search_by_judge(conn, inputs):
     results = db.search_by_judge(conn, inputs["judge_name"], county=inputs.get("county"), limit=20)
-    return json.dumps([dict(r) for r in results], default=str) if results else f"No cases found for judge: {inputs['judge_name']}"
+    return _auto_table([dict(r) for r in results], _CASE_COLS, empty_msg=f"No cases found for judge: {inputs['judge_name']}")
 
 
 def _search_by_attorney(conn, inputs):
     results = db.search_by_attorney(conn, inputs["attorney_name"], role=inputs.get("role"), county=inputs.get("county"), limit=20)
-    return json.dumps([dict(r) for r in results], default=str) if results else f"No cases found for attorney: {inputs['attorney_name']}"
+    return _auto_table([dict(r) for r in results], _CASE_COLS, empty_msg=f"No cases found for attorney: {inputs['attorney_name']}")
 
 
 def _search_by_charge(conn, inputs):
     results = db.search_by_charge(conn, statute=inputs.get("statute"), description=inputs.get("description"),
                                    disposition=inputs.get("disposition"), county=inputs.get("county"), limit=20)
-    return json.dumps([dict(r) for r in results], default=str) if results else "No charges found."
+    return _auto_table([dict(r) for r in results],
+                       {"Docket": "docket_number", "Charge": "description", "Statute": "statute", "Disposition": "disposition", "County": "county"},
+                       empty_msg="No charges found.")
 
 
 # ---------------------------------------------------------------------------
 # Hearing tools
 # ---------------------------------------------------------------------------
+
+_HEARING_COLS = {"Time": "event_date", "Type": "event_type", "Docket": "docket_number", "Case": "caption", "Location": "event_location"}
+
+
+def _format_hearing_time(date_str):
+    """Extract time from 'MM/DD/YYYY HH:MM AM/PM' format."""
+    if not date_str:
+        return ""
+    parts = str(date_str).split(" ", 1)
+    return parts[1] if len(parts) > 1 else parts[0]
+
+
+def _hearing_results_to_table(results, title="", empty_msg="No hearings found."):
+    if not results:
+        return empty_msg
+    rows = []
+    for r in results:
+        rows.append([
+            _format_hearing_time(r.get("event_date", "")),
+            str(r.get("event_type", "")),
+            str(r.get("docket_number", "")),
+            str(r.get("caption", "")),
+            str(r.get("event_location", "")),
+        ])
+    table = {"title": title, "headers": list(_HEARING_COLS.keys()), "rows": rows}
+    summary = f"Found {len(rows)} hearings."
+    return json.dumps({"_summary": summary, "_table": table})
+
 
 def _get_todays_hearings(conn, inputs):
     today = datetime.now().strftime("%m/%d/%Y")
@@ -120,8 +169,8 @@ def _get_todays_hearings(conn, inputs):
         code = {"criminal": "-CR-", "civil": "-CV-", "traffic": "-TR-"}.get(inputs["case_type"].lower(), "")
         if code: clauses.append("c.docket_number LIKE %s"); params.append(f"%{code}%")
     cur.execute(f"SELECT e.*, c.caption, c.county FROM events e JOIN cases c ON e.docket_number = c.docket_number WHERE {' AND '.join(clauses)} ORDER BY e.event_date ASC", params)
-    results = cur.fetchall()
-    return json.dumps([dict(r) for r in results], default=str) if results else f"No hearings today ({today})"
+    results = [dict(r) for r in cur.fetchall()]
+    return _hearing_results_to_table(results, title=f"Hearings — {today}", empty_msg=f"No hearings today ({today})")
 
 
 def _get_upcoming_hearings(conn, inputs):
@@ -139,8 +188,9 @@ def _get_upcoming_hearings(conn, inputs):
     where = " AND ".join(clauses) if clauses else "TRUE"
     params.append(200)
     cur.execute(f"SELECT e.*, c.caption, c.county FROM events e JOIN cases c ON e.docket_number = c.docket_number WHERE {where} ORDER BY e.event_date ASC LIMIT %s", params)
-    results = cur.fetchall()
-    return json.dumps([dict(r) for r in results], default=str) if results else f"No hearings found for {inputs.get('target_date', 'the specified period')}"
+    results = [dict(r) for r in cur.fetchall()]
+    date_label = inputs.get('target_date', 'upcoming')
+    return _hearing_results_to_table(results, title=f"Hearings — {date_label}", empty_msg=f"No hearings found for {date_label}")
 
 
 # ---------------------------------------------------------------------------

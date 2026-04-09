@@ -101,6 +101,34 @@ def _save_to_conversation(conversation_id, response_text):
         pass
 
 
+def _process_tool_result(result, job_id, silent=False):
+    """Process a tool result — detect _table auto-inject and TABLE_INJECT markers.
+    Returns the cleaned result text for Claude (without table data)."""
+    if not result or not isinstance(result, str):
+        return result or ""
+
+    # Auto-table from data tools: {"_summary": "...", "_table": {...}}
+    try:
+        parsed = json.loads(result)
+        if isinstance(parsed, dict) and "_table" in parsed:
+            table_json = json.dumps(parsed["_table"])
+            if not silent:
+                _update_job(job_id, append_response=f"\n\n```table\n{table_json}\n```\n\n")
+            return parsed.get("_summary", f"Table with {len(parsed['_table'].get('rows', []))} rows rendered.")
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    # Legacy TABLE_INJECT marker from render_table
+    if "<!--TABLE_INJECT:" in result:
+        start = result.index("<!--TABLE_INJECT:") + 17
+        end = result.index(":TABLE_INJECT-->")
+        table_json = result[start:end]
+        if not silent:
+            _update_job(job_id, append_response=f"\n\n```table\n{table_json}\n```\n\n")
+        return result[:result.index("<!--TABLE_INJECT:")]
+
+    return result
+
 
 
 
@@ -135,15 +163,7 @@ def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=F
                         if not silent:
                             _update_job(job_id, append_tool=block.name)
                         result = execute_tool(block.name, block.input)
-                        # Handle large table injection — write directly to DB response
-                        clean_result = result
-                        if "<!--TABLE_INJECT:" in result:
-                            start = result.index("<!--TABLE_INJECT:") + 17
-                            end = result.index(":TABLE_INJECT-->")
-                            table_json = result[start:end]
-                            if not silent:
-                                _update_job(job_id, append_response=f"\n\n```table\n{table_json}\n```\n\n")
-                            clean_result = result[:result.index("<!--TABLE_INJECT:")]
+                        clean_result = _process_tool_result(result, job_id, silent=silent)
                         tool_results.append({
                             "type": "tool_result",
                             "tool_use_id": block.id,
@@ -287,14 +307,7 @@ def _streamed_turn(client, system, tools, messages, job_id):
             except json.JSONDecodeError:
                 inp = {}
             result = execute_tool(tb["name"], inp)
-            # Handle large table injection
-            clean_result = result
-            if "<!--TABLE_INJECT:" in result:
-                start = result.index("<!--TABLE_INJECT:") + 17
-                end = result.index(":TABLE_INJECT-->")
-                table_json = result[start:end]
-                _update_job(job_id, append_response=f"\n\n```table\n{table_json}\n```\n\n")
-                clean_result = result[:result.index("<!--TABLE_INJECT:")]
+            clean_result = _process_tool_result(result, job_id)
             tool_results.append({"type": "tool_result", "tool_use_id": bid, "content": clean_result})
         if tool_results:
             messages.append({"role": "user", "content": tool_results})
