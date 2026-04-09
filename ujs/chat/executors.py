@@ -410,8 +410,12 @@ def _run_custom_query(conn, inputs):
         cur.execute("RESET transaction_read_only")
         return json.dumps([dict(r) for r in rows[:100]], default=str)
     except Exception as e:
-        cur.execute("RESET transaction_read_only")
-        # Don't leak DB internals — generic message
+        conn.rollback()  # Clear aborted transaction before RESET
+        try:
+            cur.execute("RESET statement_timeout")
+            cur.execute("RESET transaction_read_only")
+        except Exception:
+            conn.rollback()
         return "Query failed. Check SQL syntax and try again."
 
 
