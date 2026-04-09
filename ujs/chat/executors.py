@@ -7,13 +7,32 @@ from datetime import datetime
 from ujs import db
 
 
+import logging, traceback
+_logger = logging.getLogger("ujs.tools")
+
+
 def execute_tool(name, inputs):
-    """Route a tool call to the appropriate executor."""
-    with db.connect() as conn:
-        handler = HANDLERS.get(name)
-        if handler:
+    """Route a tool call to the appropriate executor. Logs errors to DB."""
+    handler = HANDLERS.get(name)
+    if not handler:
+        return f"Unknown tool: {name}"
+    try:
+        with db.connect() as conn:
             return handler(conn, inputs)
-    return f"Unknown tool: {name}"
+    except Exception as e:
+        error_msg = str(e)[:300]
+        _logger.error(f"Tool {name} failed: {error_msg}\nInputs: {inputs}\n{traceback.format_exc()}")
+        # Log to DB for debugging
+        try:
+            with db.connect() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    INSERT INTO system_log (component, level, message, details)
+                    VALUES ('tool', 'error', %s, %s)
+                """, (f"{name}: {error_msg}", json.dumps({"inputs": inputs, "traceback": traceback.format_exc()[-500:]})))
+        except Exception:
+            pass
+        return f"Tool error: {error_msg}. Try rephrasing your question."
 
 
 def _auto_table(results, columns, title="", empty_msg="No results found."):
