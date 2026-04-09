@@ -83,7 +83,7 @@ def set_cached_response(question, response):
     r = _get_redis()
     if not r:
         return
-    if _PERSON_PATTERNS.search(question):
+    if _is_person_query(question):
         return
     key = _cache_key("resp", normalize_query(question))
     try:
