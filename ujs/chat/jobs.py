@@ -192,11 +192,17 @@ def _streamed_turn(client, system, tools, messages, job_id):
             return
         if fence_depth > 0 and not force:
             return  # Hold fenced content
+        # Clean any leaked tool XML
+        clean = re.sub(r'<invoke\b[^>]*>.*?</invoke>', '', buffer, flags=re.DOTALL)
+        clean = re.sub(r'<invoke\b[^>]*>.*', '', clean, flags=re.DOTALL)  # partial invoke at end
+        if not clean.strip():
+            buffer = ""
+            return
         if first_text:
-            _update_job(job_id, append_response="\n\n" + buffer)
+            _update_job(job_id, append_response="\n\n" + clean)
             first_text = False
         else:
-            _update_job(job_id, append_response=buffer)
+            _update_job(job_id, append_response=clean)
         buffer = ""
         last_flush = time.time()
 
@@ -363,6 +369,8 @@ def _run_job(job_id, question, history, conversation_id=None):
         # Strip the status prefix for saving
         idx = full_response.find("\n\n")
         save_text = full_response[idx + 2:] if idx >= 0 else full_response
+        # Clean any leaked tool XML from response
+        save_text = re.sub(r'<invoke\b[^>]*>.*?</invoke>', '', save_text, flags=re.DOTALL).strip()
 
         # ---------------------------------------------------------------
         # Pass 2: News search (non-blocking — user sees court data immediately)
