@@ -2,7 +2,7 @@
 
 {% block body %}
 <!-- Nav -->
-<nav class="bg-navy flex items-center justify-between px-6 md:px-10 h-16 border-b border-navy-border">
+<nav class="bg-navy flex items-center px-6 md:px-10 h-16 border-b border-navy-border relative">
   <!-- Left: auth -->
   <div>
   {% if user %}
@@ -46,10 +46,10 @@
   <a href="/login" class="text-[11px] font-medium text-navy bg-gold hover:bg-gold-dim rounded px-4 py-[7px]">Sign in</a>
   {% endif %}
   </div>
-  <!-- Right: logo -->
-  <a href="/" class="flex items-center gap-3 no-underline">
-    <span class="text-[15px] font-semibold text-court-bright">Gavel<span class="text-gold">Search</span></span>
+  <!-- Center: logo -->
+  <a href="/" class="flex items-center gap-3 no-underline absolute left-1/2 -translate-x-1/2">
     <img src="/static/img/logo-light.svg" class="w-9 h-9 shrink-0" alt="GavelSearch">
+    <span class="text-[15px] font-semibold text-court-bright">Gavel<span class="text-gold">Search</span></span>
   </a>
 </nav>
 
