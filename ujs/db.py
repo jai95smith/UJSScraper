@@ -170,10 +170,10 @@ def search_cases(conn, county=None, status=None, docket_type=None,
             clauses.append("c.docket_number LIKE %s")
             params.append(f"%{code}%")
     if filed_after:
-        clauses.append("c.filing_date >= %s")
+        clauses.append("TO_DATE(c.filing_date, 'MM/DD/YYYY') >= TO_DATE(%s, 'MM/DD/YYYY')")
         params.append(filed_after)
     if filed_before:
-        clauses.append("c.filing_date <= %s")
+        clauses.append("TO_DATE(c.filing_date, 'MM/DD/YYYY') <= TO_DATE(%s, 'MM/DD/YYYY')")
         params.append(filed_before)
     if name:
         # Handle "First Last" → also search "Last, First" and each word separately
@@ -207,7 +207,7 @@ def search_cases(conn, county=None, status=None, docket_type=None,
     cur.execute(f"""
         SELECT c.* FROM cases c
         WHERE {where}
-        ORDER BY c.filing_date DESC
+        ORDER BY TO_DATE(c.filing_date, 'MM/DD/YYYY') DESC
         LIMIT %s
     """, params)
     return cur.fetchall()
