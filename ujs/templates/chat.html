@@ -124,6 +124,7 @@ let allChats = [];
 let currentChatId = null;
 let chartInstances = {};
 let watchedDockets = new Set();
+let _abortController = null; // Cancels active SSE/poll when switching chats
 
 function apiFetch(url, opts = {}) {
   opts.headers = { ...opts.headers, 'Authorization': 'Bearer ' + USER_TOKEN };
@@ -202,12 +203,17 @@ function showWelcome() {
 }
 
 /* --- Chat management --- */
+function _cancelActivePoll() {
+  if (_abortController) { _abortController.abort(); _abortController = null; }
+}
 function newChat() {
+  _cancelActivePoll();
   currentChatId = null;
   history.pushState({}, '', '/chat');
   showWelcome(); renderChatList(); input.focus(); closeMobileSidebar();
 }
 async function loadChat(id) {
+  _cancelActivePoll();
   const conv = await loadConversation(id);
   if (!conv) { history.replaceState({}, '', '/chat'); newChat(); return; }
   currentChatId = id;
@@ -372,16 +378,8 @@ async function checkRunningJob(convId) {
       document.getElementById('btn-text').classList.remove('hidden');
       document.getElementById('btn-spin').classList.add('hidden');
       statusEl.classList.add('opacity-50');
-    } else if (data.status === 'completed' && data.job_id) {
-      // Job finished while we were away — reload conversation to show response
-      await loadChat(convId);
     } else {
-      // No job found — show retry
-      const conv = await loadConversation(convId);
-      const lastMsg = (conv.messages || []).slice(-1)[0];
-      if (lastMsg && lastMsg.role === 'user') {
-        messages.insertAdjacentHTML('beforeend', retryBubble(lastMsg.content));
-      }
+      // Job completed or not found — no action needed, conversation already rendered
     }
   } catch(e) {
     // No job endpoint or error — show retry
@@ -447,10 +445,14 @@ async function pollJob(jobId, statusEl, contentEl, msgId, convId) {
   const dotsEl = document.getElementById(statusEl.id + '-dots');
   const state = { seen: 0, lastToolCount: 0, statusEl, statusTextEl, dotsEl, contentEl, msgId };
 
+  // Create abort controller for this poll — cancelled when switching chats
+  _abortController = new AbortController();
+  const signal = _abortController.signal;
+
   // Try SSE first
   const sseUrl = API + '/ask/job/' + jobId + '/stream?cid=' + (convId || '');
   try {
-    const sseRes = await fetch(sseUrl, { headers: { 'Authorization': 'Bearer ' + USER_TOKEN } });
+    const sseRes = await fetch(sseUrl, { headers: { 'Authorization': 'Bearer ' + USER_TOKEN }, signal });
     if (sseRes.ok && sseRes.headers.get('content-type')?.includes('text/event-stream')) {
       const reader = sseRes.body.getReader();
       const decoder = new TextDecoder();
@@ -482,7 +484,7 @@ async function pollJob(jobId, statusEl, contentEl, msgId, convId) {
   } catch(e) { /* SSE failed — fall through to polling */ }
 
   // Fallback: HTTP polling
-  while (true) {
+  while (!signal.aborted) {
     try {
       const res = await apiFetch(API + '/ask/job/' + jobId + '?after=' + state.seen + (convId ? '&cid=' + convId : ''));
       const data = await res.json();
