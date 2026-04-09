@@ -46,10 +46,29 @@ DTYPE_MAP = {
 # Session / helpers
 # ---------------------------------------------------------------------------
 
+import os as _os
+import itertools as _itertools
+
+# Proxy pool — round-robin across multiple IPs to avoid rate limits
+_PROXY_LIST = [p.strip() for p in _os.environ.get("UJS_PROXIES", "").split(",") if p.strip()]
+_proxy_cycle = _itertools.cycle(_PROXY_LIST) if _PROXY_LIST else None
+
+
+def _next_proxy():
+    """Get next proxy from pool, or None for direct connection."""
+    if _proxy_cycle:
+        proxy = next(_proxy_cycle)
+        return {"http": f"http://{proxy}", "https": f"http://{proxy}"}
+    return None
+
+
 def get_session():
-    """Create a requests session with CSRF token."""
+    """Create a requests session with CSRF token. Uses proxy pool if configured."""
     s = requests.Session()
     s.headers["User-Agent"] = "UJSCourtSearch/1.0 (Jai Smith; LehighDaily.com; jsmith@lehighdaily.com)"
+    proxy = _next_proxy()
+    if proxy:
+        s.proxies.update(proxy)
     r = s.get(SEARCH_URL)
     r.raise_for_status()
     m = re.search(

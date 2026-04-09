@@ -19,49 +19,63 @@ _worker_running = False
 
 
 def _queue_worker():
-    """Continuous analysis worker. Single-threaded with rate limiting."""
+    """Continuous analysis worker. Parallel threads, one per proxy IP."""
     global _worker_running
+    import os
     from ujs.modules.ingest import deep_analyze_docket
 
     _worker_running = True
     _recent = set()
-    _delay = 10  # Base delay between requests (seconds)
+    proxies = [p.strip() for p in os.environ.get("UJS_PROXIES", "").split(",") if p.strip()]
+    num_workers = max(len(proxies), 1)
+    print(f"[worker] Starting {num_workers} threads ({len(proxies)} proxies)")
 
-    while _worker_running:
-        try:
-            with db.connect() as conn:
-                job = db.claim_ingest_job(conn)
-            if job:
-                job_id, docket_number = job
-                if docket_number in _recent:
-                    time.sleep(1)
-                    continue
-                _recent.add(docket_number)
-                if len(_recent) > 200:
-                    _recent.clear()
-                print(f"[worker] Processing {docket_number}")
-                try:
-                    deep_analyze_docket(docket_number)
-                    with db.connect() as conn:
-                        db.complete_ingest_job(conn, job_id)
-                    print(f"[worker] Done {docket_number}")
-                    _delay = 3  # Reset delay on success
-                except Exception as e:
-                    err = str(e)
-                    if "429" in err:
-                        _delay = min(_delay * 2, 60)  # Exponential backoff, max 60s
-                        print(f"[worker] Rate limited — backing off {_delay}s")
-                        time.sleep(_delay)
-                    else:
-                        print(f"[worker] Error {docket_number}: {e}")
-                    with db.connect() as conn:
-                        db.complete_ingest_job(conn, job_id, error=err[:200])
-                time.sleep(_delay)
-            else:
-                time.sleep(10)
-        except Exception as e:
-            print(f"[worker] Connection error: {e}")
-            time.sleep(30)
+    def _single_worker(worker_id):
+        delay = 3
+        while _worker_running:
+            try:
+                with db.connect() as conn:
+                    job = db.claim_ingest_job(conn)
+                if job:
+                    job_id, docket_number = job
+                    if docket_number in _recent:
+                        time.sleep(1)
+                        continue
+                    _recent.add(docket_number)
+                    if len(_recent) > 500:
+                        _recent.clear()
+                    try:
+                        deep_analyze_docket(docket_number)
+                        with db.connect() as conn:
+                            db.complete_ingest_job(conn, job_id)
+                        print(f"[w{worker_id}] Done {docket_number}")
+                        delay = 3
+                    except Exception as e:
+                        err = str(e)
+                        if "429" in err:
+                            delay = min(delay * 2, 60)
+                            print(f"[w{worker_id}] Rate limited — {delay}s")
+                            time.sleep(delay)
+                        else:
+                            print(f"[w{worker_id}] Error {docket_number}: {err[:100]}")
+                        with db.connect() as conn:
+                            db.complete_ingest_job(conn, job_id, error=err[:200])
+                    time.sleep(delay)
+                else:
+                    time.sleep(10)
+            except Exception as e:
+                print(f"[w{worker_id}] Connection error: {e}")
+                time.sleep(30)
+
+    threads = []
+    for i in range(num_workers):
+        t = threading.Thread(target=_single_worker, args=(i,), daemon=True)
+        t.start()
+        threads.append(t)
+        time.sleep(0.5)
+
+    for t in threads:
+        t.join()
 
 
 @asynccontextmanager
