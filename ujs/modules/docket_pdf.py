@@ -89,12 +89,19 @@ GEMINI_SCHEMA = {
 
 GEMINI_PROMPT = """Extract structured data from this PA court docket sheet. Copy values exactly as they appear in the document — do not rephrase, reformat, summarize, or abbreviate any field values. Every string value must be a verbatim copy from the source text.
 
+CRITICAL — EXTRACT EVERY FIELD. Do not leave fields empty/null if the data exists anywhere in the document:
+- BAIL: Look for "Bail" section. Extract type, amount, and status. Common values: "Monetary", "ROR", "Unsecured". Status is usually "Set", "Posted", "Revoked", or "Denied". If bail information exists ANYWHERE in the document, you MUST extract it.
+- DISPOSITIONS: Look in the "Charges" or "Disposition" section. If a charge has any disposition (Guilty Plea, Nolle Prossed, Dismissed, etc.), extract it. Do not leave disposition null if it appears in the document.
+- SENTENCES: Look for "Sentence" section or sentencing information within charges. Extract all sentences including probation, incarceration, fines.
+- ATTORNEYS: Look for "Attorneys" or "Counsel" section. Extract name and role (Defense, Prosecution, etc.).
+
 FORMAT RULES:
 - ALL dates: MM/DD/YYYY (e.g. 01/08/2025). Never YYYY-MM-DD.
 - ALL currency: include $ and commas (e.g. $7,500.00).
 - Statute numbers: exact as printed (e.g. "18 § 3929 §§ A1"), no added whitespace.
 - Sentence durations: copy verbatim from the document (e.g. "Min of 3.00 Months Max of 23.00 Months 29.00 Days").
-- Do not add words, reorder, or paraphrase any values."""
+- Do not add words, reorder, or paraphrase any values.
+- If a field genuinely does not exist in the document, use null. But NEVER use null for data that IS present."""
 
 SUMMARY_SCHEMA = {
     "type": "object",
