@@ -1,5 +1,6 @@
 """Search + Quick Access routes."""
 
+import random
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Query
 from typing import Optional
@@ -7,6 +8,116 @@ from typing import Optional
 from ujs import db
 
 router = APIRouter()
+
+
+# --- Suggestions & Autocomplete ---
+
+_suggestions_cache = {"data": [], "expires": 0}
+
+
+@router.get("/suggestions", tags=["Search"])
+def get_suggestions():
+    """Dynamic query suggestions based on real data. Cached 1 hour."""
+    import time
+    now = time.time()
+    if now < _suggestions_cache["expires"] and _suggestions_cache["data"]:
+        return random.sample(_suggestions_cache["data"], min(6, len(_suggestions_cache["data"])))
+
+    suggestions = []
+    try:
+        with db.connect() as conn:
+            cur = db._dict_cur(conn)
+            today = datetime.now().strftime("%m/%d/%Y")
+            tomorrow = (datetime.now() + timedelta(days=1)).strftime("%m/%d/%Y")
+
+            # Count today's hearings
+            cur.execute("SELECT COUNT(*) as c FROM events WHERE event_date LIKE %s", (today + "%",))
+            today_count = cur.fetchone()["c"]
+            if today_count:
+                suggestions.append(f"Show today's {today_count} hearings")
+
+            # Count tomorrow's hearings
+            cur.execute("SELECT COUNT(*) as c FROM events WHERE event_date LIKE %s", (tomorrow + "%",))
+            tmrw_count = cur.fetchone()["c"]
+            if tmrw_count:
+                suggestions.append(f"What hearings are scheduled tomorrow?")
+
+            # Recent notable filing
+            cur.execute("""
+                SELECT c.caption, c.county FROM cases c
+                WHERE c.docket_number LIKE '%%-CR-%%'
+                AND c.filing_date IS NOT NULL AND c.filing_date != ''
+                ORDER BY TO_DATE(c.filing_date, 'MM/DD/YYYY') DESC LIMIT 5
+            """)
+            recent = cur.fetchall()
+            if recent:
+                r = random.choice(recent)
+                name = r["caption"].split(" v. ")[-1] if " v. " in r["caption"] else r["caption"]
+                suggestions.append(f"What is {name} charged with?")
+
+            # Random judge
+            cur.execute("SELECT DISTINCT analysis->>'judge' as j FROM analyses WHERE analysis->>'judge' IS NOT NULL AND analysis->>'judge' != '' ORDER BY RANDOM() LIMIT 1")
+            judge = cur.fetchone()
+            if judge and judge["j"]:
+                suggestions.append(f"Show cases for Judge {judge['j'].split(',')[0]}")
+
+            # Always include these
+            suggestions.extend([
+                "Criminal filings this week in Lehigh",
+                "Average bail for DUI cases",
+                "Busiest defense attorneys in Lehigh",
+                "How long do theft cases take to resolve?",
+                "Sentencing patterns for assault charges",
+                "Search docket entries for motion to suppress",
+            ])
+
+            _suggestions_cache["data"] = suggestions
+            _suggestions_cache["expires"] = now + 3600
+    except Exception:
+        suggestions = [
+            "What hearings are scheduled tomorrow?",
+            "Criminal cases filed this week",
+            "Average bail for DUI cases",
+            "Busiest defense attorneys",
+            "How long do theft cases take?",
+            "Search for motion to suppress filings",
+        ]
+
+    return random.sample(suggestions, min(6, len(suggestions)))
+
+
+@router.get("/autocomplete", tags=["Search"])
+def autocomplete(q: str = Query(..., min_length=2, max_length=100)):
+    """Autocomplete for participant names and docket numbers."""
+    results = []
+    with db.connect() as conn:
+        cur = db._dict_cur(conn)
+        q_clean = q.strip()
+
+        # Docket number prefix
+        if any(q_clean.upper().startswith(p) for p in ["CP-", "MJ-", "MD-"]):
+            cur.execute("""
+                SELECT docket_number, caption, county FROM cases
+                WHERE docket_number ILIKE %s
+                ORDER BY docket_number LIMIT 8
+            """, (q_clean + "%",))
+            for r in cur.fetchall():
+                results.append({"type": "docket", "value": r["docket_number"], "label": f"{r['docket_number']} — {r['caption']}"})
+        else:
+            # Name search
+            cur.execute("""
+                SELECT DISTINCT p.name, COUNT(DISTINCT p.docket_number) as cases
+                FROM participants p
+                WHERE p.name ILIKE %s
+                GROUP BY p.name
+                ORDER BY cases DESC
+                LIMIT 8
+            """, (f"%{q_clean}%",))
+            for r in cur.fetchall():
+                cases = r["cases"]
+                results.append({"type": "name", "value": r["name"], "label": f"{r['name']} ({cases} case{'s' if cases != 1 else ''})"})
+
+    return results
 
 
 # --- Quick Access ---

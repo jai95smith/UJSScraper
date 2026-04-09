@@ -84,9 +84,10 @@
 
     <!-- Input -->
     <div class="bg-navy border-t border-navy-border px-4 md:px-6 py-3 shrink-0">
-      <div class="max-w-2xl mx-auto">
+      <div class="max-w-2xl mx-auto relative">
+        <div id="autocomplete-dropdown" class="hidden absolute bottom-full mb-1 left-0 right-0 bg-navy border border-navy-border rounded-lg shadow-xl overflow-hidden z-50 max-h-64 overflow-y-auto"></div>
         <div class="flex gap-2 items-center rounded-md px-3.5 py-1.5 bg-white/[0.06] border border-navy-border focus-within:border-court-dim transition">
-          <input id="q" type="text" placeholder="Ask a question..." class="flex-1 bg-transparent text-[16px] md:text-sm text-court-bright placeholder:text-court-dim outline-none py-1.5 font-sans" autofocus />
+          <input id="q" type="text" placeholder="Ask a question or search a name..." class="flex-1 bg-transparent text-[16px] md:text-sm text-court-bright placeholder:text-court-dim outline-none py-1.5 font-sans" autofocus autocomplete="off" />
           <button id="btn" onclick="send()" class="text-[13px] font-medium bg-gold hover:bg-gold-dim text-navy rounded px-4 py-1.5 disabled:opacity-40 transition">
             <span id="btn-text">Ask →</span>
             <svg id="btn-spin" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
@@ -189,17 +190,19 @@ function renderChatList() {
 }
 
 /* --- Welcome --- */
-function showWelcome() {
+async function showWelcome() {
+  let suggestions = ['What hearings are scheduled tomorrow?','Criminal cases filed this week','Average bail for DUI cases','Busiest defense attorneys','How long do theft cases take?','Search for motion to suppress filings'];
+  try {
+    const res = await apiFetch(API + '/suggestions');
+    if (res.ok) suggestions = await res.json();
+  } catch(e) {}
   messages.innerHTML = `
     <div id="welcome" class="text-center py-20">
-      <div class="w-12 h-12 rounded-2xl bg-gold/10 flex items-center justify-center mx-auto mb-4">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#c8a03a" stroke-width="1.2"/><path d="M8 17l4-10 4 10" stroke="#c8a03a" stroke-width="1.2" stroke-linecap="round"/><line x1="9.5" y1="14.5" x2="14.5" y2="14.5" stroke="#c8a03a" stroke-width="1"/></svg>
-      </div>
-      <h2 class="font-serif text-lg font-medium text-court-bright mb-2">Search Lehigh Valley court records</h2>
+      <img src="/static/img/logo-light.svg" class="w-12 h-12 mx-auto mb-4 opacity-50">
+      <h2 class="font-serif text-lg font-medium text-court-bright mb-2">Search Lehigh & Northampton County court records</h2>
       <p class="text-[13px] text-court-mid max-w-sm mx-auto mb-6">Ask in plain English. Get structured results from the PA Unified Judicial System.</p>
-      <div class="flex flex-wrap gap-1.5 justify-center max-w-md mx-auto">
-        ${['What hearings are in Lehigh tomorrow?','Show me Smith cases in Northampton','What is Kelli Murphy charged with?','Criminal cases filed this week']
-          .map(s => `<button onclick="prefill('${s}')" class="text-[11px] text-court-mid border border-navy-border rounded px-2.5 py-1 bg-navy-hover hover:border-gold hover:text-court-bright transition">${s}</button>`).join('')}
+      <div class="flex flex-wrap gap-1.5 justify-center max-w-lg mx-auto">
+        ${suggestions.map(s => `<button onclick="prefill('${s.replace(/'/g, "\\'")}')" class="text-[11px] text-court-mid border border-navy-border rounded-lg px-3 py-1.5 bg-navy-hover hover:border-gold hover:text-court-bright transition">${s}</button>`).join('')}
       </div>
     </div>`;
 }
@@ -352,7 +355,48 @@ window.addEventListener('popstate', () => {
   if (m) loadChat(m[1]); else newChat();
 });
 
-input.addEventListener('keydown', e => { if (e.key === 'Enter' && !btn.disabled) send(); });
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !btn.disabled) { hideAutocomplete(); send(); }
+  if (e.key === 'Escape') hideAutocomplete();
+});
+
+/* --- Autocomplete --- */
+let _acTimer;
+const acDropdown = document.getElementById('autocomplete-dropdown');
+
+input.addEventListener('input', () => {
+  clearTimeout(_acTimer);
+  const q = input.value.trim();
+  if (q.length < 2) { hideAutocomplete(); return; }
+  _acTimer = setTimeout(() => fetchAutocomplete(q), 250);
+});
+
+function hideAutocomplete() { acDropdown.classList.add('hidden'); acDropdown.innerHTML = ''; }
+
+async function fetchAutocomplete(q) {
+  try {
+    const res = await apiFetch(API + '/autocomplete?q=' + encodeURIComponent(q));
+    const results = await res.json();
+    if (!results.length) { hideAutocomplete(); return; }
+    acDropdown.innerHTML = results.map(r =>
+      `<button onclick="selectAutocomplete('${r.value.replace(/'/g, "\\'")}')" class="w-full text-left px-3.5 py-2.5 text-[13px] hover:bg-navy-hover transition flex items-center gap-2 border-b border-navy-border/30 last:border-0">
+        <span class="text-court-dim text-[10px] uppercase w-12 shrink-0">${r.type}</span>
+        <span class="text-court-bright truncate">${r.label}</span>
+      </button>`
+    ).join('');
+    acDropdown.classList.remove('hidden');
+  } catch(e) { hideAutocomplete(); }
+}
+
+function selectAutocomplete(val) {
+  input.value = val;
+  hideAutocomplete();
+  input.focus();
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#autocomplete-dropdown') && e.target !== input) hideAutocomplete();
+});
 function prefill(q) { input.value = q; input.focus(); }
 function retryQuestion(q) { input.value = q; send(); }
 
