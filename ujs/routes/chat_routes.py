@@ -99,6 +99,24 @@ def delete_conversation(cid: str, request: Request):
     return {"status": "deleted"}
 
 
+class TitleUpdate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=100)
+
+
+@router.put("/conversations/{cid}/title")
+def update_title(cid: str, body: TitleUpdate, request: Request):
+    """Rename a conversation."""
+    user = _require_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"error": "Authentication required"})
+    with db.connect() as conn:
+        cur = conn.cursor()
+        cur.execute("UPDATE conversations SET title = %s WHERE id = %s AND user_id = %s", (body.title, cid, user["sub"]))
+        if cur.rowcount == 0:
+            return JSONResponse(status_code=404, content={"error": "Conversation not found"})
+    return {"status": "updated"}
+
+
 @router.get("/conversations/{cid}/job")
 def get_conversation_job(cid: str, request: Request):
     """Get the latest job for a conversation (for resume on page reload)."""
