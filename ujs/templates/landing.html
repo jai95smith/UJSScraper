@@ -2,7 +2,7 @@
 
 {% block body %}
 <!-- Nav -->
-<nav class="bg-navy flex items-center px-6 md:px-10 h-16 border-b border-navy-border relative">
+<nav class="bg-navy flex items-center justify-between px-6 md:px-10 h-16 border-b border-navy-border">
   <!-- Left: auth -->
   <div>
   {% if user %}
@@ -45,17 +45,16 @@
   <a href="/login" class="text-[12px] font-semibold text-navy bg-gold hover:bg-gold-dim rounded-lg px-5 py-2">Sign in</a>
   {% endif %}
   </div>
-  <!-- Center: logo -->
-  <a href="/" class="flex items-center gap-3 no-underline absolute left-1/2 -translate-x-1/2">
-    <img src="/static/img/logo-light.svg" class="w-9 h-9 shrink-0" alt="GavelSearch">
-    <span class="text-[15px] font-semibold text-court-bright">Gavel<span class="text-gold">Search</span></span>
-  </a>
-  <!-- Right -->
-  {% if user %}
-  <a href="/chat" class="ml-auto text-[12px] font-semibold text-navy bg-gold hover:bg-gold-dim rounded-lg px-5 py-2">Go to search</a>
-  {% else %}
-  <div class="ml-auto"></div>
-  {% endif %}
+  <!-- Right: logo + Go to search (desktop only) -->
+  <div class="flex items-center gap-3">
+    {% if user %}
+    <a href="/chat" class="hidden md:block text-[12px] font-semibold text-navy bg-gold hover:bg-gold-dim rounded-lg px-5 py-2">Go to search</a>
+    {% endif %}
+    <a href="/" class="flex items-center gap-2.5 no-underline">
+      <span class="text-[15px] font-semibold text-court-bright">Gavel<span class="text-gold">Search</span></span>
+      <img src="/static/img/logo-light.svg" class="w-9 h-9 shrink-0" alt="GavelSearch">
+    </a>
+  </div>
 </nav>
 
 <!-- Hero -->
