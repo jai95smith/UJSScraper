@@ -104,8 +104,9 @@ def autocomplete(q: str = Query(..., min_length=2, max_length=100)):
             for r in cur.fetchall():
                 results.append({"type": "docket", "value": r["docket_number"], "label": f"{r['docket_number']} — {r['caption']}"})
         else:
-            # Name search — match each word independently so "Jason Krasley" finds "Krasley, Jason Michael"
-            words = q_clean.split()
+            # Name search — match each word independently, split on spaces and hyphens
+            import re
+            words = [w for w in re.split(r'[\s\-]+', q_clean) if w]
             word_clauses = " AND ".join(["p.name ILIKE %s"] * len(words))
             word_params = [f"%{w}%" for w in words]
             cur.execute(f"""
