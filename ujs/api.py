@@ -36,7 +36,6 @@ def _queue_worker():
         delay = 3
         while _worker_running:
             if _limit and _done[0] >= _limit:
-                print(f"[w{worker_id}] Limit reached ({_limit})")
                 return
             try:
                 with db.connect() as conn:
@@ -83,6 +82,12 @@ def _queue_worker():
 
     for t in threads:
         t.join()
+
+    if _limit:
+        print(f"[worker] Limit reached: {_done[0]} analyses completed. Stopping.")
+        # Exit code 0 = clean exit, systemd won't restart with on-failure policy
+        import sys
+        sys.exit(0)
 
 
 @asynccontextmanager
