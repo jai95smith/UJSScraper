@@ -26,13 +26,18 @@ def _queue_worker():
 
     _worker_running = True
     _recent = set()
+    _done = [0]  # mutable counter shared across threads
+    _limit = int(os.environ.get("ANALYZE_LIMIT", "0"))  # 0 = unlimited
     proxies = [p.strip() for p in os.environ.get("UJS_PROXIES", "").split(",") if p.strip()]
     num_workers = max(len(proxies), 1)
-    print(f"[worker] Starting {num_workers} threads ({len(proxies)} proxies)")
+    print(f"[worker] Starting {num_workers} threads ({len(proxies)} proxies)" + (f", limit {_limit}" if _limit else ""))
 
     def _single_worker(worker_id):
         delay = 3
         while _worker_running:
+            if _limit and _done[0] >= _limit:
+                print(f"[w{worker_id}] Limit reached ({_limit})")
+                return
             try:
                 with db.connect() as conn:
                     job = db.claim_ingest_job(conn)
@@ -48,7 +53,9 @@ def _queue_worker():
                         deep_analyze_docket(docket_number)
                         with db.connect() as conn:
                             db.complete_ingest_job(conn, job_id)
-                        print(f"[w{worker_id}] Done {docket_number}")
+                        _done[0] += 1
+                        if _done[0] % 50 == 0:
+                            print(f"[worker] Progress: {_done[0]}" + (f"/{_limit}" if _limit else ""))
                         delay = 3
                     except Exception as e:
                         err = str(e)
