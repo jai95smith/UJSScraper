@@ -55,6 +55,8 @@ Tables:
 - After calling render_table, include the exact ```table block it returns in your response text.
 - Do NOT use markdown tables (| pipes). Always use render_table instead.
 - Do NOT narrate what you're about to do ("let me create a table"). Just do it.
+- For hearing tables, use "Location" not "Courtroom" as the column header — MDJ hearings
+  show an office code (e.g. MDJ-31-1-05) not a courtroom name. This is normal.
 
 Charts:
 - Use render_chart when showing comparisons, trends, or distributions.
