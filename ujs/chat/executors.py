@@ -441,19 +441,75 @@ def _get_analysis_coverage(conn, inputs):
 # Charge name expansion — maps plain English to DB charge patterns
 # ---------------------------------------------------------------------------
 
+# Built from actual charge descriptions in the DB (1,101 unique charges)
 _CHARGE_SYNONYMS = {
-    "sexual assault": ["sexual assault", "indecent assault", "rape", "IDSI", "sexual abuse", "involuntary deviate"],
-    "assault": ["assault", "aggravated assault", "simple assault", "2701", "2702"],
-    "dui": ["DUI", "3802", "driving under the influence"],
-    "drunk driving": ["DUI", "3802", "driving under the influence"],
-    "drugs": ["controlled substance", "35 §", "possession with intent", "drug paraphernalia", "marijuana"],
-    "theft": ["theft", "retail theft", "receiving stolen", "3921", "3929"],
-    "robbery": ["robbery", "3701"],
-    "burglary": ["burglary", "3502"],
-    "murder": ["murder", "homicide", "2501", "2502"],
-    "gun": ["firearm", "weapon", "6105", "6106"],
+    # Sexual offenses
+    "sexual assault": ["sexual assault", "indecent assault", "rape", "IDSI", "sexual abuse", "involuntary deviate", "sexual intercourse"],
+    "sexual": ["sexual", "indecent", "rape", "IDSI", "involuntary deviate", "child sex"],
+    "rape": ["rape", "IDSI", "involuntary deviate", "sexual intercourse"],
+    "indecent assault": ["indecent assault", "indecent exposure"],
+    # Assault
+    "assault": ["assault", "aggravated assault", "simple assault"],
+    "aggravated assault": ["aggravated assault"],
+    "simple assault": ["simple assault"],
+    # DUI
+    "dui": ["DUI", "driving under the influence", "driving under influence"],
+    "drunk driving": ["DUI", "driving under the influence"],
+    "dwi": ["DUI", "driving under the influence"],
+    # Drugs
+    "drugs": ["controlled substance", "drug", "marijuana", "paraphernalia", "narcotic", "possession with intent"],
+    "drug possession": ["controlled substance", "marijuana", "narcotic"],
+    "drug dealing": ["possession with intent", "drug delivery", "manufacture"],
+    "marijuana": ["marijuana"],
+    # Theft
+    "theft": ["theft", "retail theft", "receiving stolen", "shoplifting"],
+    "shoplifting": ["retail theft"],
+    "stealing": ["theft", "retail theft", "receiving stolen"],
+    # Burglary/robbery
+    "burglary": ["burglary", "criminal trespass"],
+    "robbery": ["robbery"],
+    "breaking and entering": ["burglary", "criminal trespass"],
+    # Violence
+    "murder": ["murder", "homicide", "manslaughter"],
+    "homicide": ["murder", "homicide", "manslaughter"],
+    "manslaughter": ["manslaughter"],
+    "arson": ["arson", "cause fire"],
+    "kidnapping": ["kidnap", "abduct"],
+    # Weapons
+    "gun": ["firearm", "weapon", "gun"],
+    "firearms": ["firearm", "weapon", "gun"],
+    "weapon": ["firearm", "weapon", "gun", "knife"],
+    # Domestic
     "domestic": ["domestic", "PFA", "protection from abuse"],
-    "fraud": ["fraud", "forgery", "bad check", "identity theft", "4101"],
+    "domestic violence": ["domestic", "PFA", "protection from abuse", "strangulation"],
+    "pfa": ["PFA", "protection from abuse"],
+    # Fraud
+    "fraud": ["fraud", "forgery", "bad check", "identity theft", "counterfeit", "access device"],
+    "forgery": ["forgery", "counterfeit"],
+    "identity theft": ["identity theft", "access device"],
+    # Harassment
+    "harassment": ["harassment", "stalking", "terroristic threat"],
+    "stalking": ["stalking"],
+    "threats": ["terroristic threat", "threat"],
+    # Probation
+    "probation violation": ["probation", "parole", "gagnon"],
+    "parole violation": ["probation", "parole", "gagnon"],
+    # Disorderly
+    "disorderly conduct": ["disorderly conduct"],
+    "public intoxication": ["public drunk", "disorderly"],
+    # Child abuse
+    "child abuse": ["endanger", "child abuse", "child pornography", "child sex"],
+    "child endangerment": ["endangering welfare of children"],
+    # Resisting
+    "resisting arrest": ["resist arrest", "flee", "elude", "obstruct"],
+    "fleeing": ["fleeing", "elude", "eluding"],
+    # Property
+    "vandalism": ["criminal mischief", "vandal", "damage to property"],
+    "criminal mischief": ["criminal mischief"],
+    # Traffic
+    "traffic": ["traffic", "speed", "stop sign", "red light", "registration", "license", "inspection"],
+    "speeding": ["speed", "exceeding"],
+    "reckless driving": ["reckless driving", "careless driving"],
 }
 
 
