@@ -164,6 +164,37 @@ def get_costs():
         }
 
 
+@router.get("/costs/daily", tags=["Costs"])
+def get_costs_daily(days: int = Query(30, le=365)):
+    """Get daily cost breakdown."""
+    with db.connect() as conn:
+        cur = db._dict_cur(conn)
+        cur.execute("""
+            SELECT DATE(created_at) as date, COUNT(*) as docs,
+                   SUM(input_tokens) as input_tokens, SUM(output_tokens) as output_tokens,
+                   SUM(thinking_tokens) as thinking_tokens, SUM(cost_usd) as cost_usd
+            FROM api_costs
+            WHERE created_at > NOW() - INTERVAL '%s days'
+            GROUP BY DATE(created_at) ORDER BY date DESC
+        """, (days,))
+        return [dict(r) for r in cur.fetchall()]
+
+
+@router.get("/costs/hourly", tags=["Costs"])
+def get_costs_hourly(hours: int = Query(24, le=168)):
+    """Get hourly cost breakdown."""
+    with db.connect() as conn:
+        cur = db._dict_cur(conn)
+        cur.execute("""
+            SELECT DATE_TRUNC('hour', created_at) as hour, COUNT(*) as docs,
+                   SUM(cost_usd) as cost_usd
+            FROM api_costs
+            WHERE created_at > NOW() - INTERVAL '%s hours'
+            GROUP BY DATE_TRUNC('hour', created_at) ORDER BY hour DESC
+        """, (hours,))
+        return [dict(r) for r in cur.fetchall()]
+
+
 @router.get("/health", tags=["Health"])
 def health():
     try:
