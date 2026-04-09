@@ -290,36 +290,68 @@ def run_cycle(counties=None, docket_type=None, lookback_days=1,
 
     # 4. Analysis handled by ujs-worker service (continuous, auto-picks unanalyzed)
 
-    # 5. Refresh watched dockets (prioritized, capped per cycle)
+    # 5. Lightweight watch check — search only (no PDF/Gemini), detect status changes
     try:
+        from ujs.core import search_by_docket
         with db.connect() as conn:
             cur = conn.cursor()
-            # Only refresh watches not checked in last 4 hours, active cases first, cap at 50/cycle
             cur.execute("""
                 SELECT DISTINCT w.docket_number FROM user_watches w
                 JOIN cases c ON w.docket_number = c.docket_number
-                WHERE c.last_scraped < NOW() - INTERVAL '4 hours' OR c.last_scraped IS NULL
-                ORDER BY CASE WHEN c.status ILIKE '%%active%%' THEN 0 ELSE 1 END,
-                         c.last_scraped ASC NULLS FIRST
-                LIMIT 50
+                WHERE c.last_scraped < NOW() - INTERVAL '2 hours' OR c.last_scraped IS NULL
+                ORDER BY c.last_scraped ASC NULLS FIRST
+                LIMIT 100
             """)
             watched = [r[0] for r in cur.fetchall()]
         if watched:
-            refreshed_watched = 0
+            checked = 0
+            changes_found = 0
             for dn in watched:
                 try:
-                    deep_analyze_docket(dn)
-                    refreshed_watched += 1
-                    time.sleep(5)  # Rate limit: ~12/min
+                    results = search_by_docket(dn)
+                    if results:
+                        with db.connect() as conn:
+                            db.upsert_cases(conn, results)
+                            new_changes = db.detect_and_store_changes(conn, dn, results[0])
+                            if new_changes:
+                                changes_found += len(new_changes)
+                    checked += 1
+                    time.sleep(3)
                 except Exception as e:
                     if "429" in str(e):
-                        print(f"[watched] Rate limited after {refreshed_watched}, stopping")
+                        print(f"[watched] Rate limited after {checked}, stopping")
                         break
                     else:
                         print(f"[watched] Error {dn}: {e}")
-            print(f"[watched] Refreshed {refreshed_watched}/{len(watched)} watched dockets")
+            print(f"[watched] Checked {checked}/{len(watched)} watched dockets, {changes_found} changes detected")
         else:
             print("[watched] All watched dockets are fresh")
+
+        # Also cross-reference today's events with watched dockets (bulk, 1 query)
+        with db.connect() as conn:
+            cur = db._dict_cur(conn)
+            cur.execute("""
+                SELECT DISTINCT w.docket_number, w.user_id, e.event_type, e.event_date
+                FROM user_watches w
+                JOIN events e ON w.docket_number = e.docket_number
+                WHERE e.event_date LIKE %s
+                AND NOT EXISTS (
+                    SELECT 1 FROM change_log cl
+                    WHERE cl.docket_number = w.docket_number
+                    AND cl.change_type = 'event_today'
+                    AND cl.detected_at > NOW() - INTERVAL '12 hours'
+                )
+            """, (datetime.now().strftime("%m/%d/%Y") + "%",))
+            today_events = cur.fetchall()
+            if today_events:
+                for ev in today_events:
+                    cur2 = conn.cursor()
+                    cur2.execute("""
+                        INSERT INTO change_log (docket_number, change_type, field_name, new_value, detected_at)
+                        VALUES (%s, 'event_today', %s, %s, NOW())
+                    """, (ev["docket_number"], ev["event_type"], ev["event_date"]))
+                conn.commit()
+                print(f"[watched] {len(today_events)} watched dockets have events today")
     except Exception as e:
         print(f"[watched] Error: {e}")
 
