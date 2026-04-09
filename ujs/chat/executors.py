@@ -438,6 +438,35 @@ def _get_analysis_coverage(conn, inputs):
 
 
 # ---------------------------------------------------------------------------
+# Charge name expansion — maps plain English to DB charge patterns
+# ---------------------------------------------------------------------------
+
+_CHARGE_SYNONYMS = {
+    "sexual assault": ["sexual assault", "indecent assault", "rape", "IDSI", "sexual abuse", "involuntary deviate"],
+    "assault": ["assault", "aggravated assault", "simple assault", "2701", "2702"],
+    "dui": ["DUI", "3802", "driving under the influence"],
+    "drunk driving": ["DUI", "3802", "driving under the influence"],
+    "drugs": ["controlled substance", "35 §", "possession with intent", "drug paraphernalia", "marijuana"],
+    "theft": ["theft", "retail theft", "receiving stolen", "3921", "3929"],
+    "robbery": ["robbery", "3701"],
+    "burglary": ["burglary", "3502"],
+    "murder": ["murder", "homicide", "2501", "2502"],
+    "gun": ["firearm", "weapon", "6105", "6106"],
+    "domestic": ["domestic", "PFA", "protection from abuse"],
+    "fraud": ["fraud", "forgery", "bad check", "identity theft", "4101"],
+}
+
+
+def _expand_charge_search(term):
+    """Expand a plain English charge term into (clause, params) tuple for parameterized queries."""
+    key = term.lower().strip()
+    synonyms = _CHARGE_SYNONYMS.get(key, [term])
+    clause = " OR ".join(["ch.description ILIKE %s"] * len(synonyms))
+    params = [f"%{s}%" for s in synonyms]
+    return f"({clause})", params
+
+
+# ---------------------------------------------------------------------------
 # Analytics tools (questions 1-6)
 # ---------------------------------------------------------------------------
 
@@ -474,8 +503,9 @@ def _bail_analytics(conn, inputs):
     clauses = ["b.amount IS NOT NULL", "b.amount != ''", "b.amount != '$0.00'"]
     params = []
     if inputs.get("charge_description"):
-        clauses.append("ch.description ILIKE %s")
-        params.append(f"%{inputs['charge_description']}%")
+        charge_clause, charge_params = _expand_charge_search(inputs["charge_description"])
+        clauses.append(charge_clause)
+        params.extend(charge_params)
     if inputs.get("county"):
         clauses.append("c.county ILIKE %s")
         params.append(inputs["county"])
@@ -523,8 +553,9 @@ def _case_duration(conn, inputs):
                "c.filing_date IS NOT NULL", "c.filing_date != ''"]
     params = []
     if inputs.get("charge_description"):
-        clauses.append("ch.description ILIKE %s")
-        params.append(f"%{inputs['charge_description']}%")
+        charge_clause, charge_params = _expand_charge_search(inputs["charge_description"])
+        clauses.append(charge_clause)
+        params.extend(charge_params)
     if inputs.get("county"):
         clauses.append("c.county ILIKE %s")
         params.append(inputs["county"])
@@ -587,8 +618,11 @@ def _sentencing_patterns(conn, inputs):
         clauses.append("a.analysis->>'judge' ILIKE %s")
         params.append(f"%{inputs['judge']}%")
     if inputs.get("charge_description"):
-        clauses.append("s.charge ILIKE %s")
-        params.append(f"%{inputs['charge_description']}%")
+        key = inputs["charge_description"].lower().strip()
+        synonyms = _CHARGE_SYNONYMS.get(key, [inputs["charge_description"]])
+        clause = " OR ".join(["s.charge ILIKE %s"] * len(synonyms))
+        clauses.append(f"({clause})")
+        params.extend([f"%{s}%" for s in synonyms])
     if inputs.get("county"):
         clauses.append("c.county ILIKE %s")
         params.append(inputs["county"])
