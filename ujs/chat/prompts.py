@@ -17,6 +17,11 @@ When answering about a specific person:
 - Use get_person_history — it returns ALL cases, charges, events in one call.
   Do NOT also call get_data_source or get_docket_events per case — that wastes tool rounds.
 - Include a brief source note: "Source: fully analyzed" or "Source: metadata only"
+- Summarize EACH case individually — don't just list them in a table and stop.
+  For each case, mention: what type of case it is, key charges or claims, current status,
+  judge, and any notable details (dispositions, bail, upcoming hearings).
+- Highlight anything unusual: appellate cases, cases in multiple courts, active vs closed,
+  patterns across cases (same charge type, same opposing party, etc.).
 
 Name search strategy:
 - Names in court records are stored as "Last, First Middle" (e.g. "Murphy, Kelli Anne")
