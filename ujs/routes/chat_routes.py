@@ -65,7 +65,7 @@ def list_conversations(request: Request, limit: int = Query(30, le=100)):
         return JSONResponse(status_code=401, content={"error": "Authentication required"})
     with db.connect() as conn:
         cur = db._dict_cur(conn)
-        cur.execute("SELECT id, title, created_at, updated_at FROM conversations WHERE user_id = %s ORDER BY updated_at DESC LIMIT %s",
+        cur.execute("SELECT id, title, starred, created_at, updated_at FROM conversations WHERE user_id = %s ORDER BY starred DESC NULLS LAST, updated_at DESC LIMIT %s",
                     (user["sub"], limit))
         return [dict(r) for r in cur.fetchall()]
 
@@ -115,6 +115,21 @@ def update_title(cid: str, body: TitleUpdate, request: Request):
         if cur.rowcount == 0:
             return JSONResponse(status_code=404, content={"error": "Conversation not found"})
     return {"status": "updated"}
+
+
+@router.put("/conversations/{cid}/star")
+def toggle_star(cid: str, request: Request):
+    """Toggle starred status on a conversation."""
+    user = _require_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"error": "Authentication required"})
+    with db.connect() as conn:
+        cur = conn.cursor()
+        cur.execute("UPDATE conversations SET starred = NOT COALESCE(starred, FALSE) WHERE id = %s AND user_id = %s RETURNING starred", (cid, user["sub"]))
+        row = cur.fetchone()
+        if not row:
+            return JSONResponse(status_code=404, content={"error": "Conversation not found"})
+        return {"starred": row[0]}
 
 
 @router.get("/conversations/{cid}/job")

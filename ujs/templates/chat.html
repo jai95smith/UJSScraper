@@ -179,7 +179,7 @@ function renderChatList() {
     return `<div class="flex items-center group relative" data-cid="${c.id}">
       <button onclick="loadChat('${c.id}')" class="flex-1 text-left px-2.5 py-1.5 rounded text-[11px] truncate transition
         ${isActive ? 'bg-navy-hover text-court-bright border border-navy-border' : 'text-court-dim border border-transparent hover:text-court-mid'}">
-        ${esc(c.title || 'New chat')}
+        ${c.starred ? '<span class="text-gold mr-0.5">&#9733;</span>' : ''}${esc(c.title || 'New chat')}
       </button>
       <button onclick="event.stopPropagation();toggleChatMenu('${c.id}')" class="flex w-5 h-5 items-center justify-center text-court-dim hover:text-court-mid shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
         <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="6" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="18" r="1.5"/></svg>
@@ -189,9 +189,9 @@ function renderChatList() {
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
           Rename
         </button>
-        <button onclick="event.stopPropagation();starChat('${c.id}')" class="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-court-mid hover:bg-navy-hover hover:text-gold transition">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
-          Star
+        <button onclick="event.stopPropagation();starChat('${c.id}')" class="w-full flex items-center gap-2 px-3 py-2 text-[11px] ${c.starred ? 'text-gold' : 'text-court-mid'} hover:bg-navy-hover hover:text-gold transition">
+          <svg class="w-3.5 h-3.5" fill="${c.starred ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
+          ${c.starred ? 'Unstar' : 'Star'}
         </button>
         <div class="border-t border-navy-border"></div>
         <button onclick="event.stopPropagation();deleteChat('${c.id}')" class="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-red-400 hover:bg-red-500/10 transition">
@@ -297,7 +297,14 @@ async function renameChat(id) {
 
 async function starChat(id) {
   toggleChatMenu(id);
-  showToast('Starred chats coming soon', 'info');
+  try {
+    const res = await apiFetch(API + '/conversations/' + id + '/star', { method: 'PUT' });
+    const data = await res.json();
+    const chat = allChats.find(c => c.id === id);
+    if (chat) chat.starred = data.starred;
+    renderChatList();
+    showToast(data.starred ? 'Starred' : 'Unstarred');
+  } catch(e) { if (e !== 'auth') showToast('Failed', 'error'); }
 }
 
 /* --- Bubbles --- */
