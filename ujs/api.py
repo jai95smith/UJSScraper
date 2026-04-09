@@ -18,7 +18,7 @@ from ujs.routes import search, docket, analytics, chat_routes, rapsheet, admin, 
 _worker_running = False
 
 
-def _queue_worker(num_workers=3):
+def _queue_worker(num_workers=2):
     """Continuous analysis worker. Runs num_workers threads in parallel."""
     global _worker_running
     from ujs.modules.ingest import deep_analyze_docket
