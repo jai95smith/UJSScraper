@@ -2,16 +2,11 @@
 
 {% block body %}
 <!-- Nav -->
-<nav class="bg-navy flex items-center justify-between px-6 md:px-10 h-14 border-b border-navy-border relative">
+<nav class="bg-navy flex items-center justify-between px-6 md:px-10 h-14 border-b border-navy-border">
   <a href="/" class="flex items-center gap-3 no-underline">
     <img src="/static/img/logo-light.svg" class="w-[30px] h-[30px] shrink-0" alt="GavelSearch">
     <span class="text-[13px] font-medium text-court-bright">Gavel<span class="text-gold">Search</span></span>
   </a>
-  <div class="hidden md:flex items-center gap-6 absolute left-1/2 -translate-x-1/2">
-    <a href="/chat" class="text-xs text-court-mid hover:text-court-bright">Search</a>
-    <a href="/disclaimer" class="text-xs text-court-mid hover:text-court-bright">Disclaimer</a>
-    <a href="/privacy" class="text-xs text-court-mid hover:text-court-bright">Privacy</a>
-  </div>
   {% if user %}
   <div class="flex items-center gap-2">
     <!-- User dropdown -->
