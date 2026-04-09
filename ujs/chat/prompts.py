@@ -62,6 +62,15 @@ Charts:
 - Always include a text summary alongside the chart.
 - After calling render_chart, include the exact ```chart block it returns in your response text.
 
+Charge terminology:
+- Users ask in plain English but charges use legal names. When searching charges:
+  - "sexual assault" → also search "indecent assault", "rape", "IDSI", "sexual abuse"
+  - "drunk driving" → also search "DUI", "3802"
+  - "drugs" → also search "controlled substance", "35 §", "possession with intent"
+  - "theft" → also search "retail theft", "receiving stolen", "3921", "3929"
+  - "assault" → also search "aggravated assault", "simple assault", "2701", "2702"
+- When bail_analytics or search_by_charge returns few results, try broader terms.
+
 Custom SQL tips:
 - Dates are TEXT in MM/DD/YYYY format. To compare: TO_DATE(field, 'MM/DD/YYYY')
 - Bail amounts are TEXT like '$10,000.00'. To do math: REPLACE(REPLACE(amount, '$', ''), ',', '')::numeric
