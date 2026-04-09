@@ -288,9 +288,31 @@ def run_cycle(counties=None, docket_type=None, lookback_days=1,
     except Exception as e:
         print(f"[appellate] Error: {e}")
 
-    # 4. Analysis handled by _queue_worker in api.py (continuous, auto-picks unanalyzed)
+    # 4. Analysis handled by ujs-worker service (continuous, auto-picks unanalyzed)
 
-    # 5. Refresh stale records
+    # 5. Refresh watched dockets first (users expect timely alerts)
+    try:
+        with db.connect() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT DISTINCT docket_number FROM user_watches")
+            watched = [r[0] for r in cur.fetchall()]
+        if watched:
+            refreshed_watched = 0
+            for dn in watched:
+                try:
+                    deep_analyze_docket(dn)
+                    refreshed_watched += 1
+                except Exception as e:
+                    if "429" in str(e):
+                        print(f"[watched] Rate limited after {refreshed_watched} dockets, pausing")
+                        time.sleep(30)
+                    else:
+                        print(f"[watched] Error {dn}: {e}")
+            print(f"[watched] Refreshed {refreshed_watched}/{len(watched)} watched dockets")
+    except Exception as e:
+        print(f"[watched] Error: {e}")
+
+    # 6. Refresh stale records
     try:
         refreshed = refresh_stale(batch_size=refresh_batch)
         print(f"[refresh] Refreshed {refreshed} dockets")
