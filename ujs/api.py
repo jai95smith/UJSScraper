@@ -47,12 +47,8 @@ def _queue_worker():
 
 @asynccontextmanager
 async def lifespan(app):
-    t = threading.Thread(target=_queue_worker, daemon=True)
-    t.start()
-    print("[worker] Queue worker started")
+    # Worker runs as separate systemd service (ujs-worker), not in API process
     yield
-    global _worker_running
-    _worker_running = False
 
 
 # -------------------------------------------------------------------
