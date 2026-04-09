@@ -9,21 +9,7 @@ from ujs.chat.prompts import get_court_prompt, get_news_prompt
 from ujs.chat.tools import TOOLS, get_news_tools
 from ujs.chat.executors import execute_tool
 from ujs.chat.cleanup import structure_news, classify_and_extract
-
-# In-memory news cache: {key: (structured_text, timestamp)}
-_news_cache = {}
-_NEWS_CACHE_TTL = 86400  # 24 hours
-_NEWS_CACHE_MAX = 500  # max entries
-
-
-def _cache_set(key, value):
-    """Set cache entry, evicting oldest if over max size."""
-    _news_cache[key] = (value, time.time())
-    if len(_news_cache) > _NEWS_CACHE_MAX:
-        # Evict oldest entries
-        sorted_keys = sorted(_news_cache, key=lambda k: _news_cache[k][1])
-        for k in sorted_keys[:len(_news_cache) - _NEWS_CACHE_MAX]:
-            del _news_cache[k]
+from ujs import cache as rcache
 
 
 def create_job(question, history=None, conversation_id=None):
@@ -329,6 +315,15 @@ def _run_job(job_id, question, history, conversation_id=None):
         _update_job(job_id, status="error", error="ANTHROPIC_API_KEY not set")
         return
 
+    # Check response cache (skip for follow-up questions in a conversation)
+    is_first_message = not history or len(history) <= 1
+    if is_first_message:
+        cached = rcache.get_cached_response(question)
+        if cached:
+            _update_job(job_id, append_response=f"\n\n{cached}", status="completed", completed_at="NOW()")
+            _save_to_conversation(conversation_id, cached)
+            return
+
     client = anthropic.Anthropic(api_key=key)
     start = time.time()
     timeout_at = start + 180  # 3 minutes — large tables need multiple API rounds
@@ -374,10 +369,10 @@ def _run_job(job_id, question, history, conversation_id=None):
             # Check cache first
             context_first_line = context.split("\n")[0].lower().strip()
             cache_key = context_first_line + ":" + " ".join(sorted(question.lower().split()))
-            cached = _news_cache.get(cache_key)
+            cached = rcache.get_cached_news(cache_key)
 
-            if cached and (time.time() - cached[1]) < _NEWS_CACHE_TTL:
-                news_section = "\n\n---\n\n**News Coverage**\n\n" + cached[0]
+            if cached:
+                news_section = "\n\n---\n\n**News Coverage**\n\n" + cached
                 _update_job(job_id, append_response=news_section)
                 _update_job(job_id, status="completed", completed_at="NOW()")
                 _save_to_conversation(conversation_id, save_text + news_section)
@@ -399,7 +394,7 @@ def _run_job(job_id, question, history, conversation_id=None):
                         if news_text and "NO_NEWS_FOUND" not in news_text:
                             structured = structure_news(news_text)
                             if structured:
-                                _cache_set(cache_key, structured)
+                                rcache.set_cached_news(cache_key, structured)
                                 news_section = "\n\n---\n\n**News Coverage**\n\n" + structured
                                 _update_job(job_id, replace_in_response=(news_loading, news_section))
                                 _save_to_conversation(conversation_id, save_text + news_section)
@@ -417,6 +412,10 @@ def _run_job(job_id, question, history, conversation_id=None):
             # No news needed — just complete
             _update_job(job_id, status="completed", completed_at="NOW()")
             _save_to_conversation(conversation_id, save_text)
+
+        # Cache response for identical future queries
+        if is_first_message and save_text:
+            rcache.set_cached_response(question, save_text)
 
         # Log
         duration = int((time.time() - start) * 1000)

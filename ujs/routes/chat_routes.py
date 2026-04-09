@@ -1,7 +1,6 @@
 """Chat routes — server-side conversations with job-based responses."""
 
 import asyncio, json, time, uuid
-from collections import defaultdict
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -9,32 +8,17 @@ from typing import Optional, List
 
 from ujs import db
 from ujs.auth import get_user_from_request
+from ujs.cache import check_rate
 
 router = APIRouter(tags=["Chat"])
 
-# Rate limiting: key -> list of timestamps
-_rate_limits = defaultdict(list)
-_RATE_LIMIT_IP = 10  # requests per minute per IP
-_RATE_LIMIT_USER = 20  # requests per minute per user (more generous)
-_RATE_WINDOW = 60  # seconds
-
-
-def _check_rate(key, limit):
-    """Check if key has exceeded limit in the window."""
-    now = time.time()
-    _rate_limits[key] = [t for t in _rate_limits[key] if now - t < _RATE_WINDOW]
-    if len(_rate_limits[key]) >= limit:
-        return True
-    _rate_limits[key].append(now)
-    return False
-
 
 def _check_rate_limit(request: Request, user=None):
-    """Returns True if rate limited. Checks both IP and user."""
+    """Returns True if rate limited. Uses Redis for persistence."""
     ip = request.client.host if request.client else "unknown"
-    if _check_rate(f"ip:{ip}", _RATE_LIMIT_IP):
+    if check_rate(f"ip:{ip}", 10):  # 10/min per IP
         return True
-    if user and _check_rate(f"user:{user['sub']}", _RATE_LIMIT_USER):
+    if user and check_rate(f"user:{user['sub']}", 20):  # 20/min per user
         return True
     return False
 

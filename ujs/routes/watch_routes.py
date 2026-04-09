@@ -1,7 +1,6 @@
 """Watch routes — user-authenticated docket monitoring and preferences."""
 
-import re, time
-from collections import defaultdict
+import re
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -9,16 +8,10 @@ from typing import Optional
 
 from ujs import db
 from ujs.auth import get_user_from_request
+from ujs.cache import check_rate
 
 router = APIRouter(tags=["Watches"])
 
-# Rate limiting: user_id -> list of timestamps
-_watch_rates = defaultdict(list)
-_WATCH_RATE_LIMIT = 5  # watches per minute
-_PREFS_RATE_LIMIT = 10  # preference updates per minute
-_WATCH_RATE_WINDOW = 60
-
-# Valid PA docket format
 _DOCKET_RE = re.compile(r'^[A-Z]{2}-\d{2,5}-[A-Z]{2}-\d{5,7}-\d{4}$')
 
 
@@ -27,15 +20,6 @@ def _require_user(request: Request):
     if not user:
         return None
     return user
-
-
-def _check_rate(key, limit):
-    now = time.time()
-    _watch_rates[key] = [t for t in _watch_rates[key] if now - t < _WATCH_RATE_WINDOW]
-    if len(_watch_rates[key]) >= limit:
-        return True
-    _watch_rates[key].append(now)
-    return False
 
 
 class WatchRequest(BaseModel):
@@ -59,7 +43,7 @@ def add_watch(body: WatchRequest, request: Request):
         return JSONResponse(status_code=401, content={"error": "Authentication required"})
     if not _DOCKET_RE.match(body.docket_number):
         return JSONResponse(status_code=400, content={"error": "Invalid docket number format"})
-    if _check_rate(f"watch:{user['sub']}", _WATCH_RATE_LIMIT):
+    if check_rate(f"watch:{user['sub']}", 5):
         return JSONResponse(status_code=429, content={"error": "Too many watch requests. Try again in a minute."})
     with db.connect() as conn:
         wid = db.add_user_watch(conn, user["sub"], user["email"], body.docket_number,
@@ -120,7 +104,7 @@ def update_preferences(body: PreferencesUpdate, request: Request):
     user = _require_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"error": "Authentication required"})
-    if _check_rate(f"prefs:{user['sub']}", _PREFS_RATE_LIMIT):
+    if check_rate(f"prefs:{user['sub']}", 10):
         return JSONResponse(status_code=429, content={"error": "Too many updates. Try again in a minute."})
     updates = {k: v for k, v in body.dict().items() if v is not None}
     if not updates:
