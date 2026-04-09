@@ -102,7 +102,7 @@ def _get_person_history(conn, inputs):
                  "county": case["county"], "filing_date": case["filing_date"]}
         analysis = db.get_analysis(conn, dn, "docket")
         if analysis:
-            entry.update({k: analysis.get(k) for k in ["charges", "sentences", "bail", "judge", "docket_entries"]})
+            entry.update({k: analysis.get(k) for k in ["charges", "sentences", "bail", "judge", "docket_entries", "attorneys", "court", "defendant"]})
             # Use full caption from analysis if available (includes case details)
             if analysis.get("case_caption"):
                 entry["caption"] = analysis["case_caption"]
