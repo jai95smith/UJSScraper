@@ -181,7 +181,7 @@ function renderChatList() {
         ${isActive ? 'bg-navy-hover text-court-bright border border-navy-border' : 'text-court-dim border border-transparent hover:text-court-mid'}">
         ${esc(c.title || 'New chat')}
       </button>
-      <button onclick="event.stopPropagation();deleteChat('${c.id}')" class="hidden group-hover:flex w-5 h-5 items-center justify-center text-court-dim hover:text-red-400 shrink-0">
+      <button onclick="event.stopPropagation();deleteChat('${c.id}')" class="flex w-5 h-5 items-center justify-center text-court-dim hover:text-red-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>
     </div>`;
