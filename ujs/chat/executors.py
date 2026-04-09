@@ -644,7 +644,9 @@ def _case_duration(conn, inputs):
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     clauses = ["ch.disposition IS NOT NULL", "ch.disposition != ''",
                "ch.disposition_date IS NOT NULL", "ch.disposition_date != ''",
-               "c.filing_date IS NOT NULL", "c.filing_date != ''"]
+               "ch.disposition_date ~ '^\\d{2}/\\d{2}/\\d{4}$'",
+               "c.filing_date IS NOT NULL", "c.filing_date != ''",
+               "c.filing_date ~ '^\\d{2}/\\d{2}/\\d{4}$'"]
     params = []
     if inputs.get("charge_description"):
         charge_clause, charge_params = _expand_charge_search(inputs["charge_description"])
