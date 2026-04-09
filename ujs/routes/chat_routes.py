@@ -237,15 +237,14 @@ async def job_stream(job_id: str, cid: str = Query(None), request: Request = Non
             tools = job.get("tools_log", [])
             total = len(response)
 
-            # Only send if something changed
+            # Send full response every time (no delta accumulation bugs)
             if total > seen or len(tools) > last_tools or job["status"] in ("completed", "error"):
-                yield f"data: {json.dumps({'status': job['status'], 'tools': tools, 'response': response[seen:], 'total_length': total, 'error': job.get('error')})}\n\n"
+                yield f"data: {json.dumps({'status': job['status'], 'tools': tools, 'response': response, 'total_length': total, 'error': job.get('error')})}\n\n"
                 seen = total
                 last_tools = len(tools)
 
             if job["status"] in ("completed", "error"):
-                # Send one final full response
-                yield f"data: {json.dumps({'status': job['status'], 'tools': tools, 'response': response, 'total_length': total, 'error': job.get('error'), 'done': True})}\n\n"
+                yield f"data: {json.dumps({'done': True})}\n\n"
                 break
 
             await asyncio.sleep(0.3)  # Check every 300ms server-side (no client round trip)

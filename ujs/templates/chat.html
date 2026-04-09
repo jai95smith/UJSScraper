@@ -405,10 +405,9 @@ function _handleJobData(data, state) {
   }
 
   if (data.total_length > state.seen) {
-    // Accumulate full response (SSE sends deltas)
-    state.fullResponse = (state.fullResponse || '') + data.response;
     state.seen = data.total_length;
-    const full = state.fullResponse;
+    state.lastFullResponse = data.response;
+    const full = data.response;
     const parts = full.split('\n\n');
     if (parts.length > 1) {
       if (!toolCount) {
@@ -429,7 +428,9 @@ function _finishJob(data, state) {
   const { statusEl, contentEl, msgId } = state;
   stopThinking(statusEl.id);
   if (data.error) { contentEl.textContent = 'Error: ' + data.error; return; }
-  const resp = data.response || '';
+  // Use provided response, or fetch the last known full response
+  const resp = data.response || state.lastFullResponse || '';
+  if (!resp) return;
   const idx = resp.indexOf('\n\n');
   const text = idx >= 0 ? resp.slice(idx + 2) : resp;
   if (text) {
@@ -445,7 +446,7 @@ function _finishJob(data, state) {
 async function pollJob(jobId, statusEl, contentEl, msgId, convId) {
   const statusTextEl = document.getElementById(statusEl.id + '-text');
   const dotsEl = document.getElementById(statusEl.id + '-dots');
-  const state = { seen: 0, lastToolCount: 0, fullResponse: '', statusEl, statusTextEl, dotsEl, contentEl, msgId };
+  const state = { seen: 0, lastToolCount: 0, lastFullResponse: '', statusEl, statusTextEl, dotsEl, contentEl, msgId };
 
   // Create abort controller for this poll — cancelled when switching chats
   _abortController = new AbortController();
@@ -470,10 +471,8 @@ async function pollJob(jobId, statusEl, contentEl, msgId, convId) {
           try {
             const data = JSON.parse(line.slice(6));
             if (data.done) {
-              // done event has FULL response — use it for final render
-              _finishJob(data, state); return;
+              _finishJob({}, state); return;
             }
-            // Incremental updates (response is a delta, not full)
             _handleJobData(data, state);
           } catch(e) {}
         }
