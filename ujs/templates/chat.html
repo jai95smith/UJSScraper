@@ -40,10 +40,10 @@
     </div>
     <!-- Nav items -->
     <nav class="p-2 space-y-0.5 shrink-0">
-      <button onclick="showSection('chats')" id="nav-chats" class="sidebar-nav-item active w-full flex items-center gap-2.5 px-2.5 py-2 rounded text-[12px] text-court-bright bg-navy-hover border border-navy-border transition">
+      <div id="nav-chats" class="sidebar-nav-item active w-full flex items-center gap-2.5 px-2.5 py-2 rounded text-[12px] text-court-bright bg-navy-hover border border-navy-border">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
         Chats
-      </button>
+      </div>
       <a href="/settings" id="nav-settings" class="sidebar-nav-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded text-[12px] text-court-dim hover:text-court-mid hover:bg-navy-hover border border-transparent transition">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
         Settings
@@ -134,12 +134,17 @@ function apiFetch(url, opts = {}) {
 }
 
 /* --- Server-side conversations --- */
+let _loadConvTimer;
 async function loadConversations() {
-  try {
-    const res = await apiFetch(API + '/conversations');
-    allChats = await res.json();
-  } catch(e) { allChats = []; }
-  renderChatList();
+  // Debounce — multiple callers won't spam the API
+  clearTimeout(_loadConvTimer);
+  _loadConvTimer = setTimeout(async () => {
+    try {
+      const res = await apiFetch(API + '/conversations');
+      allChats = await res.json();
+    } catch(e) { allChats = []; }
+    renderChatList();
+  }, 200);
 }
 async function loadConversation(id) {
   try {
@@ -161,17 +166,23 @@ function closeMobileSidebar() {
   }
 }
 function renderChatList() {
-  document.getElementById('chat-list').innerHTML = allChats.map(c => `
-    <div class="flex items-center group">
+  const container = document.getElementById('chat-list');
+  const existingIds = new Set();
+  // Update existing items in-place, add new ones
+  const newHtml = allChats.map(c => {
+    existingIds.add(c.id);
+    const isActive = c.id === currentChatId;
+    return `<div class="flex items-center group" data-cid="${c.id}">
       <button onclick="loadChat('${c.id}')" class="flex-1 text-left px-2.5 py-1.5 rounded text-[11px] truncate transition
-        ${c.id === currentChatId ? 'bg-navy-hover text-court-bright border border-navy-border' : 'text-court-dim border border-transparent hover:text-court-mid'}">
+        ${isActive ? 'bg-navy-hover text-court-bright border border-navy-border' : 'text-court-dim border border-transparent hover:text-court-mid'}">
         ${esc(c.title || 'New chat')}
       </button>
       <button onclick="event.stopPropagation();deleteChat('${c.id}')" class="hidden group-hover:flex w-5 h-5 items-center justify-center text-court-dim hover:text-red-400 shrink-0">
         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
+  container.innerHTML = newHtml;
 }
 
 /* --- Welcome --- */
