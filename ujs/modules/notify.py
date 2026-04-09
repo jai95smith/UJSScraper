@@ -52,52 +52,89 @@ def send_email(to, subject, html_body, text_body):
         return False
 
 
+_FRIENDLY_TYPES = {
+    "event_today": "Hearing Today",
+    "status_change": "Status Changed",
+    "new_entry": "New Docket Entry",
+    "new_event": "New Event Scheduled",
+    "new_disposition": "Disposition Updated",
+    "bail_change": "Bail Updated",
+    "initial_ingest": "Case Added",
+    "data_changed": "Record Updated",
+}
+
+
+def _friendly_type(raw):
+    return _FRIENDLY_TYPES.get(raw, raw.replace("_", " ").title())
+
+
 def _render_email(user_email, changes_by_docket, unsubscribe_token):
-    """Render notification email. Returns (subject, html, text)."""
-    n_dockets = len(changes_by_docket)
-    n_changes = sum(len(v) for v in changes_by_docket.values())
-    subject = f"GavelSearch: {n_changes} update{'s' if n_changes != 1 else ''} on {n_dockets} watched docket{'s' if n_dockets != 1 else ''}"
+    """Render notification email. Groups by defendant name. Returns (subject, html, text)."""
+    _e = html_mod.escape
+
+    # Group dockets by defendant name
+    by_person = {}
+    for dn, changes in changes_by_docket.items():
+        caption = changes[0].get("caption") or dn
+        # Extract defendant name from "Comm. v. Last, First"
+        name = caption.split(" v. ", 1)[-1] if " v. " in caption else caption
+        if name not in by_person:
+            by_person[name] = {"caption": caption, "county": changes[0].get("county") or "", "dockets": {}}
+        by_person[name]["dockets"][dn] = changes
+
+    n_people = len(by_person)
+    n_changes = sum(len(c) for dockets in by_person.values() for c in dockets["dockets"].values())
+    subject = f"GavelSearch: {n_changes} update{'s' if n_changes != 1 else ''} on {n_people} watched case{'s' if n_people != 1 else ''}"
 
     unsub_url = f"{SITE_URL}/unsubscribe/{unsubscribe_token}" if unsubscribe_token else ""
 
     # Plain text
     text_lines = [subject, "=" * 40, ""]
-    for dn, changes in changes_by_docket.items():
-        caption = changes[0].get("caption") or dn
-        county = changes[0].get("county") or ""
-        text_lines.append(f"{dn} — {caption}" + (f" ({county})" if county else ""))
-        for c in changes:
-            ct = c.get("change_type", "change")
-            field = c.get("field_name", "")
-            new_val = c.get("new_value", "")
-            text_lines.append(f"  - {ct}: {field} → {new_val}" if field else f"  - {ct}: {new_val}")
-        text_lines.append(f"  View: {SITE_URL}/chat?q={dn}")
+    for name, info in by_person.items():
+        text_lines.append(f"{name} ({info['county']} County)")
+        for dn, changes in info["dockets"].items():
+            text_lines.append(f"  {dn}")
+            for c in changes:
+                ft = _friendly_type(c.get("change_type", "change"))
+                field = c.get("field_name", "")
+                new_val = c.get("new_value", "")
+                text_lines.append(f"    • {ft}: {field} — {new_val}" if field else f"    • {ft}: {new_val}")
+            text_lines.append(f"    View: {SITE_URL}/chat?q={dn}")
         text_lines.append("")
     if unsub_url:
         text_lines.extend(["---", f"Unsubscribe: {unsub_url}"])
     text_body = "\n".join(text_lines)
 
     # HTML
-    _e = html_mod.escape  # shorthand
-    docket_rows = ""
-    for dn, changes in changes_by_docket.items():
-        caption = _e(changes[0].get("caption") or dn)
-        county = _e(changes[0].get("county") or "")
-        dn_safe = _e(dn)
-        change_items = ""
-        for c in changes:
-            ct = _e(c.get("change_type", "change"))
-            field = _e(c.get("field_name", ""))
-            new_val = _e(c.get("new_value", ""))
-            detail = f"{field}: {new_val}" if field else new_val
-            change_items += f'<li style="color:#8fa8c8;font-size:13px;margin:4px 0">{ct} — {detail}</li>'
+    person_cards = ""
+    for name, info in by_person.items():
+        name_safe = _e(name)
+        county_safe = _e(info["county"])
+        docket_sections = ""
+        for dn, changes in info["dockets"].items():
+            dn_safe = _e(dn)
+            change_items = ""
+            for c in changes:
+                ft = _e(_friendly_type(c.get("change_type", "change")))
+                field = _e(c.get("field_name", ""))
+                new_val = _e(c.get("new_value", ""))
+                detail = f"{field}: {new_val}" if field else new_val
+                # Color-code by type
+                color = "#c8a03a" if "hearing" in ft.lower() or "today" in ft.lower() else "#8fa8c8"
+                change_items += f'<div style="color:{color};font-size:13px;margin:4px 0;padding-left:12px;border-left:2px solid {color}33">{ft} — {detail}</div>'
 
-        docket_rows += f"""
-        <div style="background:#132240;border:1px solid #1e3254;border-radius:8px;padding:16px;margin-bottom:12px">
-          <div style="font-size:14px;font-weight:600;color:#e8edf5">{caption}</div>
-          <div style="font-size:11px;color:#5a7aa0;margin-top:2px">{dn_safe}{(' — ' + county + ' County') if county else ''}</div>
-          <ul style="list-style:none;padding:0;margin:10px 0 0 0">{change_items}</ul>
-          <a href="{SITE_URL}/chat?q={dn_safe}" style="display:inline-block;margin-top:10px;font-size:12px;color:#c8a03a;text-decoration:none">View in GavelSearch →</a>
+            docket_sections += f"""
+            <div style="margin-top:10px">
+              <div style="font-size:11px;color:#5a7aa0;font-family:monospace">{dn_safe}</div>
+              {change_items}
+              <a href="{SITE_URL}/chat?q={dn_safe}" style="display:inline-block;margin-top:6px;font-size:11px;color:#c8a03a;text-decoration:none">View details →</a>
+            </div>"""
+
+        person_cards += f"""
+        <div style="background:#132240;border:1px solid #1e3254;border-radius:8px;padding:18px;margin-bottom:12px">
+          <div style="font-size:16px;font-weight:600;color:#e8edf5">{name_safe}</div>
+          <div style="font-size:12px;color:#5a7aa0;margin-top:2px">{county_safe} County · {len(info['dockets'])} docket{'s' if len(info['dockets']) != 1 else ''}</div>
+          {docket_sections}
         </div>"""
 
     html_body = f"""<!DOCTYPE html>
@@ -105,19 +142,21 @@ def _render_email(user_email, changes_by_docket, unsubscribe_token):
 <body style="margin:0;padding:0;background:#0f1e38;font-family:-apple-system,system-ui,sans-serif">
 <div style="max-width:560px;margin:0 auto;padding:24px 16px">
   <div style="text-align:center;margin-bottom:24px">
-    <span style="font-size:15px;font-weight:600;color:#e8edf5">Gavel</span><span style="font-size:15px;font-weight:600;color:#c8a03a">Search</span>
+    <span style="font-size:17px;font-weight:700;color:#e8edf5">Gavel</span><span style="font-size:17px;font-weight:700;color:#c8a03a">Search</span>
   </div>
-  <div style="font-size:13px;color:#8fa8c8;text-align:center;margin-bottom:20px">
-    {n_changes} update{'s' if n_changes != 1 else ''} on your watched dockets
+  <div style="font-size:14px;color:#8fa8c8;text-align:center;margin-bottom:24px">
+    {n_changes} update{'s' if n_changes != 1 else ''} on your watched cases
   </div>
-  {docket_rows}
-  <div style="text-align:center;margin-top:24px;padding-top:16px;border-top:1px solid #1e3254">
-    <a href="{SITE_URL}/chat" style="font-size:12px;color:#c8a03a;text-decoration:none;margin-right:16px">Open GavelSearch</a>
+  {person_cards}
+  <div style="text-align:center;margin-top:28px;padding-top:16px;border-top:1px solid #1e3254">
+    <a href="{SITE_URL}/chat" style="display:inline-block;background:#c8a03a;color:#0f1e38;font-weight:600;font-size:13px;padding:10px 24px;border-radius:6px;text-decoration:none;margin-bottom:12px">Open GavelSearch</a>
+  </div>
+  <div style="text-align:center;margin-top:12px">
     <a href="{SITE_URL}/settings" style="font-size:12px;color:#5a7aa0;text-decoration:none;margin-right:16px">Manage Watches</a>
     {f'<a href="{unsub_url}" style="font-size:12px;color:#5a7aa0;text-decoration:none">Unsubscribe</a>' if unsub_url else ''}
   </div>
   <div style="text-align:center;margin-top:16px;font-size:10px;color:#4a6a99">
-    GavelSearch — PA UJS Court Records — Not legal advice
+    GavelSearch · Lehigh &amp; Northampton County Court Records · Not legal advice
   </div>
 </div>
 </body></html>"""
