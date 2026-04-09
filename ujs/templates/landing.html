@@ -13,17 +13,45 @@
     <a href="/privacy" class="text-xs text-court-mid hover:text-court-bright">Privacy</a>
   </div>
   {% if user %}
-  <div class="flex items-center gap-3">
-    {% if user.picture %}
-    <img src="{{ user.picture }}" class="w-7 h-7 rounded-full ring-1 ring-navy-border" referrerpolicy="no-referrer">
-    {% endif %}
-    <span class="hidden md:inline text-[12px] text-court-mid">{{ user.name or user.email }}</span>
-    <a href="/logout" class="text-[11px] text-court-dim hover:text-red-400 transition">Sign out</a>
+  <div class="flex items-center gap-2">
+    <!-- User dropdown -->
+    <div class="relative" id="user-menu-wrap">
+      <button onclick="document.getElementById('user-dropdown').classList.toggle('hidden')" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-white/[0.06] border border-transparent hover:border-navy-border transition">
+        {% if user.picture %}
+        <img src="{{ user.picture }}" class="w-7 h-7 rounded-full ring-1 ring-navy-border" referrerpolicy="no-referrer">
+        {% else %}
+        <div class="w-7 h-7 rounded-full bg-navy-hover border border-navy-border flex items-center justify-center">
+          <span class="text-[11px] text-court-mid font-medium">{{ (user.name or user.email)[0]|upper }}</span>
+        </div>
+        {% endif %}
+        <span class="hidden md:block text-[12px] text-court-bright">{{ user.name or user.email.split('@')[0] }}</span>
+        <svg class="w-3 h-3 text-court-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+      </button>
+      <div id="user-dropdown" class="hidden absolute right-0 top-full mt-1.5 w-52 bg-navy border border-navy-border rounded-lg shadow-xl overflow-hidden z-50">
+        <div class="px-4 py-3 border-b border-navy-border">
+          <div class="text-[12px] text-court-bright font-medium truncate">{{ user.name or 'User' }}</div>
+          <div class="text-[10px] text-court-dim truncate">{{ user.email }}</div>
+        </div>
+        <a href="/chat" class="flex items-center gap-2.5 px-4 py-2.5 text-[12px] text-court-mid hover:bg-navy-hover hover:text-court-bright transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+          My searches
+        </a>
+        <a href="/settings" class="flex items-center gap-2.5 px-4 py-2.5 text-[12px] text-court-mid hover:bg-navy-hover hover:text-court-bright transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
+          Settings
+        </a>
+        <div class="border-t border-navy-border"></div>
+        <a href="/logout" class="flex items-center gap-2.5 px-4 py-2.5 text-[12px] text-red-400 hover:bg-red-500/10 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+          Sign out
+        </a>
+      </div>
+    </div>
     <a href="/chat" class="text-[11px] font-medium text-navy bg-gold hover:bg-gold-dim rounded px-4 py-[7px]">Go to search</a>
   </div>
   {% else %}
   <div class="flex items-center gap-3">
-    <a href="/login" class="text-[11px] text-court-mid hover:text-court-bright transition">Sign in</a>
+    <a href="/login" class="text-[11px] text-court-mid hover:text-court-bright border border-navy-border hover:border-court-dim rounded px-3.5 py-[6px] transition">Sign in</a>
     <a href="/login" class="text-[11px] font-medium text-navy bg-gold hover:bg-gold-dim rounded px-4 py-[7px]">Get started</a>
   </div>
   {% endif %}
@@ -131,5 +159,10 @@
 {% block scripts %}
 <script>
 function goChat(q) { window.location.href = '/chat?q=' + encodeURIComponent(q); }
+document.addEventListener('click', function(e) {
+  const wrap = document.getElementById('user-menu-wrap');
+  const dd = document.getElementById('user-dropdown');
+  if (wrap && dd && !wrap.contains(e.target)) dd.classList.add('hidden');
+});
 </script>
 {% endblock %}
