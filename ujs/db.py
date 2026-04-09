@@ -1010,7 +1010,8 @@ def get_user_watches(conn, user_id):
                c.caption, c.status, c.county, c.filing_date, c.last_scraped,
                (SELECT COUNT(*) FROM change_log cl WHERE cl.docket_number = w.docket_number
                 AND cl.detected_at > COALESCE(w.last_notified_at, w.created_at)
-                AND cl.old_value IS NOT NULL AND cl.field != 'initial_ingest') AS pending_changes
+                AND cl.field != 'initial_ingest'
+                AND NOT (cl.old_value IS NULL AND cl.field IN ('bail_status','bail_amount','bail_type','data_changed'))) AS pending_changes
         FROM user_watches w
         LEFT JOIN cases c ON w.docket_number = c.docket_number
         WHERE w.user_id = %s
@@ -1036,7 +1037,8 @@ def get_pending_notifications(conn, frequency='daily'):
         FROM user_watches w
         JOIN change_log cl ON cl.docket_number = w.docket_number
             AND cl.detected_at > COALESCE(w.last_notified_at, w.created_at)
-            AND cl.old_value IS NOT NULL AND cl.field != 'initial_ingest'
+            AND cl.field != 'initial_ingest'
+            AND NOT (cl.old_value IS NULL AND cl.field IN ('bail_status','bail_amount','bail_type','data_changed'))
         LEFT JOIN cases c ON w.docket_number = c.docket_number
         LEFT JOIN user_preferences p ON w.user_id = p.user_id
         WHERE w.notify_frequency = %s
