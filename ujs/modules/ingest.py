@@ -91,39 +91,22 @@ def ingest_events(county=None, docket_type=None, lookahead_days=14):
 
 
 def deep_analyze_docket(docket_number):
-    """Download PDF, run Gemini, store analysis + change detection.
-    Uses stored docket_sheet_url when available (skips UJS search)."""
-    from ujs.modules.docket_pdf import download_pdf, extract_text, parse_with_gemini
+    """Search UJS → download PDF → Gemini parse → store analysis + detect changes.
+    UJS requires a search session before PDF download (no direct URL access)."""
+    from ujs.core import search_by_docket
 
-    # Get case from DB — use stored PDF URL if available
+    # Ensure case exists in DB
     with db.connect() as conn:
-        case = db.get_case(conn, docket_number)
-
-    if not case:
-        # Not in DB yet — must search UJS (on-demand requests only)
-        from ujs.core import search_by_docket
-        results = search_by_docket(docket_number)
-        if results:
-            with db.connect() as conn:
+        if not db.get_case(conn, docket_number):
+            results = search_by_docket(docket_number)
+            if results:
                 db.upsert_cases(conn, results)
-            case = results[0] if isinstance(results[0], dict) else {"docket_sheet_url": None}
-        else:
-            raise ValueError(f"Docket not found on UJS: {docket_number}")
+            else:
+                raise ValueError(f"Docket not found on UJS: {docket_number}")
 
-    pdf_url = case.get("docket_sheet_url") if isinstance(case, dict) else getattr(case, "docket_sheet_url", None)
-    if not pdf_url:
-        # No URL stored — fall back to full search
-        with tempfile.TemporaryDirectory() as d:
-            analysis = analyze_docket(docket_number, out_dir=d)
-    else:
-        # Fast path: download PDF directly from stored URL, skip UJS search
-        with tempfile.TemporaryDirectory() as d:
-            import os
-            fn = os.path.join(d, f"{docket_number.replace('-','_')}_docket.pdf")
-            download_pdf(pdf_url, fn)
-            text = extract_text(fn)
-            analysis = parse_with_gemini(text)
-            analysis["docket_number"] = docket_number
+    # Search + download PDF + Gemini parse (~12s total)
+    with tempfile.TemporaryDirectory() as d:
+        analysis = analyze_docket(docket_number, out_dir=d)
 
     with db.connect() as conn:
         changes = db.detect_and_store_changes(conn, docket_number, analysis)
