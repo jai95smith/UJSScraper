@@ -169,10 +169,19 @@ def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=F
                         if not silent:
                             _update_job(job_id, append_tool=block.name)
                         result = execute_tool(block.name, block.input)
+                        # Handle large table injection — write directly to DB response
+                        clean_result = result
+                        if "<!--TABLE_INJECT:" in result:
+                            start = result.index("<!--TABLE_INJECT:") + 17
+                            end = result.index(":TABLE_INJECT-->")
+                            table_json = result[start:end]
+                            if not silent:
+                                _update_job(job_id, append_response=f"\n\n```table\n{table_json}\n```\n\n")
+                            clean_result = result[:result.index("<!--TABLE_INJECT:")]
                         tool_results.append({
                             "type": "tool_result",
                             "tool_use_id": block.id,
-                            "content": result,
+                            "content": clean_result,
                         })
                 if tool_results:
                     messages.append({"role": "user", "content": tool_results})
@@ -308,7 +317,15 @@ def _streamed_turn(client, system, tools, messages, job_id):
             except json.JSONDecodeError:
                 inp = {}
             result = execute_tool(tb["name"], inp)
-            tool_results.append({"type": "tool_result", "tool_use_id": bid, "content": result})
+            # Handle large table injection
+            clean_result = result
+            if "<!--TABLE_INJECT:" in result:
+                start = result.index("<!--TABLE_INJECT:") + 17
+                end = result.index(":TABLE_INJECT-->")
+                table_json = result[start:end]
+                _update_job(job_id, append_response=f"\n\n```table\n{table_json}\n```\n\n")
+                clean_result = result[:result.index("<!--TABLE_INJECT:")]
+            tool_results.append({"type": "tool_result", "tool_use_id": bid, "content": clean_result})
         if tool_results:
             messages.append({"role": "user", "content": tool_results})
         return None  # tool_use turn — caller should loop

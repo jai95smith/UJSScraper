@@ -389,7 +389,12 @@ def _render_table(conn, inputs):
     if not headers or not rows:
         return "Error: render_table requires 'headers' and 'rows' arrays."
     table_json = json.dumps({"title": inputs.get("title", ""), "headers": headers, "rows": rows})
-    return f"TABLE_RENDERED. Include this exact block in your response:\n```table\n{table_json}\n```"
+    n = len(rows)
+    # For small tables, let Claude echo the block (faster overall)
+    if n <= 15:
+        return f"TABLE_RENDERED. Include this exact block in your response:\n```table\n{table_json}\n```"
+    # For large tables, inject directly into the response to skip token-by-token streaming
+    return f"TABLE_RENDERED ({n} rows). The table has been added to your response automatically. Do NOT repeat or echo the table block. Just continue with your summary text.\n<!--TABLE_INJECT:{table_json}:TABLE_INJECT-->"
 
 
 def _render_chart(conn, inputs):

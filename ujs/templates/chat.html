@@ -393,9 +393,10 @@ async function pollJob(jobId, statusEl, contentEl, msgId, convId) {
       // Update status line from tools or response header
       if (toolCount > lastToolCount) {
         const lastTool = data.tools[toolCount - 1].replace(/_/g, ' ');
-        if (statusTextEl) statusTextEl.textContent = lastTool;
-        else statusEl.textContent = lastTool;
-        // Re-show thinking dots when a new tool starts (working on something)
+        const friendlyNames = {render_table:'Building table',render_chart:'Building chart',get_upcoming_hearings:'Fetching hearings',get_person_history:'Looking up records',search_cases:'Searching cases',fuzzy_name_search:'Searching names',live_search_ujs:'Searching UJS portal',run_custom_query:'Running query',web_search:'Searching news'};
+        if (statusTextEl) statusTextEl.textContent = friendlyNames[data.tools[toolCount-1]] || lastTool;
+        else statusEl.textContent = friendlyNames[data.tools[toolCount-1]] || lastTool;
+        // Re-show thinking dots when a new tool starts
         if (dotsEl) { dotsEl.classList.remove('fade-out'); dotsEl.style.display = ''; }
         lastToolCount = toolCount;
       }
