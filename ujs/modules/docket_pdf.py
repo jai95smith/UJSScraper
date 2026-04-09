@@ -277,11 +277,11 @@ def _gemini_extract(text, prompt, schema, api_key=None, docket_number=None):
     return result
 
 
-# Gemini 2.5 Flash pricing (per 1M tokens)
+# Gemini 2.5 Flash pricing (per 1M tokens, standard tier)
 _PRICING = {
-    "input": 0.15 / 1_000_000,
-    "output": 0.60 / 1_000_000,
-    "thinking": 0.70 / 1_000_000,
+    "input": 0.30 / 1_000_000,
+    "output": 2.50 / 1_000_000,   # includes thinking tokens
+    "thinking": 2.50 / 1_000_000,  # same rate as output
 }
 
 
