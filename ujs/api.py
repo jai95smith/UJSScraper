@@ -25,7 +25,7 @@ def _queue_worker():
 
     _worker_running = True
     _recent = set()
-    _delay = 5  # Base delay between requests (seconds)
+    _delay = 10  # Base delay between requests (seconds)
 
     while _worker_running:
         try:
