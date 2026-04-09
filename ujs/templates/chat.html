@@ -405,8 +405,10 @@ function _handleJobData(data, state) {
   }
 
   if (data.total_length > state.seen) {
+    // Accumulate full response (SSE sends deltas)
+    state.fullResponse = (state.fullResponse || '') + data.response;
     state.seen = data.total_length;
-    const full = data.response;
+    const full = state.fullResponse;
     const parts = full.split('\n\n');
     if (parts.length > 1) {
       if (!toolCount) {
@@ -443,7 +445,7 @@ function _finishJob(data, state) {
 async function pollJob(jobId, statusEl, contentEl, msgId, convId) {
   const statusTextEl = document.getElementById(statusEl.id + '-text');
   const dotsEl = document.getElementById(statusEl.id + '-dots');
-  const state = { seen: 0, lastToolCount: 0, statusEl, statusTextEl, dotsEl, contentEl, msgId };
+  const state = { seen: 0, lastToolCount: 0, fullResponse: '', statusEl, statusTextEl, dotsEl, contentEl, msgId };
 
   // Create abort controller for this poll — cancelled when switching chats
   _abortController = new AbortController();
