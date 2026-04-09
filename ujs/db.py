@@ -427,17 +427,34 @@ def claim_ingest_job(conn):
     if row:
         return row
 
-    # 2. Auto-pick next unanalyzed case (most recent filing first)
-    cur.execute("""
-        SELECT c.docket_number FROM cases c
-        LEFT JOIN analyses a ON c.docket_number = a.docket_number AND a.doc_type = 'docket'
-        WHERE a.id IS NULL AND c.filing_date IS NOT NULL AND c.filing_date != ''
-        ORDER BY TO_DATE(c.filing_date, 'MM/DD/YYYY') DESC
-        LIMIT 1
-    """)
-    unanalyzed = cur.fetchone()
-    if unanalyzed:
-        return (0, unanalyzed[0])
+    # 2. Refill queue from unanalyzed cases if running low
+    cur.execute("SELECT COUNT(*) FROM ingest_queue WHERE status = 'pending'")
+    pending = cur.fetchone()[0]
+    if pending < 10:
+        cur.execute("""
+            INSERT INTO ingest_queue (docket_number, priority)
+            SELECT c.docket_number, 2
+            FROM cases c
+            LEFT JOIN analyses a ON c.docket_number = a.docket_number AND a.doc_type = 'docket'
+            WHERE a.id IS NULL AND c.filing_date IS NOT NULL AND c.filing_date != ''
+            AND c.docket_number NOT IN (SELECT docket_number FROM ingest_queue)
+            ORDER BY TO_DATE(c.filing_date, 'MM/DD/YYYY') DESC
+            LIMIT 20
+        """)
+        if cur.rowcount > 0:
+            # Now claim one from the queue (SKIP LOCKED handles parallelism)
+            cur.execute("""
+                UPDATE ingest_queue SET status = 'processing', started_at = NOW()
+                WHERE id = (
+                    SELECT id FROM ingest_queue
+                    WHERE status = 'pending'
+                    ORDER BY priority DESC, requested_at ASC
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                )
+                RETURNING id, docket_number
+            """)
+            return cur.fetchone()
 
     return None
 
