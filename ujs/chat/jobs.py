@@ -201,6 +201,7 @@ def _streamed_turn(client, system, tools, messages, job_id):
     fence_depth = 0  # Tracks nested ``` pairs
     backtick_trail = ""  # Tracks partial ``` across chunk boundaries
     first_text = True
+    last_flush = time.time()
 
     # Tool tracking: {block_id: {"name": str, "json_str": str}}
     tool_blocks = {}
@@ -209,7 +210,7 @@ def _streamed_turn(client, system, tools, messages, job_id):
     has_tool_use = False
 
     def _flush(force=False):
-        nonlocal buffer, first_text
+        nonlocal buffer, first_text, last_flush
         if not buffer:
             return
         if fence_depth > 0 and not force:
@@ -220,6 +221,7 @@ def _streamed_turn(client, system, tools, messages, job_id):
         else:
             _update_job(job_id, append_response=buffer)
         buffer = ""
+        last_flush = time.time()
 
     def _track_fences(text):
         """Track ``` fence markers, handling partial sequences across chunks."""
@@ -280,8 +282,10 @@ def _streamed_turn(client, system, tools, messages, job_id):
                         full_text += text
                         buffer += text
                         _track_fences(text)
-                        if fence_depth == 0 and len(buffer) >= 80:
+                        now = time.time()
+                        if fence_depth == 0 and (len(buffer) >= 500 or now - last_flush >= 0.5):
                             _flush()
+                            last_flush = now
 
                 elif event.type == 'content_block_stop':
                     current_block_id = None
@@ -380,9 +384,11 @@ def _run_job(job_id, question, history, conversation_id=None):
         # ---------------------------------------------------------------
         news_section = ""
         if is_person_query(question, court_answer) and time.time() < timeout_at - 15:
-            # Check cache — key on question words sorted (order-independent)
-            cache_key = " ".join(sorted(question.lower().split()))
+            # Extract person context first, then build cache key from it
             context = _extract_person_context(question, court_answer)
+            # Cache key includes extracted name+county so different people don't collide
+            context_first_line = context.split("\n")[0].lower().strip()
+            cache_key = context_first_line + ":" + " ".join(sorted(question.lower().split()))
             cached = _news_cache.get(cache_key)
             if cached and (time.time() - cached[1]) < _NEWS_CACHE_TTL:
                 news_section = "\n\n---\n\n**News Coverage**\n\n" + cached[0]

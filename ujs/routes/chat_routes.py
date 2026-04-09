@@ -152,41 +152,32 @@ def ask(body: AskRequest, request: Request):
 
     cid = body.conversation_id
 
-    # Create conversation if none provided
-    if not cid:
-        cid = _nanoid()
-        with db.connect() as conn:
-            cur = conn.cursor()
-            cur.execute("INSERT INTO conversations (id, title, user_id, user_email, user_name) VALUES (%s, %s, %s, %s, %s)",
-                        (cid, body.question[:60], user["sub"], user["email"], user.get("name", "")))
-    else:
-        # Verify ownership of existing conversation
-        with db.connect() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT 1 FROM conversations WHERE id = %s AND user_id = %s", (cid, user["sub"]))
-            if not cur.fetchone():
-                return JSONResponse(status_code=403, content={"error": "Access denied"})
-
-    # Get existing messages for context
-    history = []
-    with db.connect() as conn:
-        cur = db._dict_cur(conn)
-        cur.execute("SELECT messages FROM conversations WHERE id = %s", (cid,))
-        row = cur.fetchone()
-        if row and row["messages"]:
-            history = row["messages"]
-
-    # Append user message to conversation
-    history.append({"role": "user", "content": body.question})
+    # Single DB connection for all conversation setup
     with db.connect() as conn:
         cur = conn.cursor()
+        dict_cur = db._dict_cur(conn)
+
+        if not cid:
+            # Create new conversation
+            cid = _nanoid()
+            cur.execute("INSERT INTO conversations (id, title, user_id, user_email, user_name) VALUES (%s, %s, %s, %s, %s)",
+                        (cid, body.question[:60], user["sub"], user["email"], user.get("name", "")))
+            history = []
+        else:
+            # Verify ownership + get messages in one trip
+            dict_cur.execute("SELECT messages FROM conversations WHERE id = %s AND user_id = %s", (cid, user["sub"]))
+            row = dict_cur.fetchone()
+            if not row:
+                return JSONResponse(status_code=403, content={"error": "Access denied"})
+            history = row["messages"] if row["messages"] else []
+
+        # Append user message and update
+        history.append({"role": "user", "content": body.question})
         cur.execute("UPDATE conversations SET messages = %s, updated_at = NOW() WHERE id = %s",
                     (json.dumps(history), cid))
 
-    # Set title from first message
-    if len(history) == 1:
-        with db.connect() as conn:
-            cur = conn.cursor()
+        # Set title from first message
+        if len(history) == 1:
             cur.execute("UPDATE conversations SET title = %s WHERE id = %s AND title = ''",
                         (body.question[:60], cid))
 

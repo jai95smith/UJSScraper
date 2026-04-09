@@ -1,20 +1,36 @@
 """Database layer for UJS court data."""
 
-import hashlib, json, os
+import hashlib, json, os, logging
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 
+logger = logging.getLogger("ujs.db")
 
 def get_db_url():
     return os.environ["DATABASE_URL"]
 
 
+# Connection pool — reuses connections instead of opening/closing each time.
+# min=2 idle connections, max=20 concurrent connections.
+_pool = None
+
+
+def _get_pool():
+    global _pool
+    if _pool is None or _pool.closed:
+        _pool = psycopg2.pool.ThreadedConnectionPool(2, 20, get_db_url())
+        logger.info("DB connection pool created (2-20 connections)")
+    return _pool
+
+
 @contextmanager
 def connect():
-    conn = psycopg2.connect(get_db_url())
+    pool = _get_pool()
+    conn = pool.getconn()
     try:
         yield conn
         conn.commit()
@@ -22,7 +38,7 @@ def connect():
         conn.rollback()
         raise
     finally:
-        conn.close()
+        pool.putconn(conn)
 
 
 def _hash(data):
