@@ -476,7 +476,6 @@ function _finishJob(data, state) {
   const { statusEl, contentEl, msgId } = state;
   stopThinking(statusEl.id);
   if (data.error) { contentEl.textContent = 'Error: ' + data.error; return; }
-  // Use provided response, or fetch the last known full response
   const resp = data.response || state.lastFullResponse || '';
   if (!resp) return;
   const idx = resp.indexOf('\n\n');
@@ -487,14 +486,45 @@ function _finishJob(data, state) {
       renderFinalResponse(contentEl, text, msgId);
       contentEl.style.transition = 'opacity 0.15s';
       contentEl.style.opacity = '1';
+      // Poll for news updates if "Searching for news" is in the response
+      if (text.includes('Searching for news coverage')) {
+        _pollForNews(state.jobId || data.job_id, contentEl, msgId, state.convId);
+      }
     });
   }
+}
+
+async function _pollForNews(jobId, contentEl, msgId, convId) {
+  for (let i = 0; i < 15; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const res = await apiFetch(API + '/ask/job/' + jobId + (convId ? '?cid=' + convId : ''));
+      const data = await res.json();
+      const resp = data.response || '';
+      if (!resp.includes('Searching for news coverage')) {
+        // News arrived or was removed — re-render
+        const idx = resp.indexOf('\n\n');
+        const text = idx >= 0 ? resp.slice(idx + 2) : resp;
+        if (text) renderFinalResponse(contentEl, text, msgId);
+        return;
+      }
+    } catch(e) { return; }
+  }
+  // Timed out waiting for news — re-render without the loading indicator
+  try {
+    const res = await apiFetch(API + '/ask/job/' + jobId + (convId ? '?cid=' + convId : ''));
+    const data = await res.json();
+    const resp = data.response || '';
+    const idx = resp.indexOf('\n\n');
+    const text = idx >= 0 ? resp.slice(idx + 2) : resp;
+    if (text) renderFinalResponse(contentEl, text, msgId);
+  } catch(e) {}
 }
 
 async function pollJob(jobId, statusEl, contentEl, msgId, convId) {
   const statusTextEl = document.getElementById(statusEl.id + '-text');
   const dotsEl = document.getElementById(statusEl.id + '-dots');
-  const state = { seen: 0, lastToolCount: 0, lastFullResponse: '', statusEl, statusTextEl, dotsEl, contentEl, msgId };
+  const state = { seen: 0, lastToolCount: 0, lastFullResponse: '', statusEl, statusTextEl, dotsEl, contentEl, msgId, jobId: jobId, convId: convId };
 
   // Create abort controller for this poll — cancelled when switching chats
   _abortController = new AbortController();
