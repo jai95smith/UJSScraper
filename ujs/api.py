@@ -21,13 +21,20 @@ _worker_running = False
 def _queue_worker():
     global _worker_running
     _worker_running = True
+    _recent = set()  # Track recently processed dockets to avoid duplicate picks
     while _worker_running:
         try:
             with db.connect() as conn:
                 job = db.claim_ingest_job(conn)
             if job:
                 job_id, docket_number = job
+                if docket_number in _recent:
+                    time.sleep(1)  # Just analyzed — wait for DB to catch up
+                    continue
                 print(f"[worker] Processing {docket_number}")
+                _recent.add(docket_number)
+                if len(_recent) > 100:
+                    _recent.clear()  # Prevent unbounded growth
                 try:
                     from ujs.modules.ingest import deep_analyze_docket
                     deep_analyze_docket(docket_number)
