@@ -2,11 +2,16 @@
 
 {% block body %}
 <!-- Nav -->
-<nav class="bg-navy flex items-center justify-between px-6 md:px-10 h-14 border-b border-navy-border">
-  <a href="/" class="flex items-center gap-3 no-underline">
-    <img src="/static/img/logo-light.svg" class="w-[30px] h-[30px] shrink-0" alt="GavelSearch">
-    <span class="text-[13px] font-medium text-court-bright">Gavel<span class="text-gold">Search</span></span>
+<nav class="bg-navy flex items-center px-6 md:px-10 h-16 border-b border-navy-border relative">
+  <!-- Spacer (balances sign-in on right) -->
+  <div class="w-24 md:w-32 shrink-0"></div>
+  <!-- Centered logo -->
+  <a href="/" class="flex items-center gap-3 no-underline absolute left-1/2 -translate-x-1/2">
+    <img src="/static/img/logo-light.svg" class="w-9 h-9 shrink-0" alt="GavelSearch">
+    <span class="text-[15px] font-semibold text-court-bright">Gavel<span class="text-gold">Search</span></span>
   </a>
+  <!-- Right side -->
+  <div class="ml-auto">
   {% if user %}
   <div class="flex items-center gap-2">
     <!-- User dropdown -->
@@ -47,6 +52,7 @@
   {% else %}
   <a href="/login" class="text-[11px] font-medium text-navy bg-gold hover:bg-gold-dim rounded px-4 py-[7px]">Sign in</a>
   {% endif %}
+  </div>
 </nav>
 
 <!-- Hero -->
