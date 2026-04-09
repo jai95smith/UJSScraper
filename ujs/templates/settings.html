@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Settings — Lehigh Valley Court AI{% endblock %}
+{% block title %}Settings — GavelSearch{% endblock %}
 
 {% block head %}
 <link rel="stylesheet" href="/static/css/chat.css">
@@ -28,10 +28,8 @@
   <aside id="sidebar" class="fixed md:relative z-50 w-60 bg-navy border-r border-navy-border flex flex-col shrink-0 h-full -translate-x-full md:translate-x-0 transition-transform duration-200">
     <div class="h-12 px-3.5 border-b border-navy-border flex items-center justify-between shrink-0">
       <a href="/" class="flex items-center gap-2 no-underline">
-        <div class="w-6 h-6 border border-gold rounded-full flex items-center justify-center">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#c8a03a" stroke-width="1.2"/><path d="M8 17l4-10 4 10" stroke="#c8a03a" stroke-width="1.2" stroke-linecap="round"/></svg>
-        </div>
-        <span class="text-xs font-medium text-court-bright">Court AI</span>
+        <img src="/static/img/logo.svg" class="w-6 h-6" alt="GavelSearch">
+        <span class="text-xs font-medium text-court-bright">Gavel<span class="text-gold">Search</span></span>
       </a>
     </div>
     <nav class="p-2 space-y-0.5 shrink-0">
@@ -71,10 +69,8 @@
   <div class="flex-1 flex flex-col min-w-0 pt-12 md:pt-0">
     <nav class="hidden md:flex bg-navy items-center justify-between px-6 h-12 border-b border-navy-border shrink-0">
       <a href="/" class="flex items-center gap-2.5 no-underline">
-        <div class="w-7 h-7 border-[1.5px] border-gold rounded-full flex items-center justify-center">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#c8a03a" stroke-width="1.2"/><path d="M8 17l4-10 4 10" stroke="#c8a03a" stroke-width="1.2" stroke-linecap="round"/><line x1="9.5" y1="14.5" x2="14.5" y2="14.5" stroke="#c8a03a" stroke-width="1"/></svg>
-        </div>
-        <span class="text-[13px] font-medium text-court-bright">Lehigh Valley <span class="text-gold">Court AI</span></span>
+        <img src="/static/img/logo.svg" class="w-7 h-7" alt="GavelSearch">
+        <span class="text-[13px] font-medium text-court-bright">Gavel<span class="text-gold">Search</span></span>
       </a>
       <a href="/chat" class="text-[11px] font-medium text-navy bg-gold hover:bg-gold-dim rounded px-3.5 py-1.5">Back to chat</a>
     </nav>
@@ -254,7 +250,7 @@
 
         <!-- Footer -->
         <div class="mt-8 pt-5 border-t border-navy-border/50 text-center">
-          <p class="text-[11px] text-court-muted">Lehigh Valley Court AI &middot; Data via PA UJS Portal &middot; Lehigh &amp; Northampton Counties</p>
+          <p class="text-[11px] text-court-muted">GavelSearch &middot; Lehigh &amp; Northampton County court records via PA UJS Portal</p>
           <p class="text-[10px] text-court-muted mt-1">This tool is for informational purposes only and does not constitute legal advice.</p>
         </div>
       </div>

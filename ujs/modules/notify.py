@@ -110,8 +110,7 @@ def _render_email(user_email, changes_by_docket, unsubscribe_token):
 <body style="margin:0;padding:0;background:#0f1e38;font-family:-apple-system,system-ui,sans-serif">
 <div style="max-width:560px;margin:0 auto;padding:24px 16px">
   <div style="text-align:center;margin-bottom:24px">
-    <span style="font-size:15px;font-weight:600;color:#e8edf5">Lehigh Valley </span>
-    <span style="font-size:15px;font-weight:600;color:#c8a03a">Court AI</span>
+    <span style="font-size:15px;font-weight:600;color:#e8edf5">Gavel</span><span style="font-size:15px;font-weight:600;color:#c8a03a">Search</span>
   </div>
   <div style="font-size:13px;color:#8fa8c8;text-align:center;margin-bottom:20px">
     {n_changes} update{'s' if n_changes != 1 else ''} on your watched dockets
