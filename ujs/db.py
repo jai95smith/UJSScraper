@@ -516,14 +516,21 @@ def detect_and_store_changes(conn, docket_number, new_analysis, doc_type="docket
     return changes
 
 
+def _normalize_val(v):
+    """Normalize values for comparison: treat None, 'None', 'null', '' as equivalent."""
+    if v is None or v == "None" or v == "null" or v == "":
+        return None
+    return v
+
+
 def _diff_analysis(old, new):
     """Compare two analysis dicts, return list of changes."""
     changes = []
     track_fields = ["case_status", "judge", "filing_date"]
 
     for field in track_fields:
-        ov = old.get(field)
-        nv = new.get(field)
+        ov = _normalize_val(old.get(field))
+        nv = _normalize_val(new.get(field))
         if ov != nv:
             changes.append({"field": field, "old": ov, "new": nv})
 
