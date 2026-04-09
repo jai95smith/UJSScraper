@@ -104,15 +104,18 @@ def autocomplete(q: str = Query(..., min_length=2, max_length=100)):
             for r in cur.fetchall():
                 results.append({"type": "docket", "value": r["docket_number"], "label": f"{r['docket_number']} — {r['caption']}"})
         else:
-            # Name search
-            cur.execute("""
+            # Name search — match each word independently so "Jason Krasley" finds "Krasley, Jason Michael"
+            words = q_clean.split()
+            word_clauses = " AND ".join(["p.name ILIKE %s"] * len(words))
+            word_params = [f"%{w}%" for w in words]
+            cur.execute(f"""
                 SELECT DISTINCT p.name, COUNT(DISTINCT p.docket_number) as cases
                 FROM participants p
-                WHERE p.name ILIKE %s
+                WHERE {word_clauses}
                 GROUP BY p.name
                 ORDER BY cases DESC
                 LIMIT 8
-            """, (f"%{q_clean}%",))
+            """, word_params)
             for r in cur.fetchall():
                 cases = r["cases"]
                 results.append({"type": "name", "value": r["name"], "label": f"{r['name']} ({cases} case{'s' if cases != 1 else ''})"})
