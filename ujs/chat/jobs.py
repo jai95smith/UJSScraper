@@ -287,8 +287,8 @@ def _streamed_turn(client, system, tools, messages, job_id):
         with client.messages.stream(
             model="claude-sonnet-4-6-20250514", max_tokens=2048,
             system=system, tools=tools, messages=messages,
-        ) as stream:
-            for event in stream:
+        ) as stream_ctx:
+            for event in stream_ctx:
                 if not hasattr(event, 'type'):
                     continue
 
@@ -327,18 +327,16 @@ def _streamed_turn(client, system, tools, messages, job_id):
                     current_block_id = None
                     current_block_type = None
 
-                elif event.type == 'message_start' and hasattr(event, 'message'):
-                    u = getattr(event.message, 'usage', None)
-                    if u:
-                        usage_tokens["input"] += getattr(u, 'input_tokens', 0)
-
-                elif event.type == 'message_delta':
-                    u = getattr(event, 'usage', None)
-                    if u:
-                        usage_tokens["output"] += getattr(u, 'output_tokens', 0)
-
         # Flush remaining buffer
         _flush(force=True)
+        # Capture usage from final message
+        try:
+            final = stream_ctx.get_final_message()
+            if hasattr(final, 'usage'):
+                usage_tokens["input"] = final.usage.input_tokens
+                usage_tokens["output"] = final.usage.output_tokens
+        except Exception:
+            pass
 
     except Exception as e:
         _flush(force=True)

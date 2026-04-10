@@ -62,7 +62,6 @@ def get_suggestions():
                 suggestions.append(f"Show cases for Judge {judge['j'].split(',')[0]}")
 
             # Always include these — use a random active county for variety
-            import random
             _counties = db.get_active_county_names()
             _sample = random.choice(_counties) if _counties else "your county"
             suggestions.extend([
