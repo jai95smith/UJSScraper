@@ -213,32 +213,68 @@ def _search_by_attorney(conn, inputs):
     return _auto_table([dict(r) for r in results], _CASE_COLS, empty_msg=f"No cases found for attorney: {inputs['attorney_name']}")
 
 
+def _rich_charge_search(conn, descriptions, disposition=None, county=None, limit=20):
+    """Search charges with full case detail joined in one query."""
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    placeholders = ",".join(["%s"] * len(descriptions))
+    params = list(descriptions)
+    extra = ""
+    if disposition:
+        extra += " AND ch.disposition ILIKE %s"
+        params.append(f"%{disposition}%")
+    if county:
+        extra += " AND c.county ILIKE %s"
+        params.append(county)
+    params.append(limit)
+    cur.execute(f"""
+        SELECT DISTINCT ON (ch.docket_number)
+            ch.docket_number, ch.description as charge, ch.statute, ch.grade,
+            ch.disposition, ch.disposition_date, ch.offense_date,
+            c.caption, c.county, c.status as case_status, c.filing_date,
+            p.name as defendant, p.dob,
+            a.analysis->>'judge' as judge,
+            b.bail_type, b.amount as bail_amount,
+            s.sentence_type, s.duration as sentence_duration
+        FROM charges ch
+        JOIN cases c ON ch.docket_number = c.docket_number
+        LEFT JOIN participants p ON ch.docket_number = p.docket_number
+        LEFT JOIN analyses a ON ch.docket_number = a.docket_number AND a.doc_type = 'docket'
+        LEFT JOIN bail b ON ch.docket_number = b.docket_number
+        LEFT JOIN sentences s ON ch.docket_number = s.docket_number
+        WHERE ch.description IN ({placeholders}) {extra}
+        ORDER BY ch.docket_number, ch.seq
+        LIMIT %s
+    """, params)
+    return [dict(r) for r in cur.fetchall()]
+
+
 def _search_by_charge(conn, inputs):
+    # First try ILIKE via db module
     results = db.search_by_charge(conn, statute=inputs.get("statute"), description=inputs.get("description"),
                                    disposition=inputs.get("disposition"), county=inputs.get("county"), limit=20)
     # If ILIKE found nothing and we have a description, try semantic search
+    desc_matches = None
     if not results and inputs.get("description") and not inputs.get("statute"):
         matches = _semantic_charge_matches(conn, inputs["description"], limit=10)
         if matches:
-            desc_list = [m[0] for m in matches]
-            placeholders = ",".join(["%s"] * len(desc_list))
-            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-            params = list(desc_list)
-            extra = ""
-            if inputs.get("disposition"):
-                extra += " AND ch.disposition ILIKE %s"
-                params.append(f"%{inputs['disposition']}%")
-            if inputs.get("county"):
-                extra += " AND c.county ILIKE %s"
-                params.append(inputs["county"])
-            params.append(20)
-            cur.execute(f"""
-                SELECT ch.docket_number, ch.description, ch.statute, ch.disposition, c.county
-                FROM charges ch JOIN cases c ON ch.docket_number = c.docket_number
-                WHERE ch.description IN ({placeholders}) {extra}
-                ORDER BY c.filing_date DESC LIMIT %s
-            """, params)
-            results = cur.fetchall()
+            desc_matches = [m[0] for m in matches]
+            results = _rich_charge_search(conn, desc_matches,
+                                          disposition=inputs.get("disposition"),
+                                          county=inputs.get("county"), limit=20)
+            return json.dumps({"_summary": f"Found {len(results)} cases (via semantic search for '{inputs['description']}').",
+                               "_detail": [dict(r) for r in results]}, default=str)
+
+    # For small ILIKE result sets, enrich with full detail
+    if results and len(results) <= 10 and not inputs.get("statute"):
+        descs = list(set(r.get("description", "") for r in results if r.get("description")))
+        if descs:
+            rich = _rich_charge_search(conn, descs,
+                                       disposition=inputs.get("disposition"),
+                                       county=inputs.get("county"), limit=20)
+            if rich:
+                return json.dumps({"_summary": f"Found {len(rich)} cases.",
+                                   "_detail": [dict(r) for r in rich]}, default=str)
+
     return _auto_table([dict(r) for r in results],
                        {"Docket": "docket_number", "Charge": "description", "Statute": "statute", "Disposition": "disposition", "County": "county"},
                        empty_msg="No charges found.")
