@@ -137,11 +137,15 @@ def county_lander(state_slug, county_slug):
         return render_template('404.html', api_url=_api_url()), 404
     with db.connect() as conn:
         charge_stats = db.get_charge_stats(conn, county=county_name, limit=10)
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(DISTINCT description) FROM charges ch JOIN cases c ON ch.docket_number = c.docket_number WHERE c.county ILIKE %s", (county_name,))
+        unique_charges = cur.fetchone()[0]
     return render_template('county_lander.html',
         api_url=_api_url(), county=county_name, state_code=state_code,
         state_slug=state_slug, county_slug=county_slug,
         case_count=match["case_count"], total_case_count=_get_case_count(),
-        charge_stats=charge_stats, counties=active, **_user_context())
+        charge_stats=charge_stats, unique_charges=unique_charges,
+        counties=active, **_user_context())
 
 
 @main_bp.route('/login')
