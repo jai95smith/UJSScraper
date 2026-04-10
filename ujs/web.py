@@ -293,12 +293,15 @@ def admin_status():
         change_count = cur.fetchone()[0]
         cur.execute("SELECT COUNT(*) FROM ingest_queue WHERE status = 'pending'")
         queue_pending = cur.fetchone()[0]
-        cur.execute("SELECT COUNT(*) FROM ingest_queue WHERE status = 'running'")
-        queue_running = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM ingest_queue WHERE status = 'completed' AND completed_at > NOW() - INTERVAL '24 hours'")
+        analyzed_24h = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM analyses")
+        total_analyzed = cur.fetchone()[0]
     return {
         'crons': crons,
         'services': services,
-        'stats': {**stats, 'changes': change_count, 'queue_pending': queue_pending, 'queue_running': queue_running},
+        'stats': {**stats, 'changes': change_count, 'queue_pending': queue_pending,
+                  'analyzed_24h': analyzed_24h, 'total_analyzed': total_analyzed},
     }
 
 

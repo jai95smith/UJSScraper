@@ -37,11 +37,12 @@ function renderDashboard(data) {
   const s = data.stats;
   return `
     <!-- Stats -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
       ${statCard('Cases Indexed', s.cases, 'Total court cases in the database')}
-      ${statCard('Changes Logged', s.changes, 'Real case updates detected by watchdog')}
-      ${statCard('Queue Pending', s.queue_pending, 'Dockets waiting for deep analysis')}
-      ${statCard('Queue Running', s.queue_running, 'Dockets being analyzed right now')}
+      ${statCard('Fully Analyzed', s.total_analyzed, 'Dockets with deep PDF analysis')}
+      ${statCard('Analyzed (24h)', s.analyzed_24h, 'Dockets analyzed in last 24 hours')}
+      ${statCard('Queue Pending', s.queue_pending, 'Dockets waiting for analysis')}
+      ${statCard('Changes', s.changes, 'Real case updates detected')}
     </div>
 
     <!-- Services -->
