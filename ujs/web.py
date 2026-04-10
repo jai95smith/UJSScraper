@@ -312,6 +312,11 @@ def admin_status():
 @admin_required
 def admin_cron_toggle(action, name):
     """Toggle a cron job on/off."""
+    if action not in ('start', 'stop'):
+        return {'error': f'Unknown action {action}'}, 400
+    _ALLOWED_CRONS = {'watchdog', 'notify'}
+    if name.lower() not in _ALLOWED_CRONS:
+        return {'error': f'Unknown cron {name}'}, 404
     import subprocess
     try:
         crontab = subprocess.run(['crontab', '-l'], capture_output=True, text=True, timeout=5).stdout

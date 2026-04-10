@@ -4,8 +4,7 @@ import os, time, hmac, hashlib, json, base64, logging
 
 logger = logging.getLogger("ujs.auth")
 
-# Token blocklist: {user_sub: revoked_at_timestamp}
-# Tokens issued before revoked_at are rejected.
+# Token blocklist: persisted in Redis, in-memory fallback
 _revoked = {}
 
 
@@ -43,7 +42,15 @@ def create_user_token(user_id, email, name=""):
 
 def revoke_user_tokens(user_sub):
     """Revoke all tokens for a user (e.g. on logout). Tokens issued before now are rejected."""
-    _revoked[user_sub] = time.time()
+    ts = time.time()
+    _revoked[user_sub] = ts
+    try:
+        from ujs.cache import _get_redis
+        r = _get_redis()
+        if r:
+            r.set(f"ujs:revoked:{user_sub}", str(ts), ex=8 * 86400)
+    except Exception:
+        pass
 
 
 def verify_user_token(token):
@@ -69,9 +76,21 @@ def verify_user_token(token):
         if not sub or not email:
             logger.warning("Auth failure: missing sub or email in token")
             return None
-        # Check revocation
+        # Check revocation (in-memory first, then Redis)
         iat = payload.get("iat", 0)
-        if sub in _revoked and iat <= _revoked[sub]:
+        revoked_at = _revoked.get(sub)
+        if not revoked_at:
+            try:
+                from ujs.cache import _get_redis
+                r = _get_redis()
+                if r:
+                    val = r.get(f"ujs:revoked:{sub}")
+                    if val:
+                        revoked_at = float(val)
+                        _revoked[sub] = revoked_at
+            except Exception:
+                pass
+        if revoked_at and iat <= revoked_at:
             logger.info("Auth failure: revoked token for %s", email)
             return None
         return {"sub": sub, "email": email, "name": payload.get("name", "")}

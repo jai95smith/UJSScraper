@@ -13,9 +13,17 @@ from ujs.cache import check_rate
 router = APIRouter(tags=["Chat"])
 
 
+def _get_real_ip(request: Request):
+    """Extract real client IP from proxy headers."""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 def _check_rate_limit(request: Request, user=None):
     """Returns True if rate limited. Uses Redis for persistence."""
-    ip = request.client.host if request.client else "unknown"
+    ip = _get_real_ip(request)
     if check_rate(f"ip:{ip}", 10):  # 10/min per IP
         return True
     if user and check_rate(f"user:{user['sub']}", 20):  # 20/min per user

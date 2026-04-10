@@ -627,13 +627,15 @@ def get_changes(conn, docket_number=None, since=None, limit=100):
 # Staleness
 # ---------------------------------------------------------------------------
 
-def cleanup_old_data(conn, queue_days=7, changelog_days=90):
-    """Delete old completed/failed queue entries and old change_log entries."""
+def cleanup_old_data(conn, queue_days=7, changelog_days=90, chat_days=90):
+    """Delete old completed/failed queue entries, change_log, and chat_jobs."""
     cur = conn.cursor()
     cur.execute("DELETE FROM ingest_queue WHERE status IN ('completed', 'failed') AND completed_at < NOW() - INTERVAL '%s days'", (queue_days,))
     queue_deleted = cur.rowcount
     cur.execute("DELETE FROM change_log WHERE detected_at < NOW() - INTERVAL '%s days'", (changelog_days,))
     changelog_deleted = cur.rowcount
+    cur.execute("DELETE FROM chat_jobs WHERE status IN ('completed', 'error') AND created_at < NOW() - INTERVAL '%s days'", (chat_days,))
+    chat_deleted = cur.rowcount
     return queue_deleted, changelog_deleted
 
 
