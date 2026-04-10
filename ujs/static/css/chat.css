@@ -4,13 +4,12 @@ body { background: #132240; height: 100dvh; overflow: hidden; }
 /* Prose / markdown content */
 .prose { line-height: 1.6; overflow-wrap: break-word; word-break: break-word; color: #e8edf5; }
 .prose p { margin: 0; }
-.prose p + p { margin-top: 8px; }
+.prose p + p { margin-top: 10px; }
 .prose strong { color: #e8edf5; font-weight: 600; }
 .prose em { color: #c8a03a; font-style: normal; }
 .prose h3, .prose h4 { color: #fff; margin-top: 16px; margin-bottom: 4px; }
-.prose ul, .prose ol { margin: 6px 0; padding-left: 20px; }
-.prose li { margin: 3px 0; }
-.prose li + li { margin-top: 2px; }
+.prose ul, .prose ol { margin: 1px 0 12px 0; padding-left: 20px; }
+.prose li { margin: 1px 0; line-height: 1.5; }
 .prose ul ul, .prose ol ol { margin: 2px 0; }
 .prose hr { border: none; border-top: 1px solid #1e3254; margin: 16px 0; }
 
