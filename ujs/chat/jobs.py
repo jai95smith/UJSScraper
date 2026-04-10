@@ -159,15 +159,6 @@ def _process_tool_result(result, job_id, silent=False):
     except (json.JSONDecodeError, TypeError):
         pass
 
-    # Legacy TABLE_INJECT marker from render_table
-    if "<!--TABLE_INJECT:" in result:
-        start = result.index("<!--TABLE_INJECT:") + 17
-        end = result.index(":TABLE_INJECT-->")
-        table_json = result[start:end]
-        if not silent:
-            _update_job(job_id, append_response=f"\n\n```table\n{table_json}\n```\n\n")
-        return result[:result.index("<!--TABLE_INJECT:")]
-
     return result
 
 
