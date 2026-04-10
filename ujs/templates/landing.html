@@ -102,9 +102,10 @@
     <button type="submit" class="h-[50px] px-6 bg-gold hover:bg-gold-dim border-none text-navy text-[13px] font-medium cursor-pointer whitespace-nowrap">Ask →</button>
   </form>
 
-  <div class="mt-[11px] text-[11px] text-court-dim flex items-center gap-[5px]">
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#5a7aa0" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 3"/></svg>
-    Beta · Currently covering {{ counties|map(attribute='county')|join(' & ') }} County, PA · {{ "{:,}".format(case_count) }} cases indexed
+  <div class="mt-4 inline-flex items-center gap-2 bg-navy/50 border border-navy-border rounded-full px-4 py-2">
+    <span class="text-[10px] font-semibold tracking-wider uppercase text-gold">Beta</span>
+    <span class="w-px h-3 bg-navy-border"></span>
+    <span class="text-[12px] text-court-mid">Currently covering {{ counties|map(attribute='county')|join(' & ') }} County, PA · {{ "{:,}".format(case_count) }} cases</span>
   </div>
 
   <div class="flex flex-wrap gap-[7px] mt-[22px] justify-center">

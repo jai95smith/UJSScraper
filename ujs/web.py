@@ -232,8 +232,10 @@ def settings():
 def chat(conversation_id=None):
     api_url = _api_url()
     initial_query = request.args.get('q', '')
+    from ujs import db
     return render_template('chat.html', api_url=api_url, initial_query=initial_query,
-                           conversation_id=conversation_id or '', case_count=_get_case_count(), **_user_context())
+                           conversation_id=conversation_id or '', case_count=_get_case_count(),
+                           counties=db.get_active_counties(), **_user_context())
 
 
 def create_app():

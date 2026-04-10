@@ -97,7 +97,7 @@
             <svg id="btn-spin" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
           </button>
         </div>
-        <p class="text-[10px] text-court-muted text-center mt-1.5">{{ "{:,}".format(case_count) }} cases · Lehigh & Northampton Counties · Not legal advice</p>
+        <p class="text-[10px] text-court-muted text-center mt-1.5">{{ "{:,}".format(case_count) }} cases · {{ counties|map(attribute='county')|join(' & ') }} County · Not legal advice</p>
       </div>
     </div>
   </div>
@@ -203,8 +203,8 @@ async function showWelcome() {
   messages.innerHTML = `
     <div id="welcome" class="text-center py-20">
       <img src="/static/img/logo-light.svg" class="w-12 h-12 mx-auto mb-4 opacity-50">
-      <h2 class="font-serif text-lg font-medium text-court-bright mb-2">Search Lehigh & Northampton County court records</h2>
-      <p class="text-[13px] text-court-mid max-w-sm mx-auto mb-6">Ask in plain English. Get structured results from the PA Unified Judicial System.</p>
+      <h2 class="font-serif text-lg font-medium text-court-bright mb-2">Search court records with AI</h2>
+      <p class="text-[13px] text-court-mid max-w-sm mx-auto mb-6">Ask in plain English. Get structured results from public court records.</p>
       <div class="flex flex-wrap gap-1.5 justify-center max-w-lg mx-auto">
         ${suggestions.map(s => `<button onclick="prefill('${s.replace(/'/g, "\\'")}')" class="text-[11px] text-court-mid border border-navy-border rounded-lg px-3 py-1.5 bg-navy-hover hover:border-gold hover:text-court-bright transition">${s}</button>`).join('')}
       </div>
