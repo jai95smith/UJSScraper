@@ -81,6 +81,13 @@
 
   <!-- Main -->
   <div class="flex-1 flex flex-col min-w-0 pt-12 md:pt-0">
+    <!-- Beta banner -->
+    <div id="beta-banner" class="bg-navy border-b border-navy-border px-4 py-2 flex items-center justify-center gap-2 text-center">
+      <span class="text-[10px] font-semibold tracking-wider uppercase text-gold">Beta</span>
+      <span class="w-px h-3 bg-navy-border"></span>
+      <span class="text-[11px] text-court-mid">Currently covering {{ counties|map(attribute='county')|join(' & ') }} County, PA</span>
+      <button onclick="document.getElementById('beta-banner').remove()" class="ml-2 text-court-dim hover:text-court-bright text-xs">&times;</button>
+    </div>
     <!-- Messages -->
     <main id="chat" class="flex-1 overflow-y-auto bg-navy-light" style="overscroll-behavior:contain;-webkit-overflow-scrolling:touch;">
       <div class="max-w-2xl mx-auto px-4 md:px-6 py-6 space-y-4" id="messages"></div>
