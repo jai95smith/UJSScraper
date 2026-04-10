@@ -216,12 +216,42 @@ def _fuzzy_name_search(conn, inputs):
 
 def _search_by_judge(conn, inputs):
     results = db.search_by_judge(conn, inputs["judge_name"], county=inputs.get("county"), limit=20)
-    return _auto_table([dict(r) for r in results], _CASE_COLS, empty_msg=f"No cases found for judge: {inputs['judge_name']}")
+    if not results:
+        return f"No cases found for judge: {inputs['judge_name']}"
+    dockets = [r["docket_number"] for r in results]
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    placeholders = ",".join(["%s"] * len(dockets))
+    # Get charge/disposition breakdown for this judge
+    cur.execute(f"""
+        SELECT ch.description, ch.disposition, COUNT(*) as cnt
+        FROM charges ch WHERE ch.docket_number IN ({placeholders})
+        AND ch.description IS NOT NULL
+        GROUP BY ch.description, ch.disposition ORDER BY cnt DESC LIMIT 15
+    """, dockets)
+    charge_stats = [dict(r) for r in cur.fetchall()]
+    table = _auto_table([dict(r) for r in results], _CASE_COLS)
+    summary = {"charge_disposition_breakdown": charge_stats, "total_cases": len(results)}
+    return json.dumps({"_summary": json.dumps(summary), "_table_data": table}, default=str)
 
 
 def _search_by_attorney(conn, inputs):
     results = db.search_by_attorney(conn, inputs["attorney_name"], role=inputs.get("role"), county=inputs.get("county"), limit=20)
-    return _auto_table([dict(r) for r in results], _CASE_COLS, empty_msg=f"No cases found for attorney: {inputs['attorney_name']}")
+    if not results:
+        return f"No cases found for attorney: {inputs['attorney_name']}"
+    dockets = [r["docket_number"] for r in results]
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    placeholders = ",".join(["%s"] * len(dockets))
+    # Get disposition breakdown for this attorney's cases
+    cur.execute(f"""
+        SELECT ch.disposition, COUNT(*) as cnt
+        FROM charges ch WHERE ch.docket_number IN ({placeholders})
+        AND ch.disposition IS NOT NULL AND ch.disposition != ''
+        GROUP BY ch.disposition ORDER BY cnt DESC LIMIT 10
+    """, dockets)
+    disp_stats = [dict(r) for r in cur.fetchall()]
+    table = _auto_table([dict(r) for r in results], _CASE_COLS)
+    summary = {"disposition_breakdown": disp_stats, "total_cases": len(results)}
+    return json.dumps({"_summary": json.dumps(summary), "_table_data": table}, default=str)
 
 
 def _rich_charge_search(conn, descriptions, disposition=None, county=None, limit=20):
@@ -350,11 +380,34 @@ def _get_upcoming_hearings(conn, inputs):
     if inputs.get("event_type"):
         clauses.append("e.event_type ILIKE %s"); params.append(f"%{inputs['event_type']}%")
     where = " AND ".join(clauses) if clauses else "TRUE"
-    params.append(200)
-    cur.execute(f"SELECT e.*, c.caption, c.county FROM events e JOIN cases c ON e.docket_number = c.docket_number WHERE {where} ORDER BY TO_DATE(SUBSTRING(e.event_date FROM 1 FOR 10), 'MM/DD/YYYY') ASC, e.event_date ASC LIMIT %s", params)
+    params.append(50)
+    cur.execute(f"""
+        SELECT e.docket_number, e.event_type, e.event_status, e.event_date, e.event_location,
+               c.caption, c.county, p.name as defendant,
+               (SELECT ch.description FROM charges ch WHERE ch.docket_number = e.docket_number AND ch.seq = 1 LIMIT 1) as lead_charge
+        FROM events e
+        JOIN cases c ON e.docket_number = c.docket_number
+        LEFT JOIN participants p ON e.docket_number = p.docket_number
+        WHERE {where}
+        ORDER BY TO_DATE(SUBSTRING(e.event_date FROM 1 FOR 10), 'MM/DD/YYYY') ASC, e.event_date ASC
+        LIMIT %s
+    """, params)
     results = [dict(r) for r in cur.fetchall()]
     date_label = inputs.get('target_date', 'upcoming')
-    return _hearing_results_to_table(results, title=f"Hearings — {date_label}", empty_msg=f"No hearings found for {date_label}")
+    if not results:
+        return f"No hearings found for {date_label}"
+    rows = []
+    for r in results:
+        rows.append([
+            _format_hearing_time(r.get("event_date", "")),
+            str(r.get("event_type", "")),
+            str(r.get("docket_number", "")),
+            str(r.get("defendant") or r.get("caption", "")),
+            str(r.get("lead_charge") or ""),
+            str(r.get("event_location", "")),
+        ])
+    table = {"title": f"Hearings — {date_label}", "headers": ["Time", "Type", "Docket", "Defendant", "Charge", "Location"], "rows": rows}
+    return json.dumps({"_summary": f"Found {len(rows)} hearings.", "_table": table})
 
 
 # ---------------------------------------------------------------------------
