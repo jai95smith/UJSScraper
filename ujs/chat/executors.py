@@ -661,11 +661,15 @@ def _run_custom_query(conn, inputs):
             cur.execute("RESET statement_timeout")
         except Exception:
             pass
-        # Auto-table for multi-row results
+        # Auto-table for multi-row results, include raw data for chart building
         if len(rows) > 1:
             headers = list(rows[0].keys())
             table_rows = [[str(r.get(h, "")) for h in headers] for r in rows]
-            return json.dumps({"_summary": f"Query returned {len(rows)} rows.", "_table": {"title": "", "headers": headers, "rows": table_rows}}, default=str)
+            return json.dumps({
+                "_summary": f"Query returned {len(rows)} rows. Raw data included below for chart rendering.",
+                "_table": {"title": "", "headers": headers, "rows": table_rows},
+                "_data": rows
+            }, default=str)
         return json.dumps(rows, default=str)
     except Exception as e:
         conn.rollback()
