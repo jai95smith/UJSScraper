@@ -2,13 +2,10 @@
 {% block title %}Not Found — GavelSearch{% endblock %}
 {% block body %}
 <div class="min-h-screen bg-navy flex items-center justify-center px-5">
-  <div class="flex flex-col items-center gap-5">
-    <div class="flex items-center gap-4">
-      <span class="text-gold text-4xl font-serif font-medium">404</span>
-      <span class="w-px h-8 bg-navy-border"></span>
-      <span class="text-court-mid text-sm">This page doesn't exist</span>
-    </div>
-    <a href="/" class="text-[12px] text-court-dim hover:text-gold no-underline transition">Back to GavelSearch</a>
+  <div class="flex flex-col items-center gap-2">
+    <p class="text-court-bright text-base font-medium">Page not found</p>
+    <p class="text-court-dim text-sm">GavelSearch can find court records, but not this page.</p>
+    <a href="/" class="text-[12px] text-gold hover:text-gold-dim no-underline transition mt-3">Back to GavelSearch</a>
   </div>
 </div>
 {% endblock %}
