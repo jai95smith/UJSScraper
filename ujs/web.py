@@ -334,6 +334,23 @@ def admin_cron_toggle(action, name):
     return {'status': 'ok', 'action': action, 'name': name}
 
 
+@main_bp.route('/admin/api/service/<action>/<name>')
+@admin_required
+def admin_service_toggle(action, name):
+    """Start/stop/restart a systemd service."""
+    import subprocess
+    allowed = {'ujs-api', 'ujs-web', 'ujs-worker', 'ujs-ingest'}
+    if name not in allowed:
+        return {'error': f'Unknown service {name}'}, 404
+    if action not in ('start', 'stop', 'restart'):
+        return {'error': f'Unknown action {action}'}, 400
+    try:
+        subprocess.run(['systemctl', action, name], capture_output=True, text=True, timeout=10)
+    except Exception as e:
+        return {'error': str(e)}, 500
+    return {'status': 'ok', 'action': action, 'name': name}
+
+
 @main_bp.route('/settings')
 @login_required
 def settings():

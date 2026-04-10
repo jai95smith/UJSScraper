@@ -48,14 +48,26 @@ function renderDashboard(data) {
     <div>
       <h2 class="text-sm font-medium text-court-bright mb-3">Services</h2>
       <div class="space-y-2">
-        ${data.services.map(svc => `
+        ${data.services.map(svc => {
+          const isUp = svc.status === 'active' || svc.status === 'activating';
+          const statusColor = isUp ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20';
+          const statusLabel = svc.status === 'activating' ? 'running' : svc.status;
+          return `
           <div class="flex items-center justify-between bg-navy-light border border-navy-border rounded-lg px-4 py-3">
             <div>
               <span class="text-[13px] text-court-bright font-medium">${svc.name}</span>
+              <span class="text-[11px] font-medium px-2 py-0.5 rounded ml-2 ${statusColor}">${statusLabel}</span>
             </div>
-            <span class="text-[11px] font-medium px-2 py-0.5 rounded ${svc.status === 'active' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}">${svc.status}</span>
-          </div>
-        `).join('')}
+            <div class="flex items-center gap-2">
+              <button onclick="toggleService('restart', '${svc.name}')"
+                class="text-[11px] px-3 py-1 rounded border border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10 transition">Restart</button>
+              <button onclick="toggleService('${isUp ? 'stop' : 'start'}', '${svc.name}')"
+                class="text-[11px] px-3 py-1 rounded border ${isUp ? 'border-red-500/30 text-red-400 hover:bg-red-500/10' : 'border-green-500/30 text-green-400 hover:bg-green-500/10'} transition">
+                ${isUp ? 'Stop' : 'Start'}
+              </button>
+            </div>
+          </div>`;
+        }).join('')}
       </div>
     </div>
 
@@ -89,6 +101,15 @@ function statCard(label, value) {
     <div class="text-lg font-serif font-medium text-court-bright">${(value || 0).toLocaleString()}</div>
     <div class="text-[10px] text-court-dim mt-1">${label}</div>
   </div>`;
+}
+
+async function toggleService(action, name) {
+  try {
+    await fetch('/admin/api/service/' + action + '/' + name);
+    setTimeout(loadAdmin, 1000);
+  } catch(e) {
+    alert('Failed: ' + e.message);
+  }
 }
 
 async function toggleCron(action, name) {
