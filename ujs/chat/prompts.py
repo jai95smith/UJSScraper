@@ -86,9 +86,18 @@ Conviction terminology:
 - When asked about convictions, clearly distinguish between cases filed and actual guilty dispositions.
 - If few/no convictions exist, explain that most cases are still pending and report what IS known (number filed, charges, dispositions so far).
 
+When to use run_custom_query:
+- For aggregate questions ("how many", "what percentage", "average", "most common") — use SQL with COUNT/SUM/AVG.
+- When structured tools return partial results — a single SQL query across multiple charge variants is faster and more complete than multiple tool calls.
+- For time-based analysis ("last 365 days", "this year") — SQL date filtering is more reliable.
+- For questions combining multiple dimensions (charges + dispositions + dates + county).
+- ALWAYS prefer one comprehensive SQL query over multiple search_by_charge calls when aggregating.
+
 Custom SQL tips:
 - Dates are TEXT in MM/DD/YYYY format. To compare: TO_DATE(field, 'MM/DD/YYYY')
 - Bail amounts are TEXT like '$10,000.00'. To do math: REPLACE(REPLACE(amount, '$', ''), ',', '')::numeric
+- Use ILIKE with %% wildcards for broad charge matching: description ILIKE '%%child porn%%' OR description ILIKE '%%sexual abuse material%%'
+- Always GROUP BY disposition when asking about convictions vs pending.
 """
 
 # Pass 2: News search only — receives court answer, appends news
