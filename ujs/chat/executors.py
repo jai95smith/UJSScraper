@@ -11,8 +11,8 @@ from ujs import db
 # Semantic charge search via Gemini embeddings + pgvector
 # ---------------------------------------------------------------------------
 
-_EMB_MIN_THRESHOLD = 0.64  # Absolute floor — nothing below this
-_EMB_DROP_MARGIN = 0.12    # Drop matches more than this below the top match
+_EMB_MIN_THRESHOLD = 0.65  # Absolute floor — nothing below this
+_EMB_DROP_MARGIN = 0.10    # Drop matches more than this below the top match
 
 def _embed_query(text):
     """Embed a search query using Gemini."""
