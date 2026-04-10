@@ -85,6 +85,21 @@ def get_conversation(cid: str, request: Request):
         return dict(row)
 
 
+@router.delete("/conversations")
+def delete_all_conversations(request: Request):
+    """Delete all conversations for the user. Preserves usage data."""
+    user = _require_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"error": "Authentication required"})
+    with db.connect() as conn:
+        cur = conn.cursor()
+        cur.execute("UPDATE chat_jobs SET conversation_id = NULL WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = %s)",
+                    (user["sub"],))
+        cur.execute("DELETE FROM conversations WHERE user_id = %s", (user["sub"],))
+        count = cur.rowcount
+    return {"status": "deleted", "count": count}
+
+
 @router.delete("/conversations/{cid}")
 def delete_conversation(cid: str, request: Request):
     """Delete a conversation. Must belong to user."""
@@ -93,7 +108,8 @@ def delete_conversation(cid: str, request: Request):
         return JSONResponse(status_code=401, content={"error": "Authentication required"})
     with db.connect() as conn:
         cur = conn.cursor()
-        cur.execute("DELETE FROM chat_jobs WHERE conversation_id = %s AND conversation_id IN (SELECT id FROM conversations WHERE user_id = %s)",
+        # Detach jobs (preserve usage data) then delete conversation
+        cur.execute("UPDATE chat_jobs SET conversation_id = NULL WHERE conversation_id = %s AND conversation_id IN (SELECT id FROM conversations WHERE user_id = %s)",
                     (cid, user["sub"]))
         cur.execute("DELETE FROM conversations WHERE id = %s AND user_id = %s", (cid, user["sub"]))
     return {"status": "deleted"}

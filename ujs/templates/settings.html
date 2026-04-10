@@ -343,12 +343,9 @@ async function loadSettings() {
 async function deleteAllChats() {
   if (!confirm('Delete all your chat history? This cannot be undone.')) return;
   try {
-    const res = await apiFetch(API + '/conversations');
-    const chats = await res.json();
-    for (const c of chats) {
-      await apiFetch(API + '/conversations/' + c.id, { method: 'DELETE' });
-    }
-    showToast('All chats deleted');
+    const res = await apiFetch(API + '/conversations', { method: 'DELETE' });
+    const data = await res.json();
+    showToast(data.count + ' chats deleted');
   } catch(e) {
     if (e !== 'auth') showToast('Failed to delete chats', 'error');
   }
