@@ -324,12 +324,19 @@ def _search_by_charge(conn, inputs):
         matches = _semantic_charge_matches(conn, inputs["description"], limit=10)
         if matches:
             desc_matches = [m[0] for m in matches]
-            match_list = ", ".join(f"'{m[0]}' ({m[1]:.0%})" for m in matches[:5])
             results = _rich_charge_search(conn, desc_matches,
                                           disposition=inputs.get("disposition"),
                                           county=inputs.get("county"), limit=20)
-            return json.dumps({"_summary": f"Found {len(results)} cases. Matched charge names: {match_list}. ALL of these are relevant results — present every case.",
-                               "_detail": [dict(r) for r in results]}, default=str)
+            # Group unique charge names found
+            charge_names = sorted(set(r.get("charge", "") for r in results if r.get("charge")))
+            disp_filter = f" with '{inputs['disposition']}' disposition" if inputs.get("disposition") else ""
+            return json.dumps({
+                "_summary": f"EXACTLY {len(results)} cases found{disp_filter}. "
+                            f"Charge names in results: {', '.join(charge_names)}. "
+                            f"These are ALL semantically equivalent to '{inputs['description']}'. "
+                            f"You MUST present every single case — do not filter or exclude any.",
+                "_detail": [dict(r) for r in results]
+            }, default=str)
 
     # For small ILIKE result sets, enrich with full detail
     if results and len(results) <= 10 and not inputs.get("statute"):
