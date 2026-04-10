@@ -158,6 +158,10 @@ def login():
 
 @main_bp.route('/login/google')
 def login_google():
+    # Stash next URL in session so it survives the OAuth round-trip
+    next_url = request.args.get('next')
+    if next_url:
+        session['login_next'] = _safe_redirect_url(next_url)
     base = os.environ.get('SITE_URL', request.host_url.rstrip('/'))
     redirect_uri = base + '/auth/callback'
     return oauth.google.authorize_redirect(redirect_uri)
@@ -191,7 +195,7 @@ def auth_callback():
         'name': userinfo.get('name', ''),
         'picture': userinfo.get('picture', ''),
     }
-    next_url = _safe_redirect_url(request.args.get('next', '/chat'))
+    next_url = _safe_redirect_url(session.pop('login_next', None) or request.args.get('next', '/chat'))
     return redirect(next_url)
 
 
