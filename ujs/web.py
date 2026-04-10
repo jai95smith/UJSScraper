@@ -347,9 +347,20 @@ def admin_settings():
     from ujs import db
     if request.method == 'POST':
         data = request.get_json()
+        _ALLOWED_SETTINGS = {
+            'user_spend_limit': lambda v: 0 <= float(v) <= 1000,
+            'user_spend_window_hours': lambda v: 0 <= int(float(v)) <= 8760,
+        }
         with db.connect() as conn:
             cur = conn.cursor()
             for key, value in data.items():
+                if key not in _ALLOWED_SETTINGS:
+                    continue
+                try:
+                    if not _ALLOWED_SETTINGS[key](value):
+                        continue
+                except (ValueError, TypeError):
+                    continue
                 cur.execute("INSERT INTO app_settings (key, value, updated_at) VALUES (%s, %s, NOW()) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()",
                             (key, str(value)))
         return {'status': 'ok'}
