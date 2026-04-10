@@ -98,8 +98,9 @@ Rules:
 
 def get_court_prompt():
     from datetime import datetime
+    from zoneinfo import ZoneInfo
     from ujs.db import get_active_county_names
-    now = datetime.now()
+    now = datetime.now(ZoneInfo("America/New_York"))
     counties = get_active_county_names()
     counties_display = ", ".join(f"{c} County" for c in counties) if counties else "Pennsylvania courts"
     counties_list = ", ".join(f"{c} County" for c in counties) if counties else "various counties"
