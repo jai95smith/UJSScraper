@@ -353,9 +353,8 @@ if (CONV_ID) {
   loadChat(CONV_ID);
 } else if (initialQuery) {
   history.replaceState({}, '', '/chat');
-  showWelcome();
   input.value = initialQuery;
-  setTimeout(() => send(), 300);
+  send();
 } else {
   showWelcome();
 }
