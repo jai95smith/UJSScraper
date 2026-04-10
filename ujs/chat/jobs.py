@@ -183,6 +183,9 @@ def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=F
                 model="claude-sonnet-4-20250514", max_tokens=2048,
                 system=system, tools=tools, messages=messages,
             )
+            if hasattr(response, 'usage') and usage_acc is not None:
+                usage_acc["input"] += response.usage.input_tokens
+                usage_acc["output"] += response.usage.output_tokens
 
             if response.stop_reason == "tool_use":
                 messages.append({"role": "assistant", "content": response.content})
