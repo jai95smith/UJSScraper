@@ -104,7 +104,7 @@
 
   <div class="mt-[11px] text-[11px] text-court-dim flex items-center gap-[5px]">
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#5a7aa0" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 3"/></svg>
-    {{ "{:,}".format(case_count) }} cases indexed across {{ counties|length }} {{ 'county' if counties|length == 1 else 'counties' }}
+    Beta · Currently covering {{ counties|map(attribute='county')|join(' & ') }} County, PA · {{ "{:,}".format(case_count) }} cases indexed
   </div>
 
   <div class="flex flex-wrap gap-[7px] mt-[22px] justify-center">
