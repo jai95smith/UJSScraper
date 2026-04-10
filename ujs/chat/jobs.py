@@ -188,7 +188,7 @@ def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=F
             return result  # end_turn — final text
         else:
             response = client.messages.create(
-                model="claude-sonnet-4-6-20250514", max_tokens=2048,
+                model="claude-sonnet-4-20250514", max_tokens=2048,
                 system=system, tools=tools, messages=messages,
             )
             if hasattr(response, 'usage'):
@@ -285,7 +285,7 @@ def _streamed_turn(client, system, tools, messages, job_id):
 
     try:
         with client.messages.stream(
-            model="claude-sonnet-4-6-20250514", max_tokens=2048,
+            model="claude-sonnet-4-20250514", max_tokens=2048,
             system=system, tools=tools, messages=messages,
         ) as stream_ctx:
             for event in stream_ctx:
