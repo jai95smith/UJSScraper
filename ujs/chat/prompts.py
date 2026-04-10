@@ -100,11 +100,11 @@ Tool selection for charge questions:
   where you need a number, not case details.
 - Do NOT write raw SQL when search_by_charge can answer the question — you'll miss the enriched fields.
 
-Custom SQL tips:
+Custom SQL tips (only when run_custom_query is needed):
 - Dates are TEXT in MM/DD/YYYY format. To compare: TO_DATE(field, 'MM/DD/YYYY')
 - Bail amounts are TEXT like '$10,000.00'. To do math: REPLACE(REPLACE(amount, '$', ''), ',', '')::numeric
-- Use ILIKE with %% wildcards for broad charge matching: description ILIKE '%%child porn%%' OR description ILIKE '%%sexual abuse material%%'
 - Always GROUP BY disposition when asking about convictions vs pending.
+- For charge searches, use search_by_charge instead — it has semantic matching and richer data.
 """
 
 # Pass 2: News search only — receives court answer, appends news
