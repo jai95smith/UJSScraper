@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Not Found — GavelSearch{% endblock %}
 {% block body %}
-<div class="min-h-screen bg-navy flex items-center justify-center">
-  <div class="text-center">
-    <img src="/static/img/logo-light.svg" class="w-12 h-12 mx-auto mb-6 opacity-40">
-    <div class="text-gold text-5xl font-serif font-medium mb-3">404</div>
-    <p class="text-court-bright text-base mb-1">Page not found</p>
-    <p class="text-court-dim text-sm mb-8">This page doesn't exist or has been moved.</p>
-    <a href="/" class="inline-block bg-gold hover:bg-gold-dim text-navy font-medium text-sm rounded-lg px-6 py-2.5 no-underline transition">Back to home</a>
+<div class="min-h-screen bg-navy flex items-center justify-center px-5">
+  <div class="flex flex-col items-center gap-5">
+    <div class="flex items-center gap-4">
+      <span class="text-gold text-4xl font-serif font-medium">404</span>
+      <span class="w-px h-8 bg-navy-border"></span>
+      <span class="text-court-mid text-sm">This page doesn't exist</span>
+    </div>
+    <a href="/" class="text-[12px] text-court-dim hover:text-gold no-underline transition">Back to GavelSearch</a>
   </div>
 </div>
 {% endblock %}
