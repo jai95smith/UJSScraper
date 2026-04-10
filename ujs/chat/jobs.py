@@ -11,15 +11,52 @@ from ujs.chat.executors import execute_tool
 from ujs.chat.cleanup import structure_news, classify_and_extract
 from ujs import cache as rcache
 
+# Pricing: Claude Sonnet 4
+_PRICE_INPUT = 3.0 / 1_000_000
+_PRICE_OUTPUT = 15.0 / 1_000_000
+_settings_cache = {"data": {}, "expires": 0}
 
-def create_job(question, history=None, conversation_id=None):
+
+def _get_setting(key, default="0"):
+    now = time.time()
+    if now >= _settings_cache["expires"]:
+        try:
+            with db.connect() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT key, value FROM app_settings")
+                _settings_cache["data"] = {r[0]: r[1] for r in cur.fetchall()}
+                _settings_cache["expires"] = now + 300
+        except Exception:
+            pass
+    return _settings_cache["data"].get(key, default)
+
+
+def get_user_usage(user_id):
+    limit = float(_get_setting("user_spend_limit", "5.0"))
+    window = int(float(_get_setting("user_spend_window_hours", "0")))
+    with db.connect() as conn:
+        cur = conn.cursor()
+        if window > 0:
+            cur.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM chat_jobs WHERE user_id = %s AND created_at > NOW() - INTERVAL '%s hours'", (user_id, window))
+        else:
+            cur.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM chat_jobs WHERE user_id = %s", (user_id,))
+        spent = float(cur.fetchone()[0])
+    return {"spent": round(spent, 4), "limit": limit, "remaining": round(max(0, limit - spent), 4)}
+
+
+def check_user_limit(user_id):
+    usage = get_user_usage(user_id)
+    return usage["remaining"] <= 0
+
+
+def create_job(question, history=None, conversation_id=None, user_id=None):
     """Create a chat job and start processing in background. Returns job_id."""
     job_id = str(uuid.uuid4())[:12]
     with db.connect() as conn:
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO chat_jobs (id, question, history, conversation_id) VALUES (%s, %s, %s, %s)",
-            (job_id, question, json.dumps(history or []), conversation_id)
+            "INSERT INTO chat_jobs (id, question, history, conversation_id, user_id) VALUES (%s, %s, %s, %s, %s)",
+            (job_id, question, json.dumps(history or []), conversation_id, user_id)
         )
     thread = threading.Thread(target=_run_job, args=(job_id, question, history, conversation_id), daemon=True)
     thread.start()
@@ -123,7 +160,7 @@ def _process_tool_result(result, job_id, silent=False):
 
 
 
-def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=False, stream=False):
+def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=False, stream=False, usage_acc=None):
     """Run a tool-use loop until end_turn or timeout. Returns final text.
     If silent=True, don't write status/tool names to the job response.
     If stream=True, stream the final text response to DB in chunks (buffers fenced blocks)."""
@@ -133,7 +170,7 @@ def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=F
 
         if stream and not silent:
             # Use streaming API — handles both tool_use and end_turn in one call
-            result = _streamed_turn(client, system, tools, messages, job_id)
+            result = _streamed_turn(client, system, tools, messages, job_id, usage_acc=usage_acc)
             if result is None:
                 continue  # tool_use turn — loop continues
             return result  # end_turn — final text
@@ -169,7 +206,7 @@ def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=F
     return None
 
 
-def _streamed_turn(client, system, tools, messages, job_id):
+def _streamed_turn(client, system, tools, messages, job_id, usage_acc=None):
     """Single streaming turn. Returns final text on end_turn, None on tool_use (caller loops).
     Buffers fenced blocks (```...```) so partial JSON never hits the DB.
     Properly tracks tool IDs and handles server_tool_use blocks."""
@@ -234,8 +271,8 @@ def _streamed_turn(client, system, tools, messages, job_id):
         with client.messages.stream(
             model="claude-sonnet-4-20250514", max_tokens=2048,
             system=system, tools=tools, messages=messages,
-        ) as stream:
-            for event in stream:
+        ) as stream_ctx:
+            for event in stream_ctx:
                 if not hasattr(event, 'type'):
                     continue
 
@@ -276,6 +313,15 @@ def _streamed_turn(client, system, tools, messages, job_id):
 
         # Flush remaining buffer
         _flush(force=True)
+        # Capture usage (mutates usage_acc in place — no return type change)
+        if usage_acc is not None:
+            try:
+                final = stream_ctx.get_final_message()
+                if hasattr(final, 'usage'):
+                    usage_acc["input"] += final.usage.input_tokens
+                    usage_acc["output"] += final.usage.output_tokens
+            except Exception:
+                pass
 
     except Exception as e:
         _flush(force=True)
@@ -317,6 +363,19 @@ def _streamed_turn(client, system, tools, messages, job_id):
     return full_text
 
 
+def _save_job_cost(job_id, usage):
+    inp = usage.get("input", 0)
+    out = usage.get("output", 0)
+    cost = inp * _PRICE_INPUT + out * _PRICE_OUTPUT
+    try:
+        with db.connect() as conn:
+            cur = conn.cursor()
+            cur.execute("UPDATE chat_jobs SET input_tokens = %s, output_tokens = %s, cost_usd = %s WHERE id = %s",
+                        (inp, out, round(cost, 6), job_id))
+    except Exception:
+        pass
+
+
 def _run_job(job_id, question, history, conversation_id=None):
     """Run the chat job — two sequential passes: court data, then news.
     Job stays 'running' until both passes complete. Frontend sees court
@@ -354,9 +413,10 @@ def _run_job(job_id, question, history, conversation_id=None):
         # ---------------------------------------------------------------
         # Pass 1: Court data (no web search tools)
         # ---------------------------------------------------------------
+        total_usage = {"input": 0, "output": 0}
         court_answer = _run_tool_loop(
             client, get_court_prompt(), TOOLS, list(messages),
-            job_id, timeout_at, stream=True,
+            job_id, timeout_at, stream=True, usage_acc=total_usage,
         )
 
         if court_answer is None:
@@ -431,6 +491,9 @@ def _run_job(job_id, question, history, conversation_id=None):
         # Cache response for identical future queries
         if is_first_message and save_text:
             rcache.set_cached_response(question, save_text)
+
+        # Save cost
+        _save_job_cost(job_id, total_usage)
 
         # Log
         duration = int((time.time() - start) * 1000)
