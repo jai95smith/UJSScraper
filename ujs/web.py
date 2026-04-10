@@ -186,6 +186,8 @@ def auth_callback():
         expected_client_id = os.environ.get('GOOGLE_CLIENT_ID')
         if aud and expected_client_id and aud != expected_client_id:
             return redirect(url_for('main.login', error='auth_failed'))
+    # Grab next URL before clearing session
+    login_next = session.get('login_next')
     # Clear old session to prevent session fixation
     session.clear()
     session.permanent = True
@@ -195,7 +197,7 @@ def auth_callback():
         'name': userinfo.get('name', ''),
         'picture': userinfo.get('picture', ''),
     }
-    next_url = _safe_redirect_url(session.pop('login_next', None) or request.args.get('next', '/chat'))
+    next_url = _safe_redirect_url(login_next or request.args.get('next', '/chat'))
     return redirect(next_url)
 
 
