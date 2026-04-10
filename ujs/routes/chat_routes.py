@@ -182,7 +182,7 @@ def ask(body: AskRequest, request: Request):
     if _check_rate_limit(request, user):
         return JSONResponse(status_code=429, content={"error": "Rate limit exceeded. Try again in a minute."})
     from ujs.chat.jobs import create_job, check_user_limit
-    if check_user_limit(user["sub"]):
+    if check_user_limit(user["sub"], email=user.get("email")):
         return JSONResponse(status_code=429, content={"error": "Usage limit reached. You've used your free allocation."})
 
     cid = body.conversation_id

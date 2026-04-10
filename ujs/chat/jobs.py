@@ -33,18 +33,27 @@ def _get_setting(key, default="0"):
 
 def get_user_usage(user_id):
     limit = float(_get_setting("user_spend_limit", "5.0"))
-    window = int(float(_get_setting("user_spend_window_hours", "0")))
+    window_raw = _get_setting("user_spend_window_hours", "0")
+    try:
+        window = max(0, int(float(window_raw)))
+    except (ValueError, TypeError):
+        window = 0
     with db.connect() as conn:
         cur = conn.cursor()
         if window > 0:
-            cur.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM chat_jobs WHERE user_id = %s AND created_at > NOW() - INTERVAL '%s hours'", (user_id, window))
+            cur.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM chat_jobs WHERE user_id = %s AND created_at > NOW() - make_interval(hours => %s)", (user_id, window))
         else:
             cur.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM chat_jobs WHERE user_id = %s", (user_id,))
         spent = float(cur.fetchone()[0])
     return {"spent": round(spent, 4), "limit": limit, "remaining": round(max(0, limit - spent), 4)}
 
 
-def check_user_limit(user_id):
+_ADMIN_BYPASS_EMAILS = {"jai95smith@gmail.com", "jsmith@lehighdaily.com"}
+
+
+def check_user_limit(user_id, email=None):
+    if email and email in _ADMIN_BYPASS_EMAILS:
+        return False
     usage = get_user_usage(user_id)
     return usage["remaining"] <= 0
 
@@ -509,4 +518,5 @@ def _run_job(job_id, question, history, conversation_id=None):
             pass
 
     except Exception as e:
+        _save_job_cost(job_id, total_usage)
         _update_job(job_id, status="error", error=str(e)[:500], completed_at="NOW()")

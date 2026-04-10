@@ -461,6 +461,15 @@ async function send() {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ question: q, conversation_id: currentChatId })
     });
+    if (res.status === 429) {
+      const err = await res.json();
+      stopThinking(id + '-status');
+      contentEl.innerHTML = '<div class="text-yellow-400 text-sm">' + (err.error || 'Usage limit reached') + '</div>';
+      btn.disabled = false;
+      document.getElementById('btn-text').classList.remove('hidden');
+      document.getElementById('btn-spin').classList.add('hidden');
+      return;
+    }
     const { job_id, conversation_id } = await res.json();
 
     // Update URL and state
