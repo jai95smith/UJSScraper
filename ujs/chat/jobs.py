@@ -11,15 +11,55 @@ from ujs.chat.executors import execute_tool
 from ujs.chat.cleanup import structure_news, classify_and_extract
 from ujs import cache as rcache
 
+# Pricing: Claude Sonnet 4.6
+_PRICE_INPUT = 3.0 / 1_000_000   # $3 per million input tokens
+_PRICE_OUTPUT = 15.0 / 1_000_000  # $15 per million output tokens
+_settings_cache = {"data": {}, "expires": 0}
 
-def create_job(question, history=None, conversation_id=None):
+
+def _get_setting(key, default="0"):
+    """Get an app setting from DB. Cached 5 min."""
+    now = time.time()
+    if now >= _settings_cache["expires"]:
+        try:
+            with db.connect() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT key, value FROM app_settings")
+                _settings_cache["data"] = {r[0]: r[1] for r in cur.fetchall()}
+                _settings_cache["expires"] = now + 300
+        except Exception:
+            pass
+    return _settings_cache["data"].get(key, default)
+
+
+def get_user_usage(user_id):
+    """Get total spend for a user. Returns {"spent": float, "limit": float, "remaining": float}."""
+    limit = float(_get_setting("user_spend_limit", "5.0"))
+    window = int(float(_get_setting("user_spend_window_hours", "0")))
+    with db.connect() as conn:
+        cur = conn.cursor()
+        if window > 0:
+            cur.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM chat_jobs WHERE user_id = %s AND created_at > NOW() - INTERVAL '%s hours'", (user_id, window))
+        else:
+            cur.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM chat_jobs WHERE user_id = %s", (user_id,))
+        spent = float(cur.fetchone()[0])
+    return {"spent": round(spent, 4), "limit": limit, "remaining": round(max(0, limit - spent), 4)}
+
+
+def check_user_limit(user_id):
+    """Returns True if user is over their spend limit."""
+    usage = get_user_usage(user_id)
+    return usage["remaining"] <= 0
+
+
+def create_job(question, history=None, conversation_id=None, user_id=None):
     """Create a chat job and start processing in background. Returns job_id."""
     job_id = str(uuid.uuid4())[:12]
     with db.connect() as conn:
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO chat_jobs (id, question, history, conversation_id) VALUES (%s, %s, %s, %s)",
-            (job_id, question, json.dumps(history or []), conversation_id)
+            "INSERT INTO chat_jobs (id, question, history, conversation_id, user_id) VALUES (%s, %s, %s, %s, %s)",
+            (job_id, question, json.dumps(history or []), conversation_id, user_id)
         )
     thread = threading.Thread(target=_run_job, args=(job_id, question, history, conversation_id), daemon=True)
     thread.start()
@@ -123,10 +163,13 @@ def _process_tool_result(result, job_id, silent=False):
 
 
 
-def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=False, stream=False):
+def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=False, stream=False, usage_acc=None):
     """Run a tool-use loop until end_turn or timeout. Returns final text.
     If silent=True, don't write status/tool names to the job response.
-    If stream=True, stream the final text response to DB in chunks (buffers fenced blocks)."""
+    If stream=True, stream the final text response to DB in chunks (buffers fenced blocks).
+    If usage_acc is a dict, accumulates {"input": N, "output": N} token counts."""
+    if usage_acc is None:
+        usage_acc = {"input": 0, "output": 0}
     for round_num in range(20):
         if time.time() > timeout_at:
             return None
@@ -134,14 +177,23 @@ def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=F
         if stream and not silent:
             # Use streaming API — handles both tool_use and end_turn in one call
             result = _streamed_turn(client, system, tools, messages, job_id)
+            if isinstance(result, tuple):
+                result, turn_usage = result
+            else:
+                turn_usage = {"input": 0, "output": 0}
+            usage_acc["input"] += turn_usage.get("input", 0)
+            usage_acc["output"] += turn_usage.get("output", 0)
             if result is None:
                 continue  # tool_use turn — loop continues
             return result  # end_turn — final text
         else:
             response = client.messages.create(
-                model="claude-sonnet-4-20250514", max_tokens=2048,
+                model="claude-sonnet-4-6-20250514", max_tokens=2048,
                 system=system, tools=tools, messages=messages,
             )
+            if hasattr(response, 'usage'):
+                usage_acc["input"] += response.usage.input_tokens
+                usage_acc["output"] += response.usage.output_tokens
 
             if response.stop_reason == "tool_use":
                 messages.append({"role": "assistant", "content": response.content})
@@ -179,6 +231,7 @@ def _streamed_turn(client, system, tools, messages, job_id):
     backtick_trail = ""  # Tracks partial ``` across chunk boundaries
     first_text = True
     last_flush = time.time()
+    usage_tokens = {"input": 0, "output": 0}
 
     # Tool tracking: {block_id: {"name": str, "json_str": str}}
     tool_blocks = {}
@@ -232,7 +285,7 @@ def _streamed_turn(client, system, tools, messages, job_id):
 
     try:
         with client.messages.stream(
-            model="claude-sonnet-4-20250514", max_tokens=2048,
+            model="claude-sonnet-4-6-20250514", max_tokens=2048,
             system=system, tools=tools, messages=messages,
         ) as stream:
             for event in stream:
@@ -274,13 +327,23 @@ def _streamed_turn(client, system, tools, messages, job_id):
                     current_block_id = None
                     current_block_type = None
 
+                elif event.type == 'message_start' and hasattr(event, 'message'):
+                    u = getattr(event.message, 'usage', None)
+                    if u:
+                        usage_tokens["input"] += getattr(u, 'input_tokens', 0)
+
+                elif event.type == 'message_delta':
+                    u = getattr(event, 'usage', None)
+                    if u:
+                        usage_tokens["output"] += getattr(u, 'output_tokens', 0)
+
         # Flush remaining buffer
         _flush(force=True)
 
     except Exception as e:
         _flush(force=True)
         if not full_text and not tool_blocks:
-            return f"Streaming error: {str(e)[:200]}"
+            return (f"Streaming error: {str(e)[:200]}", usage_tokens)
 
     # If tool_use turn, execute tools and update message history
     client_tools = {bid: tb for bid, tb in tool_blocks.items()
@@ -308,13 +371,27 @@ def _streamed_turn(client, system, tools, messages, job_id):
             tool_results.append({"type": "tool_result", "tool_use_id": bid, "content": clean_result})
         if tool_results:
             messages.append({"role": "user", "content": tool_results})
-        return None  # tool_use turn — caller should loop
+        return (None, usage_tokens)  # tool_use turn — caller should loop
 
     # server_tool_use only (web_search) — response includes results already
     if has_tool_use and not client_tools:
-        return full_text  # Text from the server-tool turn
+        return (full_text, usage_tokens)
 
-    return full_text
+    return (full_text, usage_tokens)
+
+
+def _save_job_cost(job_id, usage):
+    """Save token usage and cost to the chat_jobs row."""
+    inp = usage.get("input", 0)
+    out = usage.get("output", 0)
+    cost = inp * _PRICE_INPUT + out * _PRICE_OUTPUT
+    try:
+        with db.connect() as conn:
+            cur = conn.cursor()
+            cur.execute("UPDATE chat_jobs SET input_tokens = %s, output_tokens = %s, cost_usd = %s WHERE id = %s",
+                        (inp, out, round(cost, 6), job_id))
+    except Exception:
+        pass
 
 
 def _run_job(job_id, question, history, conversation_id=None):
@@ -354,12 +431,14 @@ def _run_job(job_id, question, history, conversation_id=None):
         # ---------------------------------------------------------------
         # Pass 1: Court data (no web search tools)
         # ---------------------------------------------------------------
+        total_usage = {"input": 0, "output": 0}
         court_answer = _run_tool_loop(
             client, get_court_prompt(), TOOLS, list(messages),
-            job_id, timeout_at, stream=True,
+            job_id, timeout_at, stream=True, usage_acc=total_usage,
         )
 
         if court_answer is None:
+            _save_job_cost(job_id, total_usage)
             _update_job(job_id, append_response="\n\nRequest timed out.", status="completed", completed_at="NOW()")
             return
 
@@ -432,7 +511,8 @@ def _run_job(job_id, question, history, conversation_id=None):
         if is_first_message and save_text:
             rcache.set_cached_response(question, save_text)
 
-        # Log
+        # Save cost and log
+        _save_job_cost(job_id, total_usage)
         duration = int((time.time() - start) * 1000)
         try:
             with db.connect() as conn:

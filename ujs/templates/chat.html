@@ -103,7 +103,15 @@
             <svg id="btn-spin" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
           </button>
         </div>
-        <p class="text-[10px] text-court-muted text-center mt-1.5">{{ "{:,}".format(case_count) }} cases · {{ counties|map(attribute='county')|join(' & ') }} County · Not legal advice</p>
+        <div class="flex items-center justify-between mt-1.5">
+          <p class="text-[10px] text-court-muted">{{ "{:,}".format(case_count) }} cases · Not legal advice</p>
+          <div id="usage-bar" class="flex items-center gap-2 text-[10px] text-court-muted">
+            <div class="w-20 h-1.5 bg-navy-border rounded-full overflow-hidden">
+              <div id="usage-fill" class="h-full bg-gold rounded-full transition-all" style="width:0%"></div>
+            </div>
+            <span id="usage-text"></span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -352,6 +360,19 @@ function botBubbleStatic(contentId) {
 loadConversations();
 loadWatchedDockets();
 
+async function loadUsage() {
+  try {
+    const res = await apiFetch(API + '/usage');
+    if (!res.ok) return;
+    const data = await res.json();
+    const pct = Math.min(100, (data.spent / data.limit) * 100);
+    document.getElementById('usage-fill').style.width = pct + '%';
+    if (pct >= 90) document.getElementById('usage-fill').classList.replace('bg-gold', 'bg-red-400');
+    document.getElementById('usage-text').textContent = '$' + data.spent.toFixed(2) + ' / $' + data.limit.toFixed(2);
+  } catch(e) {}
+}
+loadUsage();
+
 // Route: /chat/{id} → load conversation, /chat?q= → new with query, /chat → welcome
 const CONV_ID = '{{ conversation_id }}';
 const initialQuery = new URLSearchParams(window.location.search).get('q');
@@ -461,6 +482,7 @@ async function send() {
   document.getElementById('btn-spin').classList.add('hidden');
   statusEl.style.transition = 'opacity 0.4s'; statusEl.style.opacity = '0.5';
   input.focus();
+  loadUsage();
 }
 
 /* --- Check for running job on page load --- */

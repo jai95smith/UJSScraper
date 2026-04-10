@@ -103,6 +103,26 @@ function renderDashboard(data) {
         `).join('')}
       </div>
     </div>
+
+    <!-- User Limits -->
+    <div>
+      <h2 class="text-sm font-medium text-court-bright mb-3">User Limits</h2>
+      <div class="bg-navy-light border border-navy-border rounded-lg px-4 py-4 space-y-3">
+        <div class="flex items-center gap-3">
+          <label class="text-[12px] text-court-mid w-32">Spend limit ($)</label>
+          <input id="setting-limit" type="number" step="0.5" min="0" value="${data.settings?.user_spend_limit || 5}"
+            class="bg-navy border border-navy-border rounded px-3 py-1.5 text-sm text-court-bright w-24 outline-none focus:border-gold">
+          <span class="text-[10px] text-court-dim">Max $ each user can spend on AI queries</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <label class="text-[12px] text-court-mid w-32">Reset window (hrs)</label>
+          <input id="setting-window" type="number" step="1" min="0" value="${data.settings?.user_spend_window_hours || 0}"
+            class="bg-navy border border-navy-border rounded px-3 py-1.5 text-sm text-court-bright w-24 outline-none focus:border-gold">
+          <span class="text-[10px] text-court-dim">0 = lifetime, 24 = daily, 168 = weekly</span>
+        </div>
+        <button onclick="saveSettings()" class="text-[12px] font-medium bg-gold hover:bg-gold-dim text-navy rounded px-4 py-1.5 transition">Save</button>
+      </div>
+    </div>
   `;
 }
 
@@ -121,6 +141,19 @@ async function toggleService(action, name) {
   } catch(e) {
     alert('Failed: ' + e.message);
   }
+}
+
+async function saveSettings() {
+  const limit = document.getElementById('setting-limit').value;
+  const window = document.getElementById('setting-window').value;
+  try {
+    await fetch('/admin/api/settings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({user_spend_limit: limit, user_spend_window_hours: window})
+    });
+    loadAdmin();
+  } catch(e) { alert('Failed: ' + e.message); }
 }
 
 async function toggleCron(action, name) {

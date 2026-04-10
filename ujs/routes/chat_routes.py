@@ -165,7 +165,9 @@ def ask(body: AskRequest, request: Request):
         return JSONResponse(status_code=401, content={"error": "Authentication required"})
     if _check_rate_limit(request, user):
         return JSONResponse(status_code=429, content={"error": "Rate limit exceeded. Try again in a minute."})
-    from ujs.chat.jobs import create_job
+    from ujs.chat.jobs import create_job, check_user_limit
+    if check_user_limit(user["sub"]):
+        return JSONResponse(status_code=429, content={"error": "Usage limit reached. You've used your free allocation."})
 
     cid = body.conversation_id
 
@@ -199,9 +201,21 @@ def ask(body: AskRequest, request: Request):
                         (body.question[:60], cid))
 
     # Create background job
-    job_id = create_job(body.question, history=history[-10:], conversation_id=cid)
+    job_id = create_job(body.question, history=history[-10:], conversation_id=cid, user_id=user["sub"])
 
     return {"job_id": job_id, "conversation_id": cid, "status": "running"}
+
+
+# --- Usage ---
+
+@router.get("/usage")
+def get_usage(request: Request):
+    """Get current user's spend and limit."""
+    user = _require_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"error": "Authentication required"})
+    from ujs.chat.jobs import get_user_usage
+    return get_user_usage(user["sub"])
 
 
 # --- Job polling ---

@@ -297,11 +297,14 @@ def admin_status():
         analyzed_24h = cur.fetchone()[0]
         cur.execute("SELECT COUNT(*) FROM analyses")
         total_analyzed = cur.fetchone()[0]
+        cur.execute("SELECT key, value FROM app_settings")
+        settings = {r[0]: r[1] for r in cur.fetchall()}
     return {
         'crons': crons,
         'services': services,
         'stats': {**stats, 'changes': change_count, 'queue_pending': queue_pending,
                   'analyzed_24h': analyzed_24h, 'total_analyzed': total_analyzed},
+        'settings': settings,
     }
 
 
@@ -335,6 +338,26 @@ def admin_cron_toggle(action, name):
     except Exception:
         return {'error': 'Failed to update crontab'}, 500
     return {'status': 'ok', 'action': action, 'name': name}
+
+
+@main_bp.route('/admin/api/settings', methods=['GET', 'POST'])
+@admin_required
+def admin_settings():
+    """Get or update app settings."""
+    from ujs import db
+    if request.method == 'POST':
+        data = request.get_json()
+        with db.connect() as conn:
+            cur = conn.cursor()
+            for key, value in data.items():
+                cur.execute("INSERT INTO app_settings (key, value, updated_at) VALUES (%s, %s, NOW()) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()",
+                            (key, str(value)))
+        return {'status': 'ok'}
+    else:
+        with db.connect() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT key, value FROM app_settings")
+            return {r[0]: r[1] for r in cur.fetchall()}
 
 
 @main_bp.route('/admin/api/service/<action>/<name>')
