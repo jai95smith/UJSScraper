@@ -220,10 +220,10 @@ def create_app():
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
         response.headers['Content-Security-Policy'] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com; "
+            "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://www.googletagmanager.com; "
             "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
-            "img-src 'self' https://*.googleusercontent.com data:; "
-            "connect-src 'self' https://api.gavelsearch.com https://cdn.jsdelivr.net; "
+            "img-src 'self' https://*.googleusercontent.com https://www.google-analytics.com data:; "
+            "connect-src 'self' https://api.gavelsearch.com https://cdn.jsdelivr.net https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com; "
             "font-src 'self'; "
             "frame-ancestors 'none'"
         )
