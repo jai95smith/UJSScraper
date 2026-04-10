@@ -177,7 +177,7 @@ def _run_tool_loop(client, system, tools, messages, job_id, timeout_at, silent=F
     """Run a tool-use loop until end_turn or timeout. Returns final text.
     If silent=True, don't write status/tool names to the job response.
     If stream=True, stream the final text response to DB in chunks (buffers fenced blocks)."""
-    for round_num in range(20):
+    for round_num in range(10):
         if time.time() > timeout_at:
             return None
 
