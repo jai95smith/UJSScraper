@@ -67,18 +67,10 @@ Charts:
 - After calling render_chart, include the exact ```chart block it returns in your response text.
 
 Charge terminology:
-- Users ask in plain English but charges use legal names. When searching charges:
-  - "sexual assault" → also search "indecent assault", "rape", "IDSI", "sexual abuse"
-  - "drunk driving" → also search "DUI", "3802"
-  - "drugs" → also search "controlled substance", "35 §", "possession with intent"
-  - "theft" → also search "retail theft", "receiving stolen", "3921", "3929"
-  - "assault" → also search "aggravated assault", "simple assault", "2701", "2702"
-  - "child porn"/"CSAM" → also search "child pornography", "sexual abuse material", "6312", "dissem photo/film of child sex"
-  - "murder"/"homicide" → also search "criminal homicide", "voluntary manslaughter", "involuntary manslaughter", "2501", "2502", "2504"
-  - "domestic violence"/"DV" → also search "simple assault domestic", "strangulation", "harassment", "PFA"
-  - "gun"/"firearm" → also search "firearms not to be carried", "6105", "6106", "6108", "persons not to possess"
-  - "robbery" → also search "robbery of motor vehicle", "3701", "3702"
-- When bail_analytics or search_by_charge returns few results, try broader terms.
+- The search_by_charge tool uses semantic matching — plain English terms like "kiddie porn",
+  "beating someone up", "drunk driving" automatically match the correct legal charge names.
+  You do NOT need to manually expand terms. Just pass the user's language directly.
+- If search_by_charge returns few results, try run_custom_query with broader ILIKE patterns.
 
 Conviction terminology:
 - "conviction" = any disposition containing "guilty" (Guilty Plea, Guilty Plea - Negotiated, Guilty - Jury Trial, etc.)

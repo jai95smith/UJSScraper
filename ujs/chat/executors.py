@@ -96,24 +96,28 @@ def _lookup_docket(conn, inputs):
     from ujs.chat.docket_parser import normalize_docket
     raw = inputs["docket_number"]
     normalized, confidence = normalize_docket(raw)
+    dn = normalized
 
-    # Try normalized first
-    case = db.get_case(conn, normalized)
-    if not case and normalized != raw:
-        case = db.get_case(conn, raw)  # fallback to raw
+    case = db.get_case(conn, dn)
+    if not case and dn != raw:
+        dn = raw
+        case = db.get_case(conn, dn)
     if not case:
         return f"No case found for: {raw}" + (f" (tried: {normalized})" if normalized != raw else "")
-    return json.dumps(dict(case), default=str)
+    result = dict(case)
+    # Auto-include analysis if available
+    analysis = db.get_analysis(conn, dn, "docket")
+    if analysis:
+        result["_analysis"] = analysis
+        result["_source"] = "fully analyzed"
+    else:
+        result["_source"] = "metadata only"
+    return json.dumps(result, default=str)
 
 
 def _get_case_analysis(conn, inputs):
-    analysis = db.get_analysis(conn, inputs["docket_number"], "docket")
-    if not analysis:
-        case = db.get_case(conn, inputs["docket_number"])
-        if case:
-            return f"Case exists but not yet analyzed. Basic info: {json.dumps(dict(case), default=str)}"
-        return f"No case found for: {inputs['docket_number']}"
-    return json.dumps(analysis, default=str)
+    """Alias — lookup_docket now includes analysis automatically."""
+    return _lookup_docket(conn, inputs)
 
 
 def _find_all_cases_for_person(conn, name, county=None):
@@ -151,22 +155,29 @@ def _get_person_history(conn, inputs):
     cases = _find_all_cases_for_person(conn, inputs["name"], inputs.get("county"))
     if not cases:
         return f"No cases found for {inputs['name']}"
+    dockets = [c["docket_number"] for c in cases]
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    placeholders = ",".join(["%s"] * len(dockets))
+    # Batch fetch analyses
+    cur.execute(f"SELECT docket_number, analysis FROM analyses WHERE docket_number IN ({placeholders}) AND doc_type = 'docket'", dockets)
+    analyses = {r["docket_number"]: r["analysis"] for r in cur.fetchall()}
+    # Batch fetch events
+    cur.execute(f"SELECT docket_number, event_type, event_date, event_status FROM events WHERE docket_number IN ({placeholders})", dockets)
+    events_map = {}
+    for r in cur.fetchall():
+        events_map.setdefault(r["docket_number"], []).append(dict(r))
     history = []
     for case in cases:
         dn = case["docket_number"]
         entry = {"docket_number": dn, "caption": case["caption"], "status": case["status"],
                  "county": case["county"], "filing_date": case["filing_date"]}
-        analysis = db.get_analysis(conn, dn, "docket")
+        analysis = analyses.get(dn)
         if analysis:
             entry.update({k: analysis.get(k) for k in ["charges", "sentences", "bail", "judge", "docket_entries", "attorneys", "court", "defendant"]})
-            # Use full caption from analysis if available (includes case details)
             if analysis.get("case_caption"):
                 entry["caption"] = analysis["case_caption"]
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT event_type, event_date, event_status FROM events WHERE docket_number = %s", (dn,))
-        events = cur.fetchall()
-        if events:
-            entry["events"] = [dict(e) for e in events]
+        if dn in events_map:
+            entry["events"] = events_map[dn]
         history.append(entry)
     return json.dumps(history, default=str)
 
