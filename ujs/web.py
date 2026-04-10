@@ -226,6 +226,114 @@ def logout():
     return redirect('/')
 
 
+_ADMIN_EMAILS = {"jai95smith@gmail.com", "jsmith@lehighdaily.com"}
+
+
+def admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user = session.get('user')
+        if not user or user.get('email') not in _ADMIN_EMAILS:
+            return redirect('/')
+        return f(*args, **kwargs)
+    return decorated
+
+
+@main_bp.route('/admin')
+@admin_required
+def admin_panel():
+    return render_template('admin.html', api_url=_api_url(), **_user_context())
+
+
+@main_bp.route('/admin/api/status')
+@admin_required
+def admin_status():
+    """API endpoint for admin panel to fetch live status."""
+    import subprocess
+    # Cron jobs
+    try:
+        crontab = subprocess.run(['crontab', '-l'], capture_output=True, text=True, timeout=5).stdout
+    except Exception:
+        crontab = ""
+    crons = []
+    for line in crontab.strip().split('\n'):
+        if not line or line.startswith('#') and 'HALTED' not in line:
+            continue
+        halted = line.startswith('# HALTED:')
+        clean = line.replace('# HALTED: ', '') if halted else line
+        # Extract name from command
+        if 'watchdog' in clean:
+            name = 'Watchdog'
+            schedule = 'Every 2 min'
+            desc = 'Checks watched dockets for changes'
+        elif 'notify' in clean:
+            name = 'Notifications'
+            schedule = 'Daily 12pm UTC'
+            desc = 'Sends email alerts for detected changes'
+        else:
+            name = clean[:40]
+            schedule = clean.split(' ', 5)[:5]
+            desc = ''
+        crons.append({'name': name, 'schedule': schedule, 'desc': desc, 'active': not halted, 'raw': clean})
+    # Systemd services
+    services = []
+    for svc in ['ujs-api', 'ujs-web', 'ujs-worker', 'ujs-ingest']:
+        try:
+            r = subprocess.run(['systemctl', 'is-active', svc], capture_output=True, text=True, timeout=5)
+            status = r.stdout.strip()
+        except Exception:
+            status = 'unknown'
+        services.append({'name': svc, 'status': status})
+    # DB stats
+    from ujs import db
+    with db.connect() as conn:
+        stats = db.get_stats(conn)
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM change_log")
+        change_count = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM ingest_queue WHERE status = 'pending'")
+        queue_pending = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM ingest_queue WHERE status = 'running'")
+        queue_running = cur.fetchone()[0]
+    return {
+        'crons': crons,
+        'services': services,
+        'stats': {**stats, 'changes': change_count, 'queue_pending': queue_pending, 'queue_running': queue_running},
+    }
+
+
+@main_bp.route('/admin/api/cron/<action>/<name>')
+@admin_required
+def admin_cron_toggle(action, name):
+    """Toggle a cron job on/off."""
+    import subprocess
+    try:
+        crontab = subprocess.run(['crontab', '-l'], capture_output=True, text=True, timeout=5).stdout
+    except Exception:
+        return {'error': 'Failed to read crontab'}, 500
+    lines = crontab.strip().split('\n')
+    new_lines = []
+    found = False
+    for line in lines:
+        if name.lower() in line.lower():
+            found = True
+            if action == 'stop' and not line.startswith('# HALTED:'):
+                new_lines.append('# HALTED: ' + line)
+            elif action == 'start' and line.startswith('# HALTED:'):
+                new_lines.append(line.replace('# HALTED: ', ''))
+            else:
+                new_lines.append(line)
+        else:
+            new_lines.append(line)
+    if not found:
+        return {'error': f'Cron {name} not found'}, 404
+    try:
+        subprocess.run(['crontab', '-'], input='\n'.join(new_lines) + '\n', capture_output=True, text=True, timeout=5)
+    except Exception:
+        return {'error': 'Failed to update crontab'}, 500
+    return {'status': 'ok', 'action': action, 'name': name}
+
+
 @main_bp.route('/settings')
 @login_required
 def settings():
