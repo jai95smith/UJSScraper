@@ -62,16 +62,7 @@ def get_news_tools():
 TOOLS = [
     {
         "name": "lookup_docket",
-        "description": "Look up a court case by docket number (e.g. CP-39-CR-0000142-2025)",
-        "input_schema": {
-            "type": "object",
-            "properties": {"docket_number": {"type": "string"}},
-            "required": ["docket_number"],
-        },
-    },
-    {
-        "name": "get_case_analysis",
-        "description": "Get full parsed analysis of a case: charges, sentences, bail, attorneys, docket entries",
+        "description": "Look up a court case by docket number. Returns case info + full analysis (charges, sentences, bail, attorneys, judge, docket entries) if available. Includes _source field indicating data completeness.",
         "input_schema": {
             "type": "object",
             "properties": {"docket_number": {"type": "string"}},
@@ -116,7 +107,7 @@ TOOLS = [
     },
     {
         "name": "search_by_judge",
-        "description": "Find cases assigned to a specific judge",
+        "description": "Find cases assigned to a specific judge. Returns cases + charge/disposition breakdown showing the judge's track record.",
         "input_schema": {
             "type": "object",
             "properties": {"judge_name": {"type": "string"}, "county": {"type": "string"}},
@@ -125,7 +116,7 @@ TOOLS = [
     },
     {
         "name": "search_by_attorney",
-        "description": "Find cases involving a specific attorney",
+        "description": "Find cases involving a specific attorney. Returns cases + disposition breakdown (win/loss rate).",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -138,7 +129,7 @@ TOOLS = [
     },
     {
         "name": "search_by_charge",
-        "description": "Search cases by charge statute, description, or disposition",
+        "description": "Search cases by charge. Uses semantic matching — pass plain English (e.g. 'kiddie porn', 'beating someone up'). Returns enriched data: defendant, DOB, judge, bail, sentence, key docket entries. Pass disposition='guilty' to filter convictions.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -162,7 +153,7 @@ TOOLS = [
     },
     {
         "name": "get_upcoming_hearings",
-        "description": "Get court hearings/events. Use target_date for a specific day (MM/DD/YYYY), or days for a range.",
+        "description": "Get court hearings/events with defendant name + lead charge. Use target_date for a specific day (MM/DD/YYYY), or days for a range.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -273,7 +264,7 @@ TOOLS = [
     },
     {
         "name": "run_custom_query",
-        "description": """Run a custom read-only SQL query. SELECT only. Use for aggregate/analytical questions.
+        "description": """Run a custom SQL query. SELECT only. ONLY use for pure counting/aggregation — other tools return richer data. Last resort for questions no other tool handles.
 
 FULL SCHEMA (all TEXT columns unless noted):
 - cases: docket_number (PK), court_type, caption, status ('Active','Closed'), filing_date ('MM/DD/YYYY'), county ('Lehigh','Northampton'), state ('PA'), court_office
@@ -333,38 +324,7 @@ KEY PATTERNS:
             "required": ["type", "title", "labels", "datasets"],
         },
     },
-    {
-        "name": "get_system_logs",
-        "description": "Get system operation logs — scraper runs, analyzer events, errors. Use for debugging or system health questions.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "component": {"type": "string", "description": "Filter: scraper, analyzer, or all"},
-                "errors_only": {"type": "boolean", "default": False},
-                "hours": {"type": "integer", "default": 24},
-                "limit": {"type": "integer", "default": 50},
-            },
-        },
-    },
-    {
-        "name": "get_analyzer_throughput",
-        "description": "Get how many dockets were analyzed per hour over a time period. Use this for questions about analysis rate, throughput, or system activity.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "hours": {"type": "integer", "default": 24, "description": "Hours to look back"},
-            },
-        },
-    },
-    {
-        "name": "get_data_source",
-        "description": "Check where data comes from for a docket — metadata only, fully analyzed, or not indexed. Call this before answering about a specific case so you can tell the user the data source and completeness.",
-        "input_schema": {
-            "type": "object",
-            "properties": {"docket_number": {"type": "string"}},
-            "required": ["docket_number"],
-        },
-    },
+    # get_system_logs, get_analyzer_throughput, get_data_source removed — admin-only, accessible via run_custom_query if needed
     {
         "name": "get_case_changes",
         "description": "Get recent changes/updates to a specific case or all cases",
