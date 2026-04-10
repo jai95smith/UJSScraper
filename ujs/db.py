@@ -499,7 +499,8 @@ def detect_and_store_changes(conn, docket_number, new_analysis, doc_type="docket
     # Data changed — find what's different
     changes = _diff_analysis(old, new_analysis)
 
-    # Log changes
+    # Log changes (skip null→value — those are first-time field captures, not real changes)
+    changes = [c for c in changes if c["old"] is not None]
     cur = conn.cursor()
     for change in changes:
         cur.execute("""
