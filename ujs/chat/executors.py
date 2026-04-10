@@ -11,7 +11,8 @@ from ujs import db
 # Semantic charge search via Gemini embeddings + pgvector
 # ---------------------------------------------------------------------------
 
-_EMB_THRESHOLD = 0.65
+_EMB_MIN_THRESHOLD = 0.64  # Absolute floor — nothing below this
+_EMB_DROP_MARGIN = 0.12    # Drop matches more than this below the top match
 
 def _embed_query(text):
     """Embed a search query using Gemini."""
@@ -29,7 +30,8 @@ def _embed_query(text):
 
 
 def _semantic_charge_matches(conn, query, limit=20):
-    """Find charge descriptions semantically similar to query. Returns [(description, similarity)]."""
+    """Find charge descriptions semantically similar to query.
+    Uses dynamic threshold: absolute floor + relative drop from top match."""
     emb = _embed_query(query)
     if not emb:
         return []
@@ -40,8 +42,14 @@ def _semantic_charge_matches(conn, query, limit=20):
         WHERE 1 - (embedding <=> %s::vector) >= %s
         ORDER BY embedding <=> %s::vector
         LIMIT %s
-    """, (str(emb), str(emb), _EMB_THRESHOLD, str(emb), limit))
-    return [(r[0], float(r[1])) for r in cur.fetchall()]
+    """, (str(emb), str(emb), _EMB_MIN_THRESHOLD, str(emb), limit))
+    raw = [(r[0], float(r[1])) for r in cur.fetchall()]
+    if not raw:
+        return []
+    # Dynamic cutoff: keep matches within _EMB_DROP_MARGIN of top match
+    top_sim = raw[0][1]
+    cutoff = max(_EMB_MIN_THRESHOLD, top_sim - _EMB_DROP_MARGIN)
+    return [(desc, sim) for desc, sim in raw if sim >= cutoff]
 
 
 import logging, traceback
@@ -316,10 +324,11 @@ def _search_by_charge(conn, inputs):
         matches = _semantic_charge_matches(conn, inputs["description"], limit=10)
         if matches:
             desc_matches = [m[0] for m in matches]
+            match_list = ", ".join(f"'{m[0]}' ({m[1]:.0%})" for m in matches[:5])
             results = _rich_charge_search(conn, desc_matches,
                                           disposition=inputs.get("disposition"),
                                           county=inputs.get("county"), limit=20)
-            return json.dumps({"_summary": f"Found {len(results)} cases (via semantic search for '{inputs['description']}').",
+            return json.dumps({"_summary": f"Found {len(results)} cases. Matched charge names: {match_list}. ALL of these are relevant results — present every case.",
                                "_detail": [dict(r) for r in results]}, default=str)
 
     # For small ILIKE result sets, enrich with full detail
