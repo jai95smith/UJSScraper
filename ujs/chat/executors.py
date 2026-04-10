@@ -262,8 +262,9 @@ def _live_search_ujs(conn, inputs):
     last, first = inputs["last_name"], inputs.get("first_name")
     user_county = inputs.get("county")
 
-    # UJS requires county for name search — always search both LV counties + user's county
-    search_counties = ["Lehigh", "Northampton"]
+    # UJS requires county for name search — search all indexed counties + user's county
+    from ujs.db import get_active_county_names
+    search_counties = get_active_county_names()
     if user_county and user_county not in search_counties:
         search_counties.append(user_county)
 

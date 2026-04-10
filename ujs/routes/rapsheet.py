@@ -40,7 +40,7 @@ def rapsheet(name: str, county: Optional[str] = None):
             search_attempts.append((parts[0], parts[-1]))
         search_attempts.append((name, None))
 
-        search_counties = ["Lehigh", "Northampton"]
+        search_counties = db.get_active_county_names()
         if county and county not in search_counties:
             search_counties.append(county)
 
@@ -81,7 +81,8 @@ def rapsheet(name: str, county: Optional[str] = None):
             cases = db.search_cases(conn, name=name, limit=50)
 
     if not cases:
-        return {"name": name, "cases": [], "message": "No cases found in Lehigh, Northampton, or statewide courts"}
+        county_list = ", ".join(db.get_active_county_names()) or "any"
+        return {"name": name, "cases": [], "message": f"No cases found in {county_list}, or statewide courts"}
 
     # Step 2b: Analyze unanalyzed cases already in DB
     from ujs.modules.docket_pdf import analyze_docket as _analyze

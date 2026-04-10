@@ -37,6 +37,22 @@ def _get_case_count():
         return _case_count_cache['value']
 
 
+_STATE_NAMES = {
+    "PA": "pennsylvania", "NJ": "new-jersey", "NY": "new-york", "OH": "ohio",
+    "DE": "delaware", "MD": "maryland", "CT": "connecticut", "VA": "virginia",
+    "FL": "florida", "TX": "texas", "CA": "california", "IL": "illinois",
+}
+_STATE_CODES = {v: k for k, v in _STATE_NAMES.items()}
+
+
+def _state_slug(code):
+    return _STATE_NAMES.get(code.upper(), code.lower())
+
+
+def _state_code(slug):
+    return _STATE_CODES.get(slug.lower())
+
+
 def _safe_redirect_url(url):
     """Only allow relative paths. Reject absolute URLs / protocol-relative URLs."""
     if not url or not url.startswith('/') or url.startswith('//'):
@@ -63,11 +79,16 @@ def robots():
 
 @main_bp.route('/sitemap.xml')
 def sitemap():
+    from ujs import db
     pages = [
         ('/', 'weekly', '1.0'),
         ('/privacy', 'yearly', '0.3'),
         ('/disclaimer', 'yearly', '0.3'),
     ]
+    for c in db.get_active_counties():
+        state = _state_slug(c.get("state", "PA"))
+        slug = c["county"].lower().replace(' ', '-')
+        pages.append((f'/{state}/{slug}/', 'daily', '0.8'))
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
     xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
     for loc, freq, priority in pages:
@@ -97,7 +118,30 @@ def login_required(f):
 
 @main_bp.route('/')
 def landing():
-    return render_template('landing.html', api_url=_api_url(), case_count=_get_case_count(), **_user_context())
+    from ujs import db
+    return render_template('landing.html', api_url=_api_url(), case_count=_get_case_count(),
+                           counties=db.get_active_counties(), **_user_context())
+
+
+@main_bp.route('/<state_slug>/<county_slug>/')
+def county_lander(state_slug, county_slug):
+    from ujs import db
+    state_code = _state_code(state_slug)
+    if not state_code:
+        return render_template('404.html', api_url=_api_url()), 404
+    county_name = county_slug.replace('-', ' ').title()
+    active = db.get_active_counties()
+    match = next((c for c in active if c["county"].lower() == county_name.lower()
+                  and c.get("state", "PA").upper() == state_code), None)
+    if not match:
+        return render_template('404.html', api_url=_api_url()), 404
+    with db.connect() as conn:
+        charge_stats = db.get_charge_stats(conn, county=county_name, limit=10)
+    return render_template('county_lander.html',
+        api_url=_api_url(), county=county_name, state_code=state_code,
+        state_slug=state_slug, county_slug=county_slug,
+        case_count=match["case_count"], total_case_count=_get_case_count(),
+        charge_stats=charge_stats, counties=active, **_user_context())
 
 
 @main_bp.route('/login')

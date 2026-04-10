@@ -185,13 +185,13 @@ TOOLS = [
     },
     {
         "name": "live_search_ujs",
-        "description": "Search the UJS portal directly (live scrape). LAST RESORT after search_cases and fuzzy_name_search both fail. Always searches both Lehigh and Northampton counties. Provide first_name whenever possible — searches are more accurate with both names.",
+        "description": "Search the UJS portal directly (live scrape). LAST RESORT after search_cases and fuzzy_name_search both fail. Searches all indexed counties. Provide first_name whenever possible — searches are more accurate with both names.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "last_name": {"type": "string", "description": "Last name — keep hyphenated names whole (e.g. Janko-Hudson)"},
                 "first_name": {"type": "string", "description": "First name — always provide if known, improves accuracy"},
-                "county": {"type": "string", "description": "Additional county to search beyond Lehigh/Northampton"},
+                "county": {"type": "string", "description": "Additional county to search beyond the default indexed counties"},
             },
             "required": ["last_name"],
         },

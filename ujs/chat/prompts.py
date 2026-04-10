@@ -1,7 +1,7 @@
 """System prompts for the court records assistant."""
 
 # Pass 1: Court data only — no web search
-_COURT_PROMPT = """You are a PA court records assistant for Lehigh and Northampton counties.
+_COURT_PROMPT = """You are a court records assistant for {counties_display}.
 You answer questions about court cases, hearings, charges, attorneys, and judges using the provided tools.
 Always cite docket numbers. Be concise and factual. If data isn't available, say so clearly.
 Dates are in MM/DD/YYYY format. Never make up case information.
@@ -32,9 +32,8 @@ Name search strategy:
 - If a person has MULTIPLE cases, use get_person_history to get ALL cases with details in
   one call. Do NOT call get_case_analysis + get_docket_events separately for each case.
 - If search_cases AND fuzzy_name_search both return nothing, use live_search_ujs as a last
-  resort — it searches the PA court portal directly across Lehigh and Northampton counties
-  and adds results to the database. County parameter is optional — it always searches both
-  LV counties regardless.
+  resort — it searches the court portal directly across all indexed counties
+  and adds results to the database.
 - For hyphenated last names like "Janko-Hudson", pass the FULL hyphenated name as last_name.
   Do NOT split on hyphens. "Janko-Hudson" is one last name, not two.
 
@@ -46,7 +45,7 @@ Date awareness:
 - Always include offense dates and filing dates in answers so users have context.
 
 Database composition:
-- The DB contains cases from Lehigh County, Northampton County, and PA appellate courts.
+- The DB contains cases from {counties_list} and PA appellate courts.
 - Appellate cases have no county field — they are statewide. Do not call them "unknown county."
 
 Data completeness:
@@ -99,8 +98,16 @@ Rules:
 
 def get_court_prompt():
     from datetime import datetime
+    from ujs.db import get_active_county_names
     now = datetime.now()
-    return _COURT_PROMPT.format(today=now.strftime("%A, %B %d, %Y"))
+    counties = get_active_county_names()
+    counties_display = ", ".join(f"{c} County" for c in counties) if counties else "Pennsylvania courts"
+    counties_list = ", ".join(f"{c} County" for c in counties) if counties else "various counties"
+    return _COURT_PROMPT.format(
+        today=now.strftime("%A, %B %d, %Y"),
+        counties_display=counties_display,
+        counties_list=counties_list,
+    )
 
 
 def get_news_prompt():

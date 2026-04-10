@@ -156,7 +156,7 @@ def _render_email(user_email, changes_by_docket, unsubscribe_token):
     {f'<a href="{unsub_url}" style="font-size:12px;color:#5a7aa0;text-decoration:none">Unsubscribe</a>' if unsub_url else ''}
   </div>
   <div style="text-align:center;margin-top:16px;font-size:10px;color:#4a6a99">
-    GavelSearch · Lehigh &amp; Northampton County Court Records · Not legal advice
+    GavelSearch · Pennsylvania Court Records · Not legal advice
   </div>
 </div>
 </body></html>"""

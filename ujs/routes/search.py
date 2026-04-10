@@ -61,11 +61,14 @@ def get_suggestions():
             if judge and judge["j"]:
                 suggestions.append(f"Show cases for Judge {judge['j'].split(',')[0]}")
 
-            # Always include these
+            # Always include these — use a random active county for variety
+            import random
+            _counties = db.get_active_county_names()
+            _sample = random.choice(_counties) if _counties else "your county"
             suggestions.extend([
-                "Criminal filings this week in Lehigh",
+                f"Criminal filings this week in {_sample}",
                 "Average bail for DUI cases",
-                "Busiest defense attorneys in Lehigh",
+                f"Busiest defense attorneys in {_sample}",
                 "How long do theft cases take to resolve?",
                 "Sentencing patterns for assault charges",
                 "Search docket entries for motion to suppress",

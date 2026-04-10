@@ -79,7 +79,7 @@ def upsert_case(conn, case):
     defaults = {
         "docket_number": "", "court_type": "", "caption": "", "status": "",
         "filing_date": "", "participant": "", "dob": "", "county": "",
-        "court_office": "", "otn": "", "complaint": "", "incident": "",
+        "state": "PA", "court_office": "", "otn": "", "complaint": "", "incident": "",
         "docket_sheet_url": None, "court_summary_url": None,
     }
     case = {**defaults, **case}
@@ -915,6 +915,35 @@ def get_county_stats(conn):
         GROUP BY county ORDER BY total_cases DESC
     """)
     return cur.fetchall()
+
+
+import time as _time
+_active_counties_cache = {"data": [], "expires": 0}
+
+
+def get_active_counties():
+    """Counties with cases in DB. Cached 1 hour. Returns [{"county": ..., "state": ..., "case_count": ...}]."""
+    now = _time.time()
+    if now < _active_counties_cache["expires"] and _active_counties_cache["data"]:
+        return _active_counties_cache["data"]
+    with connect() as conn:
+        cur = _dict_cur(conn)
+        cur.execute("""
+            SELECT county, COALESCE(state, 'PA') as state, COUNT(*) as case_count
+            FROM cases
+            WHERE county IS NOT NULL AND county != ''
+            GROUP BY county, state
+            ORDER BY case_count DESC
+        """)
+        result = [dict(r) for r in cur.fetchall()]
+    _active_counties_cache["data"] = result
+    _active_counties_cache["expires"] = now + 3600
+    return result
+
+
+def get_active_county_names():
+    """Just the county name strings."""
+    return [c["county"] for c in get_active_counties()]
 
 
 def get_charge_stats(conn, county=None, limit=25):
