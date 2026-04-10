@@ -286,7 +286,27 @@ def _rich_charge_search(conn, descriptions, disposition=None, county=None, limit
         ORDER BY ch.docket_number, ch.seq
         LIMIT %s
     """, params)
-    return [dict(r) for r in cur.fetchall()]
+    results = [dict(r) for r in cur.fetchall()]
+    # For small results, attach key docket entries (motions, pleas, sentencing details)
+    if results and len(results) <= 10:
+        dockets = [r["docket_number"] for r in results]
+        ph = ",".join(["%s"] * len(dockets))
+        cur.execute(f"""
+            SELECT docket_number, entry_date, description FROM docket_entries
+            WHERE docket_number IN ({ph})
+            AND (description ILIKE '%%motion%%' OR description ILIKE '%%guilty%%'
+                 OR description ILIKE '%%sentenc%%' OR description ILIKE '%%amended%%'
+                 OR description ILIKE '%%amend%%' OR description ILIKE '%%plea%%')
+            ORDER BY docket_number, entry_date
+        """, dockets)
+        entries_map = {}
+        for r in cur.fetchall():
+            entries_map.setdefault(r["docket_number"], []).append(f"{r['entry_date']}: {r['description']}")
+        for result in results:
+            dn = result["docket_number"]
+            if dn in entries_map:
+                result["key_docket_entries"] = entries_map[dn]
+    return results
 
 
 def _search_by_charge(conn, inputs):
