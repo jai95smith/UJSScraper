@@ -376,6 +376,23 @@ def admin_settings():
             return {r[0]: r[1] for r in cur.fetchall()}
 
 
+@main_bp.route('/admin/api/clear-cache', methods=['POST'])
+@admin_required
+def admin_clear_cache():
+    """Clear all UJS Redis cache."""
+    try:
+        from ujs.cache import _get_redis
+        r = _get_redis()
+        if r:
+            keys = r.keys('ujs:*')
+            if keys:
+                r.delete(*keys)
+            return {'status': 'ok', 'cleared': len(keys)}
+        return {'status': 'ok', 'cleared': 0}
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+
 @main_bp.route('/admin/api/service/<action>/<name>')
 @admin_required
 def admin_service_toggle(action, name):

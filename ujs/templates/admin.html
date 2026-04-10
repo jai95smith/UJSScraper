@@ -45,6 +45,14 @@ function renderDashboard(data) {
       ${statCard('Changes', s.changes, 'Real case updates detected')}
     </div>
 
+    <!-- Quick Actions -->
+    <div>
+      <h2 class="text-sm font-medium text-court-bright mb-3">Quick Actions</h2>
+      <div class="flex gap-3">
+        <button onclick="clearCache()" class="text-[12px] font-medium bg-navy-light border border-navy-border hover:border-gold text-court-mid hover:text-court-bright rounded-lg px-4 py-2 transition">Clear Redis Cache</button>
+      </div>
+    </div>
+
     <!-- Services -->
     <div>
       <h2 class="text-sm font-medium text-court-bright mb-3">Services</h2>
@@ -141,6 +149,14 @@ async function toggleService(action, name) {
   } catch(e) {
     alert('Failed: ' + e.message);
   }
+}
+
+async function clearCache() {
+  try {
+    const res = await fetch('/admin/api/clear-cache', { method: 'POST' });
+    const data = await res.json();
+    alert('Cleared ' + (data.cleared || 0) + ' cached entries');
+  } catch(e) { alert('Failed: ' + e.message); }
 }
 
 async function saveSettings() {
