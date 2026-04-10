@@ -1,6 +1,6 @@
 """Gemini Flash structured output — all classification and cleanup calls."""
 
-import json
+import json, os
 
 
 def _gemini_json(prompt, schema, retries=2, timeout=10):
@@ -10,7 +10,7 @@ def _gemini_json(prompt, schema, retries=2, timeout=10):
     from google import genai
     from google.genai import types
 
-    client = genai.Client()
+    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
     required = schema.get("required", [])
     props = schema.get("properties", {})
 
