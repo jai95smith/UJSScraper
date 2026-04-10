@@ -235,7 +235,10 @@ def _streamed_turn(client, system, tools, messages, job_id, usage_acc=None):
             return  # Hold fenced content
         # Clean any leaked tool XML
         clean = re.sub(r'<invoke\b[^>]*>.*?</invoke>', '', buffer, flags=re.DOTALL)
-        clean = re.sub(r'<invoke\b[^>]*>.*', '', clean, flags=re.DOTALL)  # partial invoke at end
+        clean = re.sub(r'<invoke\b[^>]*>.*', '', clean, flags=re.DOTALL)
+        clean = re.sub(r'<function_calls>.*?</function_calls>', '', clean, flags=re.DOTALL)
+        clean = re.sub(r'<function_calls>.*', '', clean, flags=re.DOTALL)
+        clean = re.sub(r'</invoke>|</function_calls>', '', clean)
         if not clean.strip():
             buffer = ""
             return
@@ -435,7 +438,11 @@ def _run_job(job_id, question, history, conversation_id=None):
         idx = full_response.find("\n\n")
         save_text = full_response[idx + 2:] if idx >= 0 else full_response
         # Clean any leaked tool XML from response
-        save_text = re.sub(r'<invoke\b[^>]*>.*?</invoke>', '', save_text, flags=re.DOTALL).strip()
+        save_text = re.sub(r'<invoke\b[^>]*>.*?</invoke>', '', save_text, flags=re.DOTALL)
+        save_text = re.sub(r'<function_calls>.*?</function_calls>', '', save_text, flags=re.DOTALL)
+        save_text = re.sub(r'<invoke\b[^>]*>.*', '', save_text, flags=re.DOTALL)
+        save_text = re.sub(r'<function_calls>.*', '', save_text, flags=re.DOTALL)
+        save_text = re.sub(r'</invoke>|</function_calls>', '', save_text).strip()
 
         # ---------------------------------------------------------------
         # Pass 2: News search — only on first message in conversation
