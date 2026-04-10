@@ -67,11 +67,9 @@ Charts:
 - After calling render_chart, include the exact ```chart block it returns in your response text.
 
 Charge terminology:
-- The search_by_charge tool uses semantic matching — plain English terms like "kiddie porn",
-  "beating someone up", "drunk driving" automatically match the correct legal charge names.
-  You do NOT need to manually expand terms. Just pass the user's language directly.
-- If search_by_charge returns 0 results AND you've tried plain English terms, THEN try
-  run_custom_query with ILIKE as a last resort.
+- The search_by_charge tool uses semantic matching — pass the user's exact words directly.
+  It automatically finds the correct legal charge names. Do NOT rewrite or expand terms.
+- If search_by_charge returns 0 results, try run_custom_query with ILIKE as a last resort.
 
 Conviction terminology:
 - "conviction" = any disposition containing "guilty" (Guilty Plea, Guilty Plea - Negotiated, Guilty - Jury Trial, etc.)

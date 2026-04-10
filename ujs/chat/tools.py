@@ -120,12 +120,12 @@ TOOLS = [
     },
     {
         "name": "search_by_charge",
-        "description": "Search cases by charge. Uses semantic matching — pass plain English (e.g. 'kiddie porn', 'beating someone up'). Returns enriched data: defendant, DOB, judge, bail, sentence, key docket entries. Pass disposition='guilty' to filter convictions.",
+        "description": "Search cases by charge. Uses semantic matching — pass the user's exact words. Returns enriched data: defendant, DOB, judge, bail, sentence, key docket entries. Pass disposition='guilty' to filter convictions.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "statute": {"type": "string", "description": "e.g. 3929"},
-                "description": {"type": "string", "description": "e.g. DUI, Retail Theft, Assault"},
+                "description": {"type": "string", "description": "Charge description — pass user's exact words"},
                 "disposition": {"type": "string", "description": "e.g. Guilty, Dismissed"},
                 "county": {"type": "string"},
             },
@@ -186,7 +186,7 @@ TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "charge_description": {"type": "string", "description": "Filter by charge (e.g. DUI, Theft, Assault)"},
+                "charge_description": {"type": "string", "description": "Filter by charge — pass user's exact words"},
                 "county": {"type": "string"},
                 "group_by": {"type": "string", "enum": ["charge", "county", "judge"], "description": "How to group results"},
             },
@@ -198,7 +198,7 @@ TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "charge_description": {"type": "string", "description": "Filter by charge type (e.g. DUI, Theft)"},
+                "charge_description": {"type": "string", "description": "Filter by charge type — pass user's exact words"},
                 "county": {"type": "string"},
                 "judge": {"type": "string"},
             },
