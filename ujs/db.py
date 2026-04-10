@@ -921,6 +921,44 @@ def get_county_stats(conn):
 
 
 import time as _time
+
+
+def embed_new_charges():
+    """Embed any charge descriptions not yet in charge_embeddings. Call periodically."""
+    import os
+    try:
+        from google import genai
+        from google.genai import types
+        client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+    except Exception:
+        return 0
+    with connect() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT DISTINCT ch.description FROM charges ch
+            WHERE ch.description IS NOT NULL AND ch.description != ''
+            AND ch.description NOT IN (SELECT description FROM charge_embeddings)
+        """)
+        new_charges = [r[0] for r in cur.fetchall()]
+    if not new_charges:
+        return 0
+    # Batch embed
+    for i in range(0, len(new_charges), 100):
+        batch = new_charges[i:i+100]
+        result = client.models.embed_content(
+            model="gemini-embedding-001", contents=batch,
+            config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT", output_dimensionality=768)
+        )
+        with connect() as conn:
+            cur = conn.cursor()
+            for desc, emb in zip(batch, result.embeddings):
+                cur.execute(
+                    "INSERT INTO charge_embeddings (description, embedding) VALUES (%s, %s) ON CONFLICT (description) DO NOTHING",
+                    (desc, str(emb.values))
+                )
+    return len(new_charges)
+
+
 _active_counties_cache = {"data": [], "expires": 0}
 
 

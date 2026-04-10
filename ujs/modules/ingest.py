@@ -344,6 +344,14 @@ def run_cycle(counties=None, docket_type=None, lookback_days=1,
     except Exception as e:
         print(f"[cleanup] Error: {e}")
 
+    # 8. Embed new charge descriptions
+    try:
+        new_embs = db.embed_new_charges()
+        if new_embs:
+            print(f"[embeddings] Embedded {new_embs} new charge descriptions")
+    except Exception as e:
+        print(f"[embeddings] Error: {e}")
+
     print(f"[{ts}] Cycle complete | {total_new} new cases\n")
 
 

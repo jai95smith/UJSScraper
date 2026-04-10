@@ -1,10 +1,47 @@
 """Tool executors — each function handles one tool call against the DB."""
 
-import json
+import json, os
 import psycopg2.extras
 from datetime import datetime
 
 from ujs import db
+
+
+# ---------------------------------------------------------------------------
+# Semantic charge search via Gemini embeddings + pgvector
+# ---------------------------------------------------------------------------
+
+_EMB_THRESHOLD = 0.65
+
+def _embed_query(text):
+    """Embed a search query using Gemini."""
+    try:
+        from google import genai
+        from google.genai import types
+        client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+        result = client.models.embed_content(
+            model="gemini-embedding-001", contents=[text],
+            config=types.EmbedContentConfig(task_type="RETRIEVAL_QUERY", output_dimensionality=768)
+        )
+        return result.embeddings[0].values
+    except Exception:
+        return None
+
+
+def _semantic_charge_matches(conn, query, limit=20):
+    """Find charge descriptions semantically similar to query. Returns [(description, similarity)]."""
+    emb = _embed_query(query)
+    if not emb:
+        return []
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT description, 1 - (embedding <=> %s::vector) as similarity
+        FROM charge_embeddings
+        WHERE 1 - (embedding <=> %s::vector) >= %s
+        ORDER BY embedding <=> %s::vector
+        LIMIT %s
+    """, (str(emb), str(emb), _EMB_THRESHOLD, str(emb), limit))
+    return [(r[0], float(r[1])) for r in cur.fetchall()]
 
 
 import logging, traceback
@@ -179,6 +216,29 @@ def _search_by_attorney(conn, inputs):
 def _search_by_charge(conn, inputs):
     results = db.search_by_charge(conn, statute=inputs.get("statute"), description=inputs.get("description"),
                                    disposition=inputs.get("disposition"), county=inputs.get("county"), limit=20)
+    # If ILIKE found nothing and we have a description, try semantic search
+    if not results and inputs.get("description") and not inputs.get("statute"):
+        matches = _semantic_charge_matches(conn, inputs["description"], limit=10)
+        if matches:
+            desc_list = [m[0] for m in matches]
+            placeholders = ",".join(["%s"] * len(desc_list))
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            params = list(desc_list)
+            extra = ""
+            if inputs.get("disposition"):
+                extra += " AND ch.disposition ILIKE %s"
+                params.append(f"%{inputs['disposition']}%")
+            if inputs.get("county"):
+                extra += " AND c.county ILIKE %s"
+                params.append(inputs["county"])
+            params.append(20)
+            cur.execute(f"""
+                SELECT ch.docket_number, ch.description, ch.statute, ch.disposition, c.county
+                FROM charges ch JOIN cases c ON ch.docket_number = c.docket_number
+                WHERE ch.description IN ({placeholders}) {extra}
+                ORDER BY c.filing_date DESC LIMIT %s
+            """, params)
+            results = cur.fetchall()
     return _auto_table([dict(r) for r in results],
                        {"Docket": "docket_number", "Charge": "description", "Statute": "statute", "Disposition": "disposition", "County": "county"},
                        empty_msg="No charges found.")
@@ -555,9 +615,13 @@ _CHARGE_SYNONYMS = {
     # Disorderly
     "disorderly conduct": ["disorderly conduct"],
     "public intoxication": ["public drunk", "disorderly"],
-    # Child abuse
-    "child abuse": ["endanger", "child abuse", "child pornography", "child sex"],
+    # Child abuse / CSAM
+    "child abuse": ["endanger", "child abuse", "child pornography", "child sex", "sexual abuse material"],
     "child endangerment": ["endangering welfare of children"],
+    "csam": ["child pornography", "child sexual abuse material", "sexual abuse material", "dissem photo", "6312"],
+    "child porn": ["child pornography", "child sexual abuse material", "sexual abuse material", "dissem photo", "6312"],
+    "child pornography": ["child pornography", "child sexual abuse material", "sexual abuse material", "dissem photo", "6312"],
+    "child sexual abuse": ["child pornography", "child sexual abuse material", "sexual abuse material", "dissem photo", "6312"],
     # Resisting
     "resisting arrest": ["resist arrest", "flee", "elude", "obstruct"],
     "fleeing": ["fleeing", "elude", "eluding"],
@@ -571,13 +635,24 @@ _CHARGE_SYNONYMS = {
 }
 
 
-def _expand_charge_search(term):
-    """Expand a plain English charge term into (clause, params) tuple for parameterized queries."""
+def _expand_charge_search(term, conn=None):
+    """Expand a plain English charge term into (clause, params) tuple for parameterized queries.
+    Uses hardcoded synonyms first, falls back to semantic embedding search."""
     key = term.lower().strip()
-    synonyms = _CHARGE_SYNONYMS.get(key, [term])
-    clause = " OR ".join(["ch.description ILIKE %s"] * len(synonyms))
-    params = [f"%{s}%" for s in synonyms]
-    return f"({clause})", params
+    synonyms = _CHARGE_SYNONYMS.get(key)
+    if synonyms:
+        clause = " OR ".join(["ch.description ILIKE %s"] * len(synonyms))
+        params = [f"%{s}%" for s in synonyms]
+        return f"({clause})", params
+    # No hardcoded match — try semantic search
+    if conn:
+        matches = _semantic_charge_matches(conn, term, limit=10)
+        if matches:
+            descs = [m[0] for m in matches]
+            clause = " OR ".join(["ch.description = %s"] * len(descs))
+            return f"({clause})", descs
+    # Final fallback: ILIKE on the original term
+    return "(ch.description ILIKE %s)", [f"%{term}%"]
 
 
 # ---------------------------------------------------------------------------
