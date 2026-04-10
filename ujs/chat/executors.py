@@ -334,7 +334,8 @@ def _search_by_charge(conn, inputs):
                 "_summary": f"EXACTLY {len(results)} cases found{disp_filter}. "
                             f"Charge names in results: {', '.join(charge_names)}. "
                             f"These are ALL semantically equivalent to '{inputs['description']}'. "
-                            f"You MUST present every single case — do not filter or exclude any.",
+                            f"You MUST present every single case with ALL available fields. "
+                            f"Include key_docket_entries — they contain critical details like victim info, motion amendments, and plea specifics.",
                 "_detail": [dict(r) for r in results]
             }, default=str)
 
