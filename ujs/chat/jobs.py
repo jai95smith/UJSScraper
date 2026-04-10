@@ -370,6 +370,22 @@ def _streamed_turn(client, system, tools, messages, job_id, usage_acc=None):
     return full_text
 
 
+def _save_news_cost(job_id, usage):
+    """Add news search tokens to existing job cost."""
+    inp = max(0, usage.get("input", 0))
+    out = max(0, usage.get("output", 0))
+    if inp == 0 and out == 0:
+        return
+    cost = inp * _PRICE_INPUT + out * _PRICE_OUTPUT
+    try:
+        with db.connect() as conn:
+            cur = conn.cursor()
+            cur.execute("UPDATE chat_jobs SET input_tokens = input_tokens + %s, output_tokens = output_tokens + %s, cost_usd = cost_usd + %s WHERE id = %s",
+                        (inp, out, round(cost, 6), job_id))
+    except Exception:
+        pass
+
+
 def _save_job_cost(job_id, usage):
     inp = max(0, usage.get("input", 0))
     out = max(0, usage.get("output", 0))
@@ -477,10 +493,11 @@ def _run_job(job_id, question, history, conversation_id=None):
                     # Run news search in background thread — appends to response when done
                     def _news_worker():
                         try:
+                            news_usage = {"input": 0, "output": 0}
                             news_messages = [{"role": "user", "content": context}]
                             news_text = _run_tool_loop(
                                 client, get_news_prompt(), get_news_tools(), news_messages,
-                                job_id, timeout_at, silent=True,
+                                job_id, timeout_at, silent=True, usage_acc=news_usage,
                             )
                             news_loading = "\n\n---\n\n*Searching for news coverage...*"
                             if news_text and "NO_NEWS_FOUND" not in news_text:
@@ -494,10 +511,13 @@ def _run_job(job_id, question, history, conversation_id=None):
                                     _update_job(job_id, replace_in_response=(news_loading, ""))
                             else:
                                 _update_job(job_id, replace_in_response=(news_loading, ""))
+                            # Add news tokens to job cost
+                            _save_news_cost(job_id, news_usage)
                         except Exception as e:
                             print(f"[news_worker] Error: {e}")
                             _update_job(job_id, replace_in_response=(
                                 "\n\n---\n\n*Searching for news coverage...*", ""))
+                            _save_news_cost(job_id, news_usage)
 
                     threading.Thread(target=_news_worker, daemon=True).start()
 
