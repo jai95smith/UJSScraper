@@ -115,9 +115,6 @@ def _lookup_docket(conn, inputs):
     return json.dumps(result, default=str)
 
 
-def _get_case_analysis(conn, inputs):
-    """Alias — lookup_docket now includes analysis automatically."""
-    return _lookup_docket(conn, inputs)
 
 
 def _find_all_cases_for_person(conn, name, county=None):
@@ -1193,7 +1190,6 @@ def _news_search(conn, inputs):
 
 HANDLERS = {
     "lookup_docket": _lookup_docket,
-    "get_case_analysis": _get_case_analysis,
     "get_person_history": _get_person_history,
     "get_docket_events": _get_docket_events,
     "search_cases": _search_cases,
@@ -1214,9 +1210,6 @@ HANDLERS = {
     "get_analysis_coverage": _get_analysis_coverage,
     "render_table": _render_table,
     "render_chart": _render_chart,
-    "get_analyzer_throughput": _get_analyzer_throughput,
-    "get_system_logs": _get_system_logs,
-    "get_data_source": _get_data_source,
     "get_case_changes": _get_case_changes,
     "get_filing_stats": _get_filing_stats,
     "get_charge_stats": _get_charge_stats,
