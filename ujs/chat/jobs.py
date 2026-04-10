@@ -444,6 +444,11 @@ def _run_job(job_id, question, history, conversation_id=None):
         save_text = re.sub(r'<function_calls>.*', '', save_text, flags=re.DOTALL)
         save_text = re.sub(r'</invoke>|</function_calls>', '', save_text).strip()
 
+        # If response was mostly leaked XML, append what we can
+        if len(save_text) < 20 and court_answer:
+            save_text = court_answer
+            _update_job(job_id, append_response="\n\n" + court_answer)
+
         # ---------------------------------------------------------------
         # Pass 2: News search — only on first message in conversation
         # ---------------------------------------------------------------
