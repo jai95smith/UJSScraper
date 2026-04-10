@@ -348,7 +348,7 @@ def admin_settings():
     if request.method == 'POST':
         data = request.get_json()
         _ALLOWED_SETTINGS = {
-            'user_spend_limit': lambda v: 0 <= float(v) <= 1000,
+            'user_spend_limit': lambda v: 0.01 <= float(v) <= 1000,
             'user_spend_window_hours': lambda v: 0 <= int(float(v)) <= 8760,
         }
         with db.connect() as conn:

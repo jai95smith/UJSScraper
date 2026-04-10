@@ -51,6 +51,9 @@ def get_user_usage(user_id):
 _ADMIN_BYPASS_EMAILS = {"jai95smith@gmail.com", "jsmith@lehighdaily.com"}
 
 
+_ESTIMATED_COST_PER_QUERY = 0.10  # Pessimistic estimate reserved at job creation
+
+
 def check_user_limit(user_id, email=None):
     if email and email in _ADMIN_BYPASS_EMAILS:
         return False
@@ -59,13 +62,14 @@ def check_user_limit(user_id, email=None):
 
 
 def create_job(question, history=None, conversation_id=None, user_id=None):
-    """Create a chat job and start processing in background. Returns job_id."""
-    job_id = str(uuid.uuid4())[:12]
+    """Create a chat job and start processing in background. Returns job_id.
+    Reserves a pessimistic cost estimate upfront to prevent race conditions."""
+    job_id = str(uuid.uuid4()).replace('-', '')[:16]
     with db.connect() as conn:
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO chat_jobs (id, question, history, conversation_id, user_id) VALUES (%s, %s, %s, %s, %s)",
-            (job_id, question, json.dumps(history or []), conversation_id, user_id)
+            "INSERT INTO chat_jobs (id, question, history, conversation_id, user_id, cost_usd) VALUES (%s, %s, %s, %s, %s, %s)",
+            (job_id, question, json.dumps(history or []), conversation_id, user_id, _ESTIMATED_COST_PER_QUERY)
         )
     thread = threading.Thread(target=_run_job, args=(job_id, question, history, conversation_id), daemon=True)
     thread.start()
@@ -373,16 +377,16 @@ def _streamed_turn(client, system, tools, messages, job_id, usage_acc=None):
 
 
 def _save_job_cost(job_id, usage):
-    inp = usage.get("input", 0)
-    out = usage.get("output", 0)
+    inp = max(0, usage.get("input", 0))
+    out = max(0, usage.get("output", 0))
     cost = inp * _PRICE_INPUT + out * _PRICE_OUTPUT
     try:
         with db.connect() as conn:
             cur = conn.cursor()
             cur.execute("UPDATE chat_jobs SET input_tokens = %s, output_tokens = %s, cost_usd = %s WHERE id = %s",
                         (inp, out, round(cost, 6), job_id))
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[cost] Failed to save cost for {job_id}: {e}")
 
 
 def _run_job(job_id, question, history, conversation_id=None):
@@ -429,6 +433,7 @@ def _run_job(job_id, question, history, conversation_id=None):
         )
 
         if court_answer is None:
+            _save_job_cost(job_id, total_usage)
             _update_job(job_id, append_response="\n\nRequest timed out.", status="completed", completed_at="NOW()")
             return
 

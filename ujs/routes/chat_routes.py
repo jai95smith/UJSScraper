@@ -246,17 +246,20 @@ def job_status(job_id: str, after: int = Query(0), cid: str = Query(None), reque
     job = get_job(job_id)
     if not job:
         return JSONResponse(status_code=404, content={"error": "Job not found"})
-    # Verify user owns this job (check user_id on job, or conversation ownership)
+    # Verify user owns this job
     job_user = job.get("user_id")
     conv_id = job.get("conversation_id")
-    if job_user and job_user != user["sub"]:
-        return JSONResponse(status_code=403, content={"error": "Access denied"})
-    if not job_user and conv_id:
+    if job_user:
+        if job_user != user["sub"]:
+            return JSONResponse(status_code=403, content={"error": "Access denied"})
+    elif conv_id:
         with db.connect() as conn:
             cur = conn.cursor()
             cur.execute("SELECT 1 FROM conversations WHERE id = %s AND user_id = %s", (conv_id, user["sub"]))
             if not cur.fetchone():
                 return JSONResponse(status_code=403, content={"error": "Access denied"})
+    else:
+        return JSONResponse(status_code=403, content={"error": "Access denied"})
 
     response = job.get("response", "")
     return {
@@ -284,14 +287,17 @@ async def job_stream(job_id: str, cid: str = Query(None), request: Request = Non
         return JSONResponse(status_code=404, content={"error": "Job not found"})
     job_user = job.get("user_id")
     conv_id = job.get("conversation_id")
-    if job_user and job_user != user["sub"]:
-        return JSONResponse(status_code=403, content={"error": "Access denied"})
-    if not job_user and conv_id:
+    if job_user:
+        if job_user != user["sub"]:
+            return JSONResponse(status_code=403, content={"error": "Access denied"})
+    elif conv_id:
         with db.connect() as conn:
             cur = conn.cursor()
             cur.execute("SELECT 1 FROM conversations WHERE id = %s AND user_id = %s", (conv_id, user["sub"]))
             if not cur.fetchone():
                 return JSONResponse(status_code=403, content={"error": "Access denied"})
+    else:
+        return JSONResponse(status_code=403, content={"error": "Access denied"})
 
     async def event_generator():
         seen = 0
