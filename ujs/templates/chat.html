@@ -1,6 +1,10 @@
 {% extends "base.html" %}
-
+{% block title %}Court Records Chat — GavelSearch{% endblock %}
+{% block description %}Ask questions about PA court cases, hearings, charges, and more with AI-powered search.{% endblock %}
+{% block canonical_path %}/chat{% endblock %}
 {% block head %}
+<meta name="robots" content="noindex">
+
 <link rel="stylesheet" href="/static/css/chat.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="/static/js/render.js"></script>

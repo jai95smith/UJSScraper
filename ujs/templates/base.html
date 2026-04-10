@@ -3,7 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}GavelSearch{% endblock %}</title>
+<title>{% block title %}GavelSearch — Pennsylvania Court Records Search{% endblock %}</title>
+<meta name="description" content="{% block description %}Search Pennsylvania court records for Lehigh and Northampton counties. AI-powered case analysis, hearing schedules, and docket monitoring.{% endblock %}">
+<link rel="canonical" href="https://gavelsearch.com{% block canonical_path %}/{% endblock %}">
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="GavelSearch">
+<meta property="og:title" content="{% block og_title %}GavelSearch — Pennsylvania Court Records Search{% endblock %}">
+<meta property="og:description" content="{% block og_description %}Search Pennsylvania court records for Lehigh and Northampton counties. AI-powered case analysis, hearing schedules, and docket monitoring.{% endblock %}">
+<meta property="og:image" content="https://gavelsearch.com/static/img/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="og:image:alt" content="GavelSearch — Pennsylvania Court Records Search">
+<meta property="og:url" content="https://gavelsearch.com{% block og_url %}/{% endblock %}">
+<!-- Twitter/X -->
+<meta name="twitter:card" content="summary_large_image">
+<!-- Favicon -->
 <link rel="icon" href="/static/img/favicon.ico" sizes="32x32">
 <link rel="icon" type="image/png" sizes="32x32" href="/static/img/favicon-32.png">
 <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">

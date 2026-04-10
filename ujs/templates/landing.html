@@ -1,5 +1,33 @@
 {% extends "base.html" %}
 
+{% block head %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "GavelSearch",
+  "url": "https://gavelsearch.com",
+  "description": "Search Pennsylvania court records for Lehigh and Northampton counties. AI-powered case analysis, hearing schedules, and docket monitoring.",
+  "applicationCategory": "LegalService",
+  "operatingSystem": "Web",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "areaServed": [
+    { "@type": "AdministrativeArea", "name": "Lehigh County, Pennsylvania" },
+    { "@type": "AdministrativeArea", "name": "Northampton County, Pennsylvania" }
+  ],
+  "provider": {
+    "@type": "Organization",
+    "name": "GavelSearch",
+    "url": "https://gavelsearch.com"
+  }
+}
+</script>
+{% endblock %}
+
 {% block body %}
 <!-- Nav -->
 <nav class="bg-navy flex items-center justify-between px-6 md:px-10 h-16 border-b border-navy-border relative">

@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /chat
+Disallow: /settings
+Disallow: /login
+Disallow: /auth/
+Disallow: /ask/
+Disallow: /conversations
+
+Sitemap: https://gavelsearch.com/sitemap.xml

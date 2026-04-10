@@ -4,7 +4,7 @@ import os, secrets, time
 from datetime import timedelta
 from functools import wraps
 from urllib.parse import urlparse
-from flask import Flask, Blueprint, render_template, request, session, redirect, url_for
+from flask import Flask, Blueprint, Response, render_template, request, session, redirect, url_for, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
 from authlib.integrations.flask_client import OAuth
 from ujs.auth import create_user_token, revoke_user_tokens
@@ -54,6 +54,26 @@ def _user_context():
     if user:
         ctx['user_token'] = create_user_token(user['sub'], user['email'], user.get('name', ''))
     return ctx
+
+
+@main_bp.route('/robots.txt')
+def robots():
+    return send_from_directory(os.path.join(os.path.dirname(__file__), 'static'), 'robots.txt', mimetype='text/plain')
+
+
+@main_bp.route('/sitemap.xml')
+def sitemap():
+    pages = [
+        ('/', 'weekly', '1.0'),
+        ('/privacy', 'yearly', '0.3'),
+        ('/disclaimer', 'yearly', '0.3'),
+    ]
+    xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    for loc, freq, priority in pages:
+        xml += f'  <url><loc>https://gavelsearch.com{loc}</loc><changefreq>{freq}</changefreq><priority>{priority}</priority></url>\n'
+    xml += '</urlset>'
+    return Response(xml, mimetype='application/xml')
 
 
 @main_bp.route('/privacy')
