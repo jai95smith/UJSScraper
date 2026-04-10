@@ -335,8 +335,11 @@ def _streamed_turn(client, system, tools, messages, job_id):
             if hasattr(final, 'usage'):
                 usage_tokens["input"] = final.usage.input_tokens
                 usage_tokens["output"] = final.usage.output_tokens
-        except Exception:
-            pass
+                print(f"[usage] {usage_tokens}")
+            else:
+                print(f"[usage] no usage attr on final: {type(final)}")
+        except Exception as ue:
+            print(f"[usage] get_final_message error: {ue}")
 
     except Exception as e:
         _flush(force=True)
