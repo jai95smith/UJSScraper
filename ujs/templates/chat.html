@@ -215,10 +215,15 @@ async function showWelcome() {
 function _cancelActivePoll() {
   if (_abortController) { _abortController.abort(); _abortController = null; }
 }
+function setTabTitle(title) {
+  document.title = title ? title + ' — GavelSearch' : 'GavelSearch';
+}
+
 function newChat() {
   _cancelActivePoll();
   currentChatId = null;
   history.pushState({}, '', '/chat');
+  setTabTitle('');
   showWelcome(); renderChatList(); input.focus(); closeMobileSidebar();
 }
 async function loadChat(id) {
@@ -244,6 +249,7 @@ async function loadChat(id) {
   if (last && last.role === 'user') {
     checkRunningJob(id);
   }
+  setTabTitle(conv.title || 'Chat');
   renderChatList(); chat.scrollTop = chat.scrollHeight; input.focus(); closeMobileSidebar();
 }
 function toggleChatMenu(id) {
@@ -281,6 +287,7 @@ async function renameChat(id) {
       body: JSON.stringify({title: name.trim()})
     });
     if (chat) chat.title = name.trim();
+    if (id === currentChatId) setTabTitle(name.trim());
     renderChatList();
     showToast('Renamed');
   } catch(e) { if (e !== 'auth') showToast('Rename failed', 'error'); }
@@ -434,6 +441,7 @@ async function send() {
     if (!currentChatId) {
       currentChatId = conversation_id;
       history.pushState({}, '', '/chat/' + conversation_id);
+      setTabTitle(q.slice(0, 60));
       loadConversations();
     }
 
