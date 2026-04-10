@@ -90,7 +90,7 @@
 
 <!-- Hero -->
 <section class="bg-navy-light flex flex-col items-center text-center px-5 md:px-10 pt-16 pb-20">
-  <p class="text-[11px] tracking-[0.1em] uppercase text-gold mb-4">{{ counties|map(attribute='county')|join(' & ') }} County · Public records</p>
+  <p class="text-[11px] tracking-[0.1em] uppercase text-gold mb-4">AI-powered · Public court records</p>
   <h1 class="font-serif text-[28px] md:text-[34px] font-medium text-court-bright leading-tight max-w-[520px] mb-3">Search court records with plain language</h1>
   <p class="text-sm text-court-mid max-w-[420px] leading-relaxed mb-9">Ask a question. Get structured court records — no legal training required.</p>
 
@@ -98,24 +98,22 @@
     <div class="hidden md:flex items-center bg-white px-3.5 border-r border-gray-200">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5l4 4" stroke-linecap="round"/></svg>
     </div>
-    <input name="q" class="flex-1 h-[50px] bg-white border-none px-3.5 text-[16px] md:text-[13px] text-gray-900 outline-none font-sans placeholder:text-gray-400" placeholder="e.g. Show dockets for Smith filed in {{ (counties[0].county if counties else 'your') }} County…" autofocus />
+    <input name="q" class="flex-1 h-[50px] bg-white border-none px-3.5 text-[16px] md:text-[13px] text-gray-900 outline-none font-sans placeholder:text-gray-400" placeholder="e.g. Show dockets for Smith, DUI cases this week, hearings tomorrow…" autofocus />
     <button type="submit" class="h-[50px] px-6 bg-gold hover:bg-gold-dim border-none text-navy text-[13px] font-medium cursor-pointer whitespace-nowrap">Ask →</button>
   </form>
 
   <div class="mt-[11px] text-[11px] text-court-dim flex items-center gap-[5px]">
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#5a7aa0" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 3"/></svg>
-    Data sourced from
-    <a href="https://ujsportal.pacourts.us/CaseSearch" target="_blank" class="text-[#7a9fc8] no-underline">ujsportal.pacourts.us</a>
-    · {{ "{:,}".format(case_count) }} cases indexed
+    {{ "{:,}".format(case_count) }} cases indexed across {{ counties|length }} {{ 'county' if counties|length == 1 else 'counties' }}
   </div>
 
   <div class="flex flex-wrap gap-[7px] mt-[22px] justify-center">
-    <span onclick="goChat('Civil dockets in {{ (counties[0].county if counties else '') }}')" class="text-[11px] text-court-mid border border-[#2a4166] rounded px-2.5 py-1 cursor-pointer bg-navy-hover hover:border-gold hover:text-court-bright">Civil dockets</span>
+    <span onclick="goChat('Civil dockets')" class="text-[11px] text-court-mid border border-[#2a4166] rounded px-2.5 py-1 cursor-pointer bg-navy-hover hover:border-gold hover:text-court-bright">Civil dockets</span>
     <span onclick="goChat('Criminal filings this week')" class="text-[11px] text-court-mid border border-[#2a4166] rounded px-2.5 py-1 cursor-pointer bg-navy-hover hover:border-gold hover:text-court-bright">Criminal filings</span>
     <span onclick="goChat('Active case status')" class="text-[11px] text-court-mid border border-[#2a4166] rounded px-2.5 py-1 cursor-pointer bg-navy-hover hover:border-gold hover:text-court-bright">Case status</span>
     <span onclick="goChat('Hearings tomorrow')" class="text-[11px] text-court-mid border border-[#2a4166] rounded px-2.5 py-1 cursor-pointer bg-navy-hover hover:border-gold hover:text-court-bright">Hearing dates</span>
     <span onclick="goChat('Judge schedule')" class="text-[11px] text-court-mid border border-[#2a4166] rounded px-2.5 py-1 cursor-pointer bg-navy-hover hover:border-gold hover:text-court-bright">Judge schedule</span>
-    <span onclick="goChat('MDJ records {{ (counties[-1].county if counties|length > 1 else counties[0].county if counties else '') }}')" class="text-[11px] text-court-mid border border-[#2a4166] rounded px-2.5 py-1 cursor-pointer bg-navy-hover hover:border-gold hover:text-court-bright">MDJ records</span>
+    <span onclick="goChat('Bail analytics')" class="text-[11px] text-court-mid border border-[#2a4166] rounded px-2.5 py-1 cursor-pointer bg-navy-hover hover:border-gold hover:text-court-bright">Bail analytics</span>
   </div>
 </section>
 
