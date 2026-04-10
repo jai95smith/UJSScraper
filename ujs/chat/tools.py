@@ -273,24 +273,28 @@ TOOLS = [
     },
     {
         "name": "run_custom_query",
-        "description": """Run a custom read-only SQL query. SELECT only. Schema:
-- cases: docket_number (PK), court_type, caption, status, filing_date, county
-- participants: docket_number, name, dob
-- charges: docket_number, seq, statute, description, grade, disposition, disposition_date, offense_date
-- bail: docket_number, bail_type, amount, status
-- sentences: docket_number, charge, sentence_type, duration, sentence_date
-- attorneys: docket_number, name, role
-- events: docket_number, event_type, event_status, event_date
-- docket_entries: docket_number, entry_date, description, filer
-- analyses: docket_number, analysis (JSONB with keys: judge, defendant, case_caption, case_status)
+        "description": """Run a custom read-only SQL query. SELECT only. Use for aggregate/analytical questions.
 
-Key patterns:
-- Get judge: a.analysis->>'judge' FROM analyses a
-- Date compare: TO_DATE(filing_date, 'MM/DD/YYYY') >= CURRENT_DATE - INTERVAL '30 days'
-- Bail math: REPLACE(REPLACE(amount, '$', ''), ',', '')::numeric
-- Case type: docket_number LIKE '%-CR-%' (criminal), '%-TR-%' (traffic), '%-CV-%' (civil)
+FULL SCHEMA (all TEXT columns unless noted):
+- cases: docket_number (PK), court_type, caption, status ('Active','Closed'), filing_date ('MM/DD/YYYY'), county ('Lehigh','Northampton'), state ('PA'), court_office
+- participants: docket_number, name ('Last, First Middle'), dob ('MM/DD/YYYY')
+- charges: docket_number, seq (int), statute ('18 § 2701'), description ('Simple Assault'), grade ('M1','F3','S'), disposition ('Guilty Plea','Dismissed','Proceed to Court'), disposition_date, offense_date
+- bail: docket_number, bail_type ('Monetary','ROR','Unsecured'), amount ('$10,000.00' text), status ('Set','Posted')
+- sentences: docket_number, charge, sentence_type ('Probation','Confinement','Fine'), duration ('1 year'), sentence_date
+- attorneys: docket_number, name, role ('Public Defender','Defense','District Attorney')
+- events: docket_number, event_type ('Preliminary Hearing','Trial','Sentencing'), event_status ('Scheduled','Continued','Completed'), event_date ('MM/DD/YYYY')
+- docket_entries: docket_number, entry_date, description ('Motion to Suppress Filed'), filer
+- analyses: docket_number, analysis (JSONB — keys: judge, defendant, case_caption, case_status)
+
+KEY PATTERNS:
+- Judge: a.analysis->>'judge' FROM analyses a
+- Date filter: TO_DATE(filing_date, 'MM/DD/YYYY') >= CURRENT_DATE - INTERVAL '30 days'
+- Bail math: REPLACE(REPLACE(amount, '$', ''), ',', '')::numeric (filter: amount ~ '^\\$?[0-9]')
+- Case type from docket: LIKE '%%-CR-%%' (criminal), '%%-TR-%%' (traffic), '%%-CV-%%' (civil)
+- Charge search: description ILIKE '%%assault%%' (use %% not %)
+- Conviction: disposition ILIKE '%%guilty%%'
 - Join charges to judge: charges ch JOIN analyses a ON ch.docket_number = a.docket_number
-- ILIKE for fuzzy text match, %% for wildcards inside queries""",
+- Always LIMIT results (max 100 rows returned)""",
         "input_schema": {
             "type": "object",
             "properties": {"sql": {"type": "string", "description": "SELECT query only"}},

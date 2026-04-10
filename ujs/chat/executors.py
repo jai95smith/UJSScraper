@@ -461,20 +461,20 @@ def _run_custom_query(conn, inputs):
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("SET statement_timeout = '5s'")
-        cur.execute("SET transaction_read_only = ON")
         cur.execute(sql)
         rows = cur.fetchall()
-        cur.execute("RESET statement_timeout")
-        cur.execute("RESET transaction_read_only")
-        return json.dumps([dict(r) for r in rows[:100]], default=str)
-    except Exception as e:
-        conn.rollback()  # Clear aborted transaction before RESET
         try:
             cur.execute("RESET statement_timeout")
-            cur.execute("RESET transaction_read_only")
+        except Exception:
+            pass
+        return json.dumps([dict(r) for r in rows[:100]], default=str)
+    except Exception as e:
+        conn.rollback()
+        try:
+            cur.execute("RESET statement_timeout")
         except Exception:
             conn.rollback()
-        return "Query failed. Check SQL syntax and try again."
+        return f"Query failed: {str(e)[:200]}"
 
 
 def _get_analysis_coverage(conn, inputs):
@@ -614,7 +614,7 @@ def _search_docket_entries(conn, inputs):
 def _bail_analytics(conn, inputs):
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     group = inputs.get("group_by", "charge")
-    clauses = ["b.amount IS NOT NULL", "b.amount != ''", "b.amount != '$0.00'"]
+    clauses = ["b.amount IS NOT NULL", "b.amount != ''", "b.amount != '$0.00'", "b.amount ~ '^\\$?[0-9]'"]
     params = []
     if inputs.get("charge_description"):
         charge_clause, charge_params = _expand_charge_search(inputs["charge_description"])
