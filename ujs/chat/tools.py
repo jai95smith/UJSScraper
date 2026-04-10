@@ -82,15 +82,6 @@ TOOLS = [
         },
     },
     {
-        "name": "get_docket_events",
-        "description": "Get upcoming court events for a specific docket number. Always call this after looking up a case.",
-        "input_schema": {
-            "type": "object",
-            "properties": {"docket_number": {"type": "string"}},
-            "required": ["docket_number"],
-        },
-    },
-    {
         "name": "search_cases",
         "description": "Search cases by participant name, county, status, type, or filing date",
         "input_schema": {
@@ -141,17 +132,6 @@ TOOLS = [
         },
     },
     {
-        "name": "get_todays_hearings",
-        "description": "Get all court hearings scheduled for today",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "county": {"type": "string"},
-                "case_type": {"type": "string", "description": "Criminal, Civil, Traffic"},
-            },
-        },
-    },
-    {
         "name": "get_upcoming_hearings",
         "description": "Get court hearings/events with defendant name + lead charge. Use target_date for a specific day (MM/DD/YYYY), or days for a range.",
         "input_schema": {
@@ -188,20 +168,6 @@ TOOLS = [
         },
     },
     {
-        "name": "get_stats_query",
-        "description": "Get computed statistics. Types: case_counts, bail_stats, charge_breakdown, filing_trend, hearing_counts, repeat_offenders, judge_performance",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "stat_type": {"type": "string", "enum": ["case_counts", "bail_stats", "charge_breakdown", "filing_trend", "hearing_counts", "repeat_offenders", "judge_performance"]},
-                "county": {"type": "string"},
-                "case_type": {"type": "string"},
-                "days": {"type": "integer", "default": 30},
-            },
-            "required": ["stat_type"],
-        },
-    },
-    {
         "name": "search_docket_entries",
         "description": "Search court docket entries (filings, motions, pleas, orders) across all cases. Full-text search on descriptions.",
         "input_schema": {
@@ -235,30 +201,6 @@ TOOLS = [
                 "charge_description": {"type": "string", "description": "Filter by charge type (e.g. DUI, Theft)"},
                 "county": {"type": "string"},
                 "judge": {"type": "string"},
-            },
-        },
-    },
-    {
-        "name": "attorney_rankings",
-        "description": "Rank attorneys by case count, win rate, or case types. Find busiest or most successful attorneys.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "county": {"type": "string"},
-                "role": {"type": "string", "description": "Defense, Public Defender, District Attorney, etc."},
-                "rank_by": {"type": "string", "enum": ["case_count", "case_type"], "description": "How to rank"},
-            },
-        },
-    },
-    {
-        "name": "sentencing_patterns",
-        "description": "Analyze sentencing patterns by judge, charge type, or county. Shows common sentence types and durations.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "judge": {"type": "string"},
-                "charge_description": {"type": "string"},
-                "county": {"type": "string"},
             },
         },
     },
@@ -331,22 +273,6 @@ KEY PATTERNS:
         "input_schema": {
             "type": "object",
             "properties": {"docket_number": {"type": "string"}},
-        },
-    },
-    {
-        "name": "get_filing_stats",
-        "description": "Get filing counts and trends by date and case type",
-        "input_schema": {
-            "type": "object",
-            "properties": {"county": {"type": "string"}, "days": {"type": "integer", "default": 30}},
-        },
-    },
-    {
-        "name": "get_charge_stats",
-        "description": "Get the most common charges with guilty/dismissed rates",
-        "input_schema": {
-            "type": "object",
-            "properties": {"county": {"type": "string"}},
         },
     },
 ]

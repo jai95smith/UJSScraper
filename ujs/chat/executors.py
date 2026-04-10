@@ -639,12 +639,17 @@ def _run_custom_query(conn, inputs):
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("SET statement_timeout = '5s'")
         cur.execute(sql)
-        rows = cur.fetchall()
+        rows = [dict(r) for r in cur.fetchall()[:100]]
         try:
             cur.execute("RESET statement_timeout")
         except Exception:
             pass
-        return json.dumps([dict(r) for r in rows[:100]], default=str)
+        # Auto-table for multi-row results
+        if len(rows) > 1:
+            headers = list(rows[0].keys())
+            table_rows = [[str(r.get(h, "")) for h in headers] for r in rows]
+            return json.dumps({"_summary": f"Query returned {len(rows)} rows.", "_table": {"title": "", "headers": headers, "rows": table_rows}}, default=str)
+        return json.dumps(rows, default=str)
     except Exception as e:
         conn.rollback()
         try:
@@ -1191,28 +1196,21 @@ def _news_search(conn, inputs):
 HANDLERS = {
     "lookup_docket": _lookup_docket,
     "get_person_history": _get_person_history,
-    "get_docket_events": _get_docket_events,
     "search_cases": _search_cases,
     "fuzzy_name_search": _fuzzy_name_search,
     "search_by_judge": _search_by_judge,
     "search_by_attorney": _search_by_attorney,
     "search_by_charge": _search_by_charge,
-    "get_todays_hearings": _get_todays_hearings,
     "get_upcoming_hearings": _get_upcoming_hearings,
     "live_search_ujs": _live_search_ujs,
-    "get_stats_query": _get_stats_query,
     "search_docket_entries": _search_docket_entries,
     "bail_analytics": _bail_analytics,
     "case_duration": _case_duration,
-    "attorney_rankings": _attorney_rankings,
-    "sentencing_patterns": _sentencing_patterns,
     "run_custom_query": _run_custom_query,
     "get_analysis_coverage": _get_analysis_coverage,
     "render_table": _render_table,
     "render_chart": _render_chart,
     "get_case_changes": _get_case_changes,
-    "get_filing_stats": _get_filing_stats,
-    "get_charge_stats": _get_charge_stats,
     "news_search": _news_search,
     "generate_news_queries": _generate_news_queries,
 }
