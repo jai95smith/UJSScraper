@@ -438,6 +438,7 @@ def _run_job(job_id, question, history, conversation_id=None):
             job_id, timeout_at, stream=True, usage_acc=total_usage,
         )
 
+        print(f"[job {job_id}] court_answer: {repr(court_answer)[:200]}, usage: {total_usage}")
         if court_answer is None:
             _save_job_cost(job_id, total_usage)
             _update_job(job_id, append_response="\n\nRequest timed out.", status="completed", completed_at="NOW()")
@@ -527,4 +528,7 @@ def _run_job(job_id, question, history, conversation_id=None):
             pass
 
     except Exception as e:
+        import traceback
+        print(f"[job {job_id}] EXCEPTION: {e}")
+        traceback.print_exc()
         _update_job(job_id, status="error", error=str(e)[:500], completed_at="NOW()")
